@@ -141,11 +141,13 @@ function createFrame(name: string, width: number, depth: number, scene: Scene): 
   const height = 0.04;
   const alongX = { width: width + 2 * RIM, height, depth: RIM };
   const alongZ = { width: RIM, height, depth };
-  const parts = [
-    Object.assign(CreateBox(`${name}-n`, alongX, scene), { position: new Vector3(0, 0, depth / 2 + RIM / 2) }),
-    Object.assign(CreateBox(`${name}-s`, alongX, scene), { position: new Vector3(0, 0, -depth / 2 - RIM / 2) }),
-    Object.assign(CreateBox(`${name}-e`, alongZ, scene), { position: new Vector3(width / 2 + RIM / 2, 0, 0) }),
-    Object.assign(CreateBox(`${name}-w`, alongZ, scene), { position: new Vector3(-width / 2 - RIM / 2, 0, 0) }),
-  ];
-  return Mesh.MergeMeshes(parts, true, true)!;
+  const north = CreateBox(`${name}-n`, alongX, scene);
+  north.position.z = depth / 2 + RIM / 2;
+  const south = CreateBox(`${name}-s`, alongX, scene);
+  south.position.z = -depth / 2 - RIM / 2;
+  const east = CreateBox(`${name}-e`, alongZ, scene);
+  east.position.x = width / 2 + RIM / 2;
+  const west = CreateBox(`${name}-w`, alongZ, scene);
+  west.position.x = -width / 2 - RIM / 2;
+  return Mesh.MergeMeshes([north, south, east, west], true, true)!;
 }

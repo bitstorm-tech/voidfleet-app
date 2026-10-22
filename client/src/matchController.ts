@@ -4,10 +4,11 @@
 // Alles ist bis zum Submit änderbar. Der Spielzustand steckt in `Match`,
 // die Szene spiegelt ihn nur.
 
+import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { needsTarget } from "./data/cards.ts";
 import { MAX_SHIPS_PER_SIDE, type Lane } from "./game/board.ts";
 import { Match } from "./game/match.ts";
-import { MatchScene } from "./scene/matchScene.ts";
+import { MatchScene, pickedPad } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
 import { HandView } from "./ui/hand.ts";
@@ -34,8 +35,7 @@ export class MatchController {
     });
 
     this.hud.submitButton.addEventListener("click", () => this.submit());
-    canvas.addEventListener("pointermove", (event) => this.updateHoveredPad(event));
-    canvas.addEventListener("pointerdown", (event) => this.onCanvasClick(event));
+    this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
 
     this.refreshHand();
     this.refreshSelectionVisuals();
@@ -86,11 +86,17 @@ export class MatchController {
 
   // --- Brett ---
 
-  private onCanvasClick(event: PointerEvent): void {
-    if (event.button !== 0) return;
-    if (this.selectedShipIndex === null && this.selectedCommandIndex === null) return;
+  /** Das Brett reagiert nur, solange eine Karte gewählt ist; `pickInfo` wird erst beim Zugriff berechnet. */
+  private onScenePointer(info: PointerInfo): void {
+    const hasSelection = this.selectedShipIndex !== null || this.selectedCommandIndex !== null;
+    if (info.type === PointerEventTypes.POINTERMOVE) {
+      this.setHoveredPad(hasSelection ? pickedPad(info) : null);
+    } else if (info.type === PointerEventTypes.POINTERDOWN && info.event.button === 0 && hasSelection) {
+      this.onBoardClick(pickedPad(info));
+    }
+  }
 
-    const pad = this.view.padAt(event.offsetX, event.offsetY);
+  private onBoardClick(pad: SlotPad | null): void {
     if (pad === null) {
       this.selectShip(null);
       this.selectCommand(null);
@@ -222,9 +228,7 @@ export class MatchController {
     return `${fleet} — Schiffs- oder Befehlskarte antippen, oder ohne Zug „Runde ausführen“ (Pass).`;
   }
 
-  private updateHoveredPad(event: PointerEvent): void {
-    const canHover = this.selectedShipIndex !== null || this.selectedCommandIndex !== null;
-    const pad = canHover ? this.view.padAt(event.offsetX, event.offsetY) : null;
+  private setHoveredPad(pad: SlotPad | null): void {
     if (pad === this.hoveredPad) return;
     this.hoveredPad?.setHovered(false);
     this.hoveredPad = pad;

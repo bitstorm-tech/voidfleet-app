@@ -4,15 +4,18 @@
 // Koordinaten: Babylon ist linkshändig, die Godot-Szene rechtshändig. Alle
 // Z-Werte aus der Godot-Szene sind hier negiert; x (Lanes) und y bleiben.
 
+import { TargetCamera } from "@babylonjs/core/Cameras/targetCamera";
 import { Engine } from "@babylonjs/core/Engines/engine";
-import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
+import type { PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import { Tools } from "@babylonjs/core/Misc/tools";
 import { Scene } from "@babylonjs/core/scene";
 import "@babylonjs/core/Culling/ray";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
@@ -22,8 +25,8 @@ import { LaneLabel } from "./laneLabel.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";
 
 const CAMERA_RIG_POSITION = new Vector3(0, 14.7, -15.7);
-const CAMERA_PITCH = Math.atan2(0.6691, 0.7431);
-const CAMERA_FOV = (32 * Math.PI) / 180;
+const CAMERA_PITCH = Tools.ToRadians(42);
+const CAMERA_FOV = Tools.ToRadians(32);
 const BOARD_Z = 2.5;
 const LANE_X: Record<Side, Record<Lane["type"], number>> = {
   player: { command: -5.8, strike: -2.6 },
@@ -36,10 +39,18 @@ const LABEL_COLORS: Record<Side, string> = {
   enemy: "rgba(255, 140, 128, 0.7)",
 };
 
-/** Kamera-Parallaxe: Reichweite in Welteinheiten, Nachlauf, Hintergrund in Pixeln. */
+/** Kamera-Parallaxe: Reichweite in Welteinheiten und Nachlauf. */
 const MAX_SCROLL_OFFSET = new Vector2(0.75, 0.4);
 const FOLLOW_SPEED = 4;
-const BACKGROUND_SCROLL_STRENGTH = new Vector2(24, 12);
+/** Hintergrund-Versatz als Anteil des Viewports pro Welteinheit Kameraversatz. */
+const BACKGROUND_SCROLL_STRENGTH = new Vector2(0.0125, 0.011);
+
+const isPadHitbox = (mesh: AbstractMesh): boolean => mesh.metadata?.pad !== undefined;
+
+/** Der SlotPad unter dem Zeiger eines Pointer-Events, sofern einer getroffen wurde. */
+export function pickedPad(info: PointerInfo): SlotPad | null {
+  return (info.pickInfo?.pickedMesh?.metadata?.pad as SlotPad | undefined) ?? null;
+}
 
 export class MatchScene {
   readonly engine: Engine;
@@ -52,7 +63,10 @@ export class MatchScene {
   private readonly laneLabels: LaneLabel[] = [];
   private readonly scrollOffset = new Vector2(0, 0);
 
-  constructor(canvas: HTMLCanvasElement, board: Board) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    board: Board,
+  ) {
     registerBuiltInLoaders();
     this.engine = new Engine(canvas, true, { adaptToDeviceRatio: true });
     this.scene = new Scene(this.engine);
@@ -61,14 +75,17 @@ export class MatchScene {
 
     this.cameraRig = new TransformNode("camera-rig", this.scene);
     this.cameraRig.position = CAMERA_RIG_POSITION.clone();
-    const camera = new FreeCamera("camera", Vector3.Zero(), this.scene);
+    const camera = new TargetCamera("camera", Vector3.Zero(), this.scene);
     camera.parent = this.cameraRig;
     camera.rotation.x = CAMERA_PITCH;
     camera.fov = CAMERA_FOV;
     camera.minZ = 0.1;
     camera.maxZ = 80;
-    camera.inputs.clear();
-    this.scene.attachControl();
+
+    // Pointer-Events der Szene treffen nur die Hitboxen der Pads.
+    this.scene.pointerMovePredicate = isPadHitbox;
+    this.scene.pointerDownPredicate = isPadHitbox;
+    this.scene.skipPointerUpPicking = true;
 
     this.createLights();
     // Nur die Rahmen gültiger Ziele bekommen Bloom, alles andere bleibt scharf.
@@ -86,11 +103,6 @@ export class MatchScene {
   setGridVisible(value: boolean): void {
     for (const pad of this.pads) pad.setGridVisible(value);
     for (const label of this.laneLabels) label.visible = value;
-  }
-
-  padAt(x: number, y: number): SlotPad | null {
-    const hit = this.scene.pick(x, y, (mesh) => mesh.metadata?.pad !== undefined);
-    return hit.pickedMesh ? (hit.pickedMesh.metadata.pad as SlotPad) : null;
   }
 
   private createLights(): void {
@@ -128,8 +140,9 @@ export class MatchScene {
   }
 
   private updateCameraParallax(): void {
-    const width = this.engine.getRenderWidth();
-    const height = this.engine.getRenderHeight();
+    // Zeigerposition und Canvas-Größe beide in CSS-Pixeln; die Render-Größe
+    // wäre auf HiDPI-Displays um den Device-Pixel-Ratio größer.
+    const { clientWidth: width, clientHeight: height } = this.canvas;
     if (width === 0 || height === 0) return;
     const ratioX = Math.min(Math.max(this.scene.pointerX / width, 0), 1) - 0.5;
     const ratioY = Math.min(Math.max(this.scene.pointerY / height, 0), 1) - 0.5;

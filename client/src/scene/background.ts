@@ -12,8 +12,6 @@ const OVERSCAN = 1.06;
 
 export class Background {
   private readonly layer: Layer;
-  private readonly scrollOffset = new Vector2(0, 0);
-  private coverScale = new Vector2(1, 1);
 
   constructor(private readonly scene: Scene) {
     this.layer = new Layer("background", null, scene, true);
@@ -23,12 +21,10 @@ export class Background {
     scene.getEngine().onResizeObservable.add(() => this.fit());
   }
 
-  /** Verschiebung in Pixeln, wie Godots ParallaxBackground.scroll_offset. */
+  /** Verschiebung als Anteil des Viewports, y nach unten positiv. */
   setScrollOffset(x: number, y: number): void {
-    const engine = this.scene.getEngine();
     // Clip-Space: 2 Einheiten entsprechen der Viewport-Breite bzw. -Höhe.
-    this.scrollOffset.set((x * 2) / engine.getRenderWidth(), (-y * 2) / engine.getRenderHeight());
-    this.layer.offset.copyFrom(this.scrollOffset);
+    this.layer.offset.set(x * 2, -y * 2);
   }
 
   private fit(): void {
@@ -39,10 +35,10 @@ export class Background {
     const engine = this.scene.getEngine();
     const viewportAspect = engine.getRenderWidth() / engine.getRenderHeight();
     const imageAspect = size.width / size.height;
-    this.coverScale =
+    const coverScale =
       imageAspect > viewportAspect
         ? new Vector2(imageAspect / viewportAspect, 1)
         : new Vector2(1, viewportAspect / imageAspect);
-    this.layer.scale.copyFrom(this.coverScale).scaleInPlace(OVERSCAN);
+    this.layer.scale.copyFrom(coverScale).scaleInPlace(OVERSCAN);
   }
 }
