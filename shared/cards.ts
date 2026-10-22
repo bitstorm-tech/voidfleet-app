@@ -1,4 +1,5 @@
 // Kartendefinitionen, portiert aus den Godot-Ressourcen (data/cards/*.tres).
+// Von Client und Server gemeinsam genutzt; Karten werden über ihre id übertragen.
 
 export type ShipClass = "fighter" | "cruiser" | "battleship" | "support";
 export type CommandType = "attack" | "buff" | "debuff" | "tactic" | "reposition" | "special";
@@ -34,25 +35,6 @@ export interface CommandCard {
 
 export type Card = ShipCard | CommandCard;
 
-/** Farbe als RGB-Tripel im Bereich 0..1, wie Godots Color. */
-export type Rgb = readonly [number, number, number];
-
-const SHIP_COLORS: Record<ShipClass, Rgb> = {
-  fighter: [0.9, 0.3, 0.2],
-  cruiser: [0.3, 0.5, 0.9],
-  battleship: [0.5, 0.5, 0.6],
-  support: [0.2, 0.8, 0.5],
-};
-
-const COMMAND_COLORS: Record<CommandType, Rgb> = {
-  attack: [0.9, 0.2, 0.2],
-  buff: [0.2, 0.7, 0.3],
-  debuff: [0.6, 0.2, 0.8],
-  tactic: [0.2, 0.6, 0.9],
-  reposition: [0.9, 0.7, 0.1],
-  special: [0.9, 0.5, 0.1],
-};
-
 const TARGET_LABELS: Record<TargetMode, string> = {
   none: "",
   auto_highest_hp: "Highest-HP Enemy",
@@ -64,35 +46,12 @@ const TARGET_LABELS: Record<TargetMode, string> = {
   choose_enemy: "Choose Enemy",
 };
 
-export function cardColor(card: Card): Rgb {
-  return card.kind === "ship" ? SHIP_COLORS[card.shipClass] : COMMAND_COLORS[card.commandType];
-}
-
 export function targetLabel(card: CommandCard): string {
   return TARGET_LABELS[card.targetMode];
 }
 
 export function needsTarget(card: CommandCard): boolean {
   return card.targetMode === "choose_friendly";
-}
-
-/** Entspricht Godots Color.darkened(). */
-export function darkened(color: Rgb, amount: number): Rgb {
-  return [color[0] * (1 - amount), color[1] * (1 - amount), color[2] * (1 - amount)];
-}
-
-/** Entspricht Godots Color.lightened(). */
-export function lightened(color: Rgb, amount: number): Rgb {
-  return [
-    color[0] + (1 - color[0]) * amount,
-    color[1] + (1 - color[1]) * amount,
-    color[2] + (1 - color[2]) * amount,
-  ];
-}
-
-export function toCss(color: Rgb, alpha = 1): string {
-  const [r, g, b] = color.map((c) => Math.round(c * 255));
-  return `rgb(${r} ${g} ${b} / ${alpha})`;
 }
 
 function ship(
@@ -142,3 +101,14 @@ export const COMMANDS: readonly CommandCard[] = [
   command("targeting_jammer", "Targeting Jammer", "debuff", "all_enemy_strike", "All enemy ships in the Strike Line get -1 ATK this round (min 0)."),
   command("volley_fire", "Volley Fire", "attack", "auto_all", "Deal 1 damage to ALL enemy ships."),
 ];
+
+const SHIPS_BY_ID = new Map(SHIPS.map((card) => [card.id, card]));
+const COMMANDS_BY_ID = new Map(COMMANDS.map((card) => [card.id, card]));
+
+export function shipById(id: string): ShipCard {
+  return SHIPS_BY_ID.get(id)!;
+}
+
+export function commandById(id: string): CommandCard {
+  return COMMANDS_BY_ID.get(id)!;
+}

@@ -1,15 +1,17 @@
 # Client (TypeScript + Babylon.js, Bun)
 
-- `bun install`, dann `bun run dev` (Bun-Dev-Server mit HMR auf `index.html`, Port über `BUN_PORT`), `bun run build` (Bundle nach `dist/`), `bun run typecheck`.
+- `bun install`, dann `bun run build` (Bundle nach `dist/`), `bun run typecheck`. Zum Spielen liefert der Server den Client aus (`cd ../server && bun run dev`), weil der Client ohne WebSocket-Verbindung nichts tut.
 - Kein Vite, kein Node: `index.html` ist der Entry, Bun bündelt `src/main.ts` und die CSS-Datei. Assets (`assets/`) werden per `import` eingebunden und vom file-Loader als URL geliefert (Typen in `src/assets.d.ts`).
 
 ## Aufbau
 
-- `src/data/cards.ts` — Kartendefinitionen (aus den Godot-`.tres`-Dateien portiert) plus Farb-Helfer.
-- `src/game/` — reiner Spielzustand ohne Rendering: `board.ts` (Lanes, Slots, Platzierungsregeln), `deck.ts`, `match.ts` (Hände, Zugplan, lokale Deploy-Phase).
+- `../shared/` — mit dem Server geteilt: `cards.ts` (Kartendefinitionen), `board.ts` (Lanes, Slots, Platzierungsregeln, Snapshot), `protocol.ts` (Nachrichten).
+- `src/data/cardColors.ts` — Kartenfarben und Farb-Helfer.
+- `src/game/match.ts` — Spielzustand aus Server-Sicht (Brett, Hände, Zugplan) ohne Rendering.
+- `src/net/connection.ts` — WebSocket zum Server; Match-Id aus `?match=`, Spieler-Token pro Tab im `sessionStorage`.
 - `src/scene/` — Babylon-Szene: `matchScene.ts` (Kamera-Rig mit Maus-Parallaxe, Lichter, Glow, Lanes), `slotPad.ts`, `laneLabel.ts`, `ship.ts` (glTF-Modell oder Kitbash-Fallback), `background.ts`.
-- `src/ui/` — DOM-Overlay über dem Canvas: `hud.ts` (Runde, Status, Log, Submit), `hand.ts` (Schiffs- und Befehlskarten), `cursor.ts` (Maus-Cursor aus SVG, pro Pixeldichte gerastert).
-- `src/matchController.ts` — verbindet Zustand, Szene und UI; die Szene spiegelt den Zustand nur.
+- `src/ui/` — DOM-Overlay über dem Canvas: `hud.ts` (Runde, Status, Log, Submit), `hand.ts` (Schiffs- und Befehlskarten), `roundLog.ts` (Rundenereignisse als Log-Text), `cursor.ts` (Maus-Cursor aus SVG, pro Pixeldichte gerastert).
+- `src/matchController.ts` — verbindet Server, Zustand, Szene und UI; die Szene spiegelt den Zustand nur.
 
 ## Koordinaten
 
@@ -17,4 +19,4 @@ Babylon ist linkshändig, Godot rechtshändig. Z-Werte aus der Godot-Szene (`mat
 
 ## Status
 
-Nur die Match-Szene ist portiert. Die Rundenauflösung (Gegner-KI, Befehle, Kampf, Cleanup) fehlt bewusst; sie gehört zum Server. `Runde ausführen` führt lokal nur Deploy und Nachziehen aus.
+Nur die Match-Szene ist portiert. Der Client plant den Zug und schickt ihn mit „Zug abgeben“ an den Server; aufgelöst wird dort. „player“ ist immer die eigene Seite, der Server spiegelt für den zweiten Spieler.

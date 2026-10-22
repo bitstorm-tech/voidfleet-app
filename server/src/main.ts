@@ -1,0 +1,105 @@
+// Spielserver: liefert den Client aus (Bun bündelt index.html samt HMR) und
+// verbindet die Spieler über WebSockets. Matches leben nur im Speicher und
+// entstehen beim ersten Beitritt; wer den Match-Link öffnet, sitzt mit drin.
+
+import type { ServerWebSocket } from "bun";
+import index from "../../client/index.html";
+import type { ClientMessage, ServerMessage } from "../../shared/protocol.ts";
+import { Match, type Seat } from "./match.ts";
+
+interface SocketData {
+  matchId: string;
+  token: string;
+  seat: Seat | null;
+}
+
+type Socket = ServerWebSocket<SocketData>;
+
+interface Room {
+  match: Match;
+  sockets: [Socket | null, Socket | null];
+}
+
+const rooms = new Map<string, Room>();
+
+function roomFor(matchId: string): Room {
+  let room = rooms.get(matchId);
+  if (!room) {
+    room = { match: new Match(matchId), sockets: [null, null] };
+    rooms.set(matchId, room);
+  }
+  return room;
+}
+
+function send(socket: Socket | null, message: ServerMessage): void {
+  socket?.send(JSON.stringify(message));
+}
+
+function broadcastState(room: Room): void {
+  for (const player of room.match.players) {
+    send(room.sockets[player.seat], { type: "state", view: room.match.view(player.seat) });
+  }
+}
+
+function onSubmit(socket: Socket, room: Room, seat: Seat, message: ClientMessage): void {
+  const error = room.match.submit(seat, message.plan);
+  if (error) {
+    send(socket, { type: "error", message: error });
+    return;
+  }
+  if (room.match.isRoundComplete) {
+    const round = room.match.round;
+    const events = room.match.resolveRound();
+    for (const player of room.match.players) {
+      send(room.sockets[player.seat], { type: "round", round, events: room.match.eventsFor(player.seat, events) });
+    }
+  }
+  broadcastState(room);
+}
+
+const server = Bun.serve({
+  port: Number(process.env.PORT ?? 3000),
+  development: process.env.NODE_ENV !== "production",
+  routes: {
+    "/": index,
+    "/ws": (req, server) => {
+      const params = new URL(req.url).searchParams;
+      const matchId = params.get("match");
+      const token = params.get("token");
+      if (!matchId || !token) return new Response("match und token fehlen", { status: 400 });
+      if (server.upgrade(req, { data: { matchId, token, seat: null } })) return undefined;
+      return new Response("WebSocket erwartet", { status: 400 });
+    },
+  },
+  websocket: {
+    data: {} as SocketData,
+    open(socket) {
+      const room = roomFor(socket.data.matchId);
+      const seat = room.match.join(socket.data.token);
+      if (seat === null) {
+        send(socket, { type: "error", message: "Dieses Match ist bereits voll." });
+        socket.close();
+        return;
+      }
+      socket.data.seat = seat;
+      // Ein zweiter Tab mit demselben Token übernimmt den Platz.
+      room.sockets[seat]?.close();
+      room.sockets[seat] = socket;
+      broadcastState(room);
+    },
+    message(socket, raw) {
+      const seat = socket.data.seat;
+      if (seat === null) return;
+      const message = JSON.parse(String(raw)) as ClientMessage;
+      if (message.type === "submit") onSubmit(socket, roomFor(socket.data.matchId), seat, message);
+    },
+    close(socket) {
+      const room = rooms.get(socket.data.matchId);
+      if (room && socket.data.seat !== null && room.sockets[socket.data.seat] === socket) {
+        room.sockets[socket.data.seat] = null;
+      }
+    },
+  },
+});
+
+console.log(`Voidfleet-Server läuft auf ${server.url}`);

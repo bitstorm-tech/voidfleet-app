@@ -19,7 +19,7 @@ import { Tools } from "@babylonjs/core/Misc/tools";
 import { Scene } from "@babylonjs/core/scene";
 import "@babylonjs/core/Culling/ray";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
-import type { Board, Lane, Side } from "../game/board.ts";
+import type { Board, Lane, Side } from "../../../shared/board.ts";
 import { Background } from "./background.ts";
 import { LaneLabel } from "./laneLabel.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";

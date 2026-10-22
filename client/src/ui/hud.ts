@@ -31,7 +31,7 @@ export class Hud {
     this.submitButton = document.createElement("button");
     this.submitButton.type = "button";
     this.submitButton.className = "submit-button";
-    this.submitButton.textContent = "Runde ausführen";
+    this.submitButton.textContent = "Zug abgeben";
   }
 
   setRound(round: number): void {

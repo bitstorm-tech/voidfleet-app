@@ -17,7 +17,8 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Tools } from "@babylonjs/core/Misc/tools";
 import type { Scene } from "@babylonjs/core/scene";
-import { cardColor, lightened, type Rgb, type ShipCard } from "../data/cards.ts";
+import type { ShipCard } from "../../../shared/cards.ts";
+import { cardColor, lightened, type Rgb } from "../data/cardColors.ts";
 import voidInterceptorUrl from "../../assets/models/void_interceptor_low_poly.glb";
 
 const MODEL_URLS: Record<string, string> = {

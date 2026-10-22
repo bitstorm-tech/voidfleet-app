@@ -1,24 +1,29 @@
-// Verbindet Spielzustand, 3D-Szene und DOM-UI zur Zugplanung:
+// Verbindet Server, Spielzustand, 3D-Szene und DOM-UI zur Zugplanung:
 // Der Spieler stellt seinen Zug zusammen (1 Schiff + 1 Befehl), das gewählte
 // Schiff steht als Geist auf dem Slot, der gewählte Befehl bleibt markiert.
-// Alles ist bis zum Submit änderbar. Der Spielzustand steckt in `Match`,
-// die Szene spiegelt ihn nur.
+// Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
+// Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
-import { needsTarget } from "./data/cards.ts";
-import { MAX_SHIPS_PER_SIDE, type Lane } from "./game/board.ts";
+import { needsTarget } from "../../shared/cards.ts";
+import { MAX_SHIPS_PER_SIDE, type Lane } from "../../shared/board.ts";
+import type { ServerMessage } from "../../shared/protocol.ts";
 import { Match } from "./game/match.ts";
+import { ServerConnection } from "./net/connection.ts";
 import { MatchScene, pickedPad } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
 import { HandView } from "./ui/hand.ts";
 import { Hud } from "./ui/hud.ts";
+import { roundLogLines } from "./ui/roundLog.ts";
 
 export class MatchController {
   private readonly match = new Match();
   private readonly view: MatchScene;
   private readonly hud: Hud;
   private readonly hand: HandView;
+  private readonly connection: ServerConnection;
+  private isConnected = true;
 
   private selectedShipIndex: number | null = null;
   private selectedCommandIndex: number | null = null;
@@ -37,16 +42,49 @@ export class MatchController {
     this.hud.submitButton.addEventListener("click", () => this.submit());
     this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
 
-    this.refreshHand();
+    this.connection = new ServerConnection({
+      onMessage: (message) => this.onServerMessage(message),
+      onClose: () => {
+        this.isConnected = false;
+        this.refreshSelectionVisuals();
+      },
+    });
     this.refreshSelectionVisuals();
+  }
+
+  /** Geplant wird, solange der Zug dieser Runde noch nicht abgegeben ist. */
+  private get canPlan(): boolean {
+    return this.isConnected && this.match.round > 0 && !this.match.submitted;
+  }
+
+  // --- Server ---
+
+  private onServerMessage(message: ServerMessage): void {
+    switch (message.type) {
+      case "state":
+        this.match.apply(message.view);
+        this.selectedShipIndex = null;
+        this.selectedCommandIndex = null;
+        this.syncBoard();
+        this.refreshSelectionVisuals();
+        break;
+      case "round":
+        this.hud.appendLog(roundLogLines(message.round, message.events));
+        break;
+      case "error":
+        this.hud.appendLog([`Server: ${message.message}`]);
+        break;
+    }
   }
 
   // --- Hand ---
 
   private onShipCardClick(index: number): void {
+    if (!this.canPlan) return;
     if (this.match.plan.ship?.handIndex === index) {
       // Erneutes Antippen der geplanten Karte nimmt den Zug zurück.
-      this.clearShipPlan();
+      this.match.plan.ship = null;
+      this.clearGhost();
       this.selectShip(null);
     } else if (this.selectedShipIndex === index) {
       this.selectShip(null);
@@ -57,6 +95,7 @@ export class MatchController {
 
   /** Befehle ohne Zielwahl sind mit einem Klick eingeplant, sonst folgt der Klick auf ein eigenes Schiff. */
   private onCommandCardClick(index: number): void {
+    if (!this.canPlan) return;
     const card = this.match.commandHand[index]!;
     if (this.match.plan.command?.handIndex === index) {
       this.match.plan.command = null;
@@ -122,30 +161,34 @@ export class MatchController {
     if (this.selectedShipIndex !== null) return this.match.board.canPlace(lane, pad.slot.index);
     if (this.selectedCommandIndex !== null) return pad.slot.isOccupied;
     const target = this.match.plan.command?.target;
-    return target !== undefined && target !== null && target.lane === lane && target.slotIndex === pad.slot.index;
+    return target !== undefined && target !== null && target.lane === lane.type && target.slotIndex === pad.slot.index;
   }
 
-  /** Setzt das Geist-Schiff auf den Slot. Das Brett bleibt bis zum Submit unberührt. */
+  /** Plant das Schiff auf den Slot; bis zur Auflösung steht es dort nur als Geist. */
   private stageShipOn(pad: SlotPad): void {
-    const handIndex = this.selectedShipIndex!;
-    this.clearGhost();
-    this.match.plan.ship = { handIndex, target: { lane: pad.slot.lane, slotIndex: pad.slot.index } };
-    this.ghostPad = pad;
-    pad.attachShip(new ShipView(this.view.scene, this.match.shipHand[handIndex]!, true));
+    this.match.plan.ship = {
+      handIndex: this.selectedShipIndex!,
+      target: { lane: pad.slot.lane.type, slotIndex: pad.slot.index },
+    };
+    this.showGhost();
     this.selectShip(null);
   }
 
   private stageCommandTargetOn(pad: SlotPad): void {
     this.match.plan.command = {
       handIndex: this.selectedCommandIndex!,
-      target: { lane: pad.slot.lane, slotIndex: pad.slot.index },
+      target: { lane: pad.slot.lane.type, slotIndex: pad.slot.index },
     };
     this.selectCommand(null);
   }
 
-  private clearShipPlan(): void {
-    this.match.plan.ship = null;
+  private showGhost(): void {
     this.clearGhost();
+    const ship = this.match.plan.ship;
+    if (ship === null) return;
+    const lane = this.match.board.lane("player", ship.target.lane);
+    this.ghostPad = this.view.padsByLane.get(lane)![ship.target.slotIndex]!;
+    this.ghostPad.attachShip(new ShipView(this.view.scene, this.match.shipHand[ship.handIndex]!, true));
   }
 
   private clearGhost(): void {
@@ -156,17 +199,13 @@ export class MatchController {
   // --- Runde ---
 
   private submit(): void {
-    this.selectShip(null);
-    this.selectCommand(null);
-    this.clearGhost();
-    this.hud.appendLog(this.match.submit());
-    this.syncBoardShips();
-    this.refreshHand();
-    this.refreshSelectionVisuals();
+    if (!this.canPlan || !this.match.opponent.joined) return;
+    this.connection.send({ type: "submit", plan: this.match.plan });
   }
 
-  /** Pads und Brett abgleichen: besetzte Slots ohne Schiff bekommen eins. */
-  private syncBoardShips(): void {
+  /** Szene an den neuen Zustand angleichen; der Geist kommt erst nach den echten Schiffen. */
+  private syncBoard(): void {
+    this.clearGhost();
     for (const pad of this.view.pads) {
       const slot = pad.slot;
       if (slot.isOccupied && pad.ship === null) {
@@ -176,6 +215,7 @@ export class MatchController {
       }
       pad.ship?.setStats(slot.hp, slot.shield);
     }
+    this.showGhost();
   }
 
   // --- Darstellung ---
@@ -207,9 +247,19 @@ export class MatchController {
   private updateHud(): void {
     this.hud.setRound(this.match.round);
     this.hud.setStatus(this.buildStatusText());
+    this.hud.submitButton.disabled = !this.canPlan || !this.match.opponent.joined;
   }
 
   private buildStatusText(): string {
+    if (!this.isConnected) return "Verbindung zum Server verloren — Seite neu laden.";
+    if (this.match.round === 0) return "Verbinde mit dem Server …";
+    if (this.match.submitted) return "Zug abgegeben — warte auf den Gegner.";
+    if (!this.match.opponent.joined) return `Warte auf den Gegner — Link teilen: ${location.href}`;
+    const opponent = this.match.opponent.submitted ? " Der Gegner hat schon abgegeben." : "";
+    return this.buildPlanningText() + opponent;
+  }
+
+  private buildPlanningText(): string {
     const fleet = `Flotte ${this.match.board.shipCount("player")}/${MAX_SHIPS_PER_SIDE}`;
     if (this.selectedShipIndex !== null) {
       const name = this.match.shipHand[this.selectedShipIndex]!.name;
@@ -223,9 +273,9 @@ export class MatchController {
     }
     const planned = [this.match.plannedShip?.name, this.match.plannedCommand?.name].filter((name) => name !== undefined);
     if (planned.length > 0) {
-      return `${fleet} — ${planned.join(" + ")} steht bereit. „Runde ausführen“ oder Karte antippen zum Zurücknehmen.`;
+      return `${fleet} — ${planned.join(" + ")} steht bereit. „Zug abgeben“ oder Karte antippen zum Zurücknehmen.`;
     }
-    return `${fleet} — Schiffs- oder Befehlskarte antippen, oder ohne Zug „Runde ausführen“ (Pass).`;
+    return `${fleet} — Schiffs- oder Befehlskarte antippen, oder ohne Karte „Zug abgeben“ (Pass).`;
   }
 
   private setHoveredPad(pad: SlotPad | null): void {

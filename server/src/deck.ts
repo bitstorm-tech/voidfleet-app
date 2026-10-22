@@ -1,6 +1,6 @@
 // Ein gemischter Nachziehstapel, getrennt für Schiffe und Befehle.
 
-import { COMMANDS, SHIPS, type Card, type CommandCard, type ShipCard } from "../data/cards.ts";
+import { COMMANDS, SHIPS, type Card, type CommandCard, type ShipCard } from "../../shared/cards.ts";
 
 export class Deck<T extends Card> {
   private cards: T[];

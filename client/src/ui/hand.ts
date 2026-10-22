@@ -1,7 +1,8 @@
 // Die Hand: Schiffskarten links, Submit in der Mitte, Befehlskarten rechts.
 // Karten werden bei jedem Refresh aus der Hand neu aufgebaut.
 
-import { cardColor, darkened, targetLabel, toCss, type CommandCard, type ShipCard } from "../data/cards.ts";
+import { targetLabel, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
+import { cardColor, darkened, toCss } from "../data/cardColors.ts";
 
 export interface HandCallbacks {
   onShipCardClick: (handIndex: number) => void;

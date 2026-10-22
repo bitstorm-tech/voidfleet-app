@@ -9,7 +9,7 @@ import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
-import type { Slot } from "../game/board.ts";
+import type { Slot } from "../../../shared/board.ts";
 import type { ShipView } from "./ship.ts";
 
 export const PAD_WIDTH = 2.5;
