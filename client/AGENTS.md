@@ -8,7 +8,7 @@
 - `src/data/cards.ts` — Kartendefinitionen (aus den Godot-`.tres`-Dateien portiert) plus Farb-Helfer.
 - `src/game/` — reiner Spielzustand ohne Rendering: `board.ts` (Lanes, Slots, Platzierungsregeln), `deck.ts`, `match.ts` (Hände, Zugplan, lokale Deploy-Phase).
 - `src/scene/` — Babylon-Szene: `matchScene.ts` (Kamera-Rig mit Maus-Parallaxe, Lichter, Glow, Lanes), `slotPad.ts`, `laneLabel.ts`, `ship.ts` (glTF-Modell oder Kitbash-Fallback), `background.ts`.
-- `src/ui/` — DOM-Overlay über dem Canvas: `hud.ts` (Runde, Status, Log, Submit), `hand.ts` (Schiffs- und Befehlskarten).
+- `src/ui/` — DOM-Overlay über dem Canvas: `hud.ts` (Runde, Status, Log, Submit), `hand.ts` (Schiffs- und Befehlskarten), `cursor.ts` (Maus-Cursor aus SVG, pro Pixeldichte gerastert).
 - `src/matchController.ts` — verbindet Zustand, Szene und UI; die Szene spiegelt den Zustand nur.
 
 ## Koordinaten
