@@ -253,9 +253,9 @@ export class MatchController {
   private buildStatusText(): string {
     if (!this.isConnected) return "Verbindung zum Server verloren — Seite neu laden.";
     if (this.match.round === 0) return "Verbinde mit dem Server …";
-    if (this.match.submitted) return "Zug abgegeben — warte auf den Gegner.";
+    if (this.match.submitted) return "Zug beendet — warte auf den Gegner.";
     if (!this.match.opponent.joined) return `Warte auf den Gegner — Link teilen: ${location.href}`;
-    const opponent = this.match.opponent.submitted ? " Der Gegner hat schon abgegeben." : "";
+    const opponent = this.match.opponent.submitted ? " Der Gegner hat seinen Zug schon beendet." : "";
     return this.buildPlanningText() + opponent;
   }
 
@@ -273,9 +273,9 @@ export class MatchController {
     }
     const planned = [this.match.plannedShip?.name, this.match.plannedCommand?.name].filter((name) => name !== undefined);
     if (planned.length > 0) {
-      return `${fleet} — ${planned.join(" + ")} steht bereit. „Zug abgeben“ oder Karte antippen zum Zurücknehmen.`;
+      return `${fleet} — ${planned.join(" + ")} steht bereit. „Zug beenden“ oder Karte antippen zum Zurücknehmen.`;
     }
-    return `${fleet} — Schiffs- oder Befehlskarte antippen, oder ohne Karte „Zug abgeben“ (Pass).`;
+    return `${fleet} — Schiffs- oder Befehlskarte antippen, oder ohne Karte „Zug beenden“ (Pass).`;
   }
 
   private setHoveredPad(pad: SlotPad | null): void {

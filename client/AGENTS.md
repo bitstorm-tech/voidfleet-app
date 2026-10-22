@@ -19,4 +19,4 @@ Babylon ist linkshändig, Godot rechtshändig. Z-Werte aus der Godot-Szene (`mat
 
 ## Status
 
-Nur die Match-Szene ist portiert. Der Client plant den Zug und schickt ihn mit „Zug abgeben“ an den Server; aufgelöst wird dort. „player“ ist immer die eigene Seite, der Server spiegelt für den zweiten Spieler.
+Nur die Match-Szene ist portiert. Der Client plant den Zug und schickt ihn mit „Zug beenden“ an den Server; aufgelöst wird dort. „player“ ist immer die eigene Seite, der Server spiegelt für den zweiten Spieler.

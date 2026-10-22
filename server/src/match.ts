@@ -78,7 +78,7 @@ export class Match {
   submit(seat: Seat, plan: TurnPlan): string | null {
     const player = this.players[seat]!;
     if (this.players.length < 2) return "Der Gegner ist noch nicht beigetreten.";
-    if (player.plan !== null) return "Der Zug dieser Runde ist bereits abgegeben.";
+    if (player.plan !== null) return "Der Zug dieser Runde ist bereits beendet.";
 
     if (plan.ship) {
       const { handIndex, target } = plan.ship;
