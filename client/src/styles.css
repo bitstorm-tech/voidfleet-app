@@ -287,7 +287,7 @@ body {
 }
 
 .reveal-banner.visible {
-  animation: banner 1.7s ease-out forwards;
+  animation: banner calc(1.7s * var(--animation-time-scale)) ease-out forwards;
 }
 
 @keyframes banner {
@@ -310,7 +310,7 @@ body {
   font-weight: 700;
   white-space: nowrap;
   text-shadow: 0 0 6px rgb(0 0 0 / 0.9), 0 1px 2px rgb(0 0 0 / 0.9);
-  animation: float-up 1.4s ease-out forwards;
+  animation: float-up calc(1.4s * var(--animation-time-scale)) ease-out forwards;
 }
 
 .float-text.damage { color: rgb(255 112 88); }
