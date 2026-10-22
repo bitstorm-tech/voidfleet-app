@@ -124,6 +124,13 @@ export class SlotPad {
     ship.root.parent = this.shipAnchor;
   }
 
+  /** Nimmt das Schiff vom Pad, ohne es zu entsorgen (Lane-Wechsel, Zerstörung). */
+  detachShip(): ShipView {
+    const ship = this.ship!;
+    this.ship = null;
+    return ship;
+  }
+
   clearShip(): void {
     this.ship?.dispose();
     this.ship = null;

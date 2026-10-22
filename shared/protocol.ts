@@ -17,6 +17,16 @@ export interface TurnPlan {
   command: { handIndex: number; target: SlotTarget | null } | null;
 }
 
+/** Ein Schiff an einer Stelle des Bretts; die Karte steht dabei, weil der Slot danach leer sein kann. */
+export interface ShipRef {
+  side: Side;
+  lane: LaneType;
+  slotIndex: number;
+  cardId: ShipId;
+}
+
+export type MatchResult = "won" | "lost" | "draw";
+
 export interface PlayerView {
   matchId: string;
   round: number;
@@ -28,13 +38,40 @@ export interface PlayerView {
   /** Der abgegebene Zug dieser Runde; null, solange noch geplant wird. */
   submittedPlan: TurnPlan | null;
   opponent: { joined: boolean; submitted: boolean };
+  /** Gesetzt, sobald das Match entschieden ist; danach gibt es keine Züge mehr. */
+  result: MatchResult | null;
 }
 
-/** Was in einer Runde aufgedeckt und aufgelöst wurde, in Auflösungsreihenfolge. */
+/** HP und Schild eines Schiffs nach einem Ereignis, damit der Client die Runde Schritt für Schritt zeigen kann. */
+export interface ShipStats {
+  hp: number;
+  shield: number;
+}
+
+/** Was ein Befehl an einem Schiff bewirkt. */
+export type CommandEffect =
+  | { type: "damage"; amount: number }
+  | { type: "attack"; delta: number }
+  | { type: "shield"; amount: number }
+  | { type: "disable" }
+  | { type: "heal"; amount: number }
+  | { type: "move"; to: SlotTarget };
+
+/**
+ * Was in einer Runde aufgedeckt und aufgelöst wurde, in Auflösungsreihenfolge.
+ * Im Kampf feuern erst alle Schiffe (`attack`), dann wirkt der summierte Schaden (`hit`).
+ */
 export type RoundEvent =
   | { kind: "deploy"; side: Side; cardId: ShipId; target: SlotTarget }
   | { kind: "pass"; side: Side }
-  | { kind: "command"; side: Side; cardId: CommandId; target: SlotTarget | null };
+  | { kind: "command"; side: Side; cardId: CommandId; target: SlotTarget | null }
+  | { kind: "effect"; side: Side; cardId: CommandId; ship: ShipRef; effect: CommandEffect; after: ShipStats }
+  | { kind: "draw"; side: Side; cardId: CommandId; ships: number; commands: number }
+  | { kind: "noEffect"; side: Side; cardId: CommandId }
+  | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number }
+  | { kind: "hit"; ship: ShipRef; amount: number; after: ShipStats }
+  | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }
+  | { kind: "destroyed"; ship: ShipRef };
 
 /** Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`. */
 export type ClientMessage = { type: "submit"; plan: TurnPlan };
@@ -42,6 +79,7 @@ export type ClientMessage = { type: "submit"; plan: TurnPlan };
 /** Fehler werden als Code übertragen, der Client formuliert sie in seiner Sprache. */
 export type ErrorCode =
   | "match_full"
+  | "match_over"
   | "opponent_missing"
   | "already_submitted"
   | "ship_not_in_hand"
@@ -49,7 +87,8 @@ export type ErrorCode =
   | "command_not_in_hand"
   | "target_required"
   | "target_not_allowed"
-  | "target_not_own_ship";
+  | "target_not_own_ship"
+  | "target_wrong_lane";
 
 export type ServerMessage =
   | { type: "state"; view: PlayerView }

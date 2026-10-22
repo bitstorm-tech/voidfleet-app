@@ -20,6 +20,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { ShipCard } from "../../../shared/cards.ts";
 import { cardColor, lightened, type Rgb } from "../data/cardColors.ts";
 import voidInterceptorUrl from "../../assets/models/void_interceptor_low_poly.glb";
+import { easeInCubic, easeOutBack, easeOutCubic, tween } from "./tween.ts";
 
 const MODEL_URLS: Record<string, string> = {
   void_interceptor: voidInterceptorUrl,
@@ -27,6 +28,8 @@ const MODEL_URLS: Record<string, string> = {
 /** Schiffe sind für den Hangar modelliert und auf dem Brett zu groß. */
 const BOARD_SCALE = 0.6;
 const MODEL_SCALE = 0.55;
+/** Höhe, aus der ein Schiff beim Deploy auf den Pad sinkt. */
+const WARP_IN_HEIGHT = 1.6;
 /** Geist-Schiffe zeigen einen geplanten, noch nicht ausgeführten Zug. */
 const GHOST_VISIBILITY = 0.3;
 
@@ -108,6 +111,31 @@ export class ShipView {
     const shieldMax = Math.max(this.card.shield, shield);
     this.shieldRow.setEnabled(shieldMax > 0);
     if (shieldMax > 0) this.setFill(this.shieldFill, ratio(shield, shieldMax));
+  }
+
+  /** Deploy: wächst aus dem Nichts und sinkt auf den Pad. */
+  async warpIn(): Promise<void> {
+    await tween(this.scene, 560, (progress) => {
+      this.root.scaling.setAll(BOARD_SCALE * Math.max(easeOutBack(progress), 0));
+      this.root.position.y = (1 - easeOutCubic(progress)) * WARP_IN_HEIGHT;
+    });
+  }
+
+  /** Treffer: das Modell zittert kurz, die Balken bleiben ruhig. */
+  async shake(): Promise<void> {
+    await tween(this.scene, 320, (progress) => {
+      const amplitude = 0.18 * (1 - progress);
+      this.modelRoot.position.set(Math.sin(progress * 55) * amplitude, 0, Math.cos(progress * 41) * amplitude);
+    });
+  }
+
+  /** Zerstörung: schrumpft weg und wird danach entsorgt. */
+  async vanish(): Promise<void> {
+    await tween(this.scene, 420, (progress) => {
+      this.root.scaling.setAll(BOARD_SCALE * (1 - easeInCubic(progress)));
+      this.root.rotation.z = progress * 0.9;
+    });
+    this.dispose();
   }
 
   dispose(): void {

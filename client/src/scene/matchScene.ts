@@ -12,16 +12,17 @@ import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
-import { Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Matrix, Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Tools } from "@babylonjs/core/Misc/tools";
 import { Scene } from "@babylonjs/core/scene";
 import "@babylonjs/core/Culling/ray";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
-import type { Board, Lane, Side } from "../../../shared/board.ts";
+import type { Board, Lane, LaneType, Side } from "../../../shared/board.ts";
 import { t, upper } from "../i18n/index.ts";
 import { Background } from "./background.ts";
+import { BoardEffects } from "./effects.ts";
 import { LaneLabel } from "./laneLabel.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";
 
@@ -58,6 +59,8 @@ export class MatchScene {
   readonly scene: Scene;
   readonly pads: SlotPad[] = [];
   readonly padsByLane = new Map<Lane, SlotPad[]>();
+  readonly effects: BoardEffects;
+  private readonly camera: TargetCamera;
   private readonly cameraRig: TransformNode;
   private readonly glow: GlowLayer;
   private readonly background: Background;
@@ -66,7 +69,7 @@ export class MatchScene {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    board: Board,
+    private readonly board: Board,
   ) {
     registerBuiltInLoaders();
     this.engine = new Engine(canvas, true, { adaptToDeviceRatio: true });
@@ -76,7 +79,7 @@ export class MatchScene {
 
     this.cameraRig = new TransformNode("camera-rig", this.scene);
     this.cameraRig.position = CAMERA_RIG_POSITION.clone();
-    const camera = new TargetCamera("camera", Vector3.Zero(), this.scene);
+    const camera = (this.camera = new TargetCamera("camera", Vector3.Zero(), this.scene));
     camera.parent = this.cameraRig;
     camera.rotation.x = CAMERA_PITCH;
     camera.fov = CAMERA_FOV;
@@ -92,12 +95,25 @@ export class MatchScene {
     // Nur die Rahmen gültiger Ziele bekommen Bloom, alles andere bleibt scharf.
     this.glow = new GlowLayer("glow", this.scene, { blurKernelSize: 48 });
     this.glow.intensity = 0.7;
+    this.effects = new BoardEffects(this.scene, this.glow);
 
     this.createBoard(board);
 
     this.scene.onBeforeRenderObservable.add(() => this.updateCameraParallax());
     window.addEventListener("resize", () => this.engine.resize());
     this.engine.runRenderLoop(() => this.scene.render());
+  }
+
+  pad(side: Side, lane: LaneType, slotIndex: number): SlotPad {
+    return this.padsByLane.get(this.board.lane(side, lane))![slotIndex]!;
+  }
+
+  /** Bildschirmposition eines Weltpunkts in CSS-Pixeln, für DOM-Overlays. */
+  screenPosition(world: Vector3): { x: number; y: number } {
+    const { clientWidth: width, clientHeight: height } = this.canvas;
+    const viewport = this.camera.viewport.toGlobal(width, height);
+    const projected = Vector3.Project(world, Matrix.IdentityReadOnly, this.scene.getTransformMatrix(), viewport);
+    return { x: projected.x, y: projected.y };
   }
 
   /** Das Lane-Gitter lenkt nur ab, solange nichts platziert wird. */

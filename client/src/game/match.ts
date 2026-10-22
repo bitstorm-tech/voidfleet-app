@@ -4,7 +4,7 @@
 
 import { commandById, shipById, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
 import { Board } from "../../../shared/board.ts";
-import type { PlayerView, TurnPlan } from "../../../shared/protocol.ts";
+import type { MatchResult, PlayerView, TurnPlan } from "../../../shared/protocol.ts";
 
 export class Match {
   readonly board = new Board();
@@ -17,6 +17,7 @@ export class Match {
   /** Der Zug ist abgegeben und bis zur Auflösung gesperrt. */
   submitted = false;
   opponent = { joined: false, submitted: false };
+  result: MatchResult | null = null;
 
   get plannedShip(): ShipCard | null {
     return this.plan.ship ? (this.shipHand[this.plan.ship.handIndex] ?? null) : null;
@@ -41,5 +42,6 @@ export class Match {
     this.shipDeckSize = view.shipDeckSize;
     this.commandDeckSize = view.commandDeckSize;
     this.opponent = view.opponent;
+    this.result = view.result;
   }
 }

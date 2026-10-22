@@ -3,7 +3,7 @@
 
 import type { LaneType, Side } from "../../../shared/board.ts";
 import type { CommandId, ShipClass, ShipId, TargetMode } from "../../../shared/cards.ts";
-import type { ErrorCode } from "../../../shared/protocol.ts";
+import type { ErrorCode, MatchResult } from "../../../shared/protocol.ts";
 
 export interface CardText {
   name: string;
@@ -31,18 +31,52 @@ export const en = {
     chooseCommandTarget: (command: string) => `${command}: tap one of your ships. Click the card again to take it back.`,
     planned: (cards: string) => `${cards} ready. Click “End turn”, or tap a card to take it back.`,
     idle: "Tap a ship or command card, or click “End turn” without a card to pass.",
+    resolving: "Both turns are revealed — resolving the round …",
+    result: {
+      won: "Victory — the enemy fleet is destroyed.",
+      lost: "Defeat — your fleet is destroyed.",
+      draw: "Draw — both fleets are destroyed.",
+    } satisfies Record<MatchResult, string>,
   },
   log: {
     roundHeader: (round: number) => `— Round ${round} —`,
     who: { player: "You", enemy: "Enemy" } satisfies Record<Side, string>,
     slot: (side: Side, lane: string, slot: number) => `${side === "player" ? "your" : "enemy"} ${lane} slot ${slot}`,
+    ship: (ship: string, slot: string) => `${ship} (${slot})`,
     deploy: (who: string, ship: string, slot: string) => `Deploy: ${who} — ${ship} on ${slot}`,
     pass: (who: string) => `Deploy: ${who} — no ship`,
-    command: (who: string, command: string) => `Command: ${who} — ${command} (no effect yet)`,
-    commandOn: (who: string, command: string, slot: string) => `Command: ${who} — ${command} on ${slot} (no effect yet)`,
+    command: (who: string, command: string) => `Command: ${who} — ${command}`,
+    commandOn: (who: string, command: string, slot: string) => `Command: ${who} — ${command} on ${slot}`,
+    damage: (command: string, ship: string, amount: number) => `Effect: ${command} hits ${ship} for ${amount}`,
+    attackBonus: (command: string, ship: string, delta: number) =>
+      `Effect: ${command} — ${ship} ${delta > 0 ? "+" : ""}${delta} ATK this round`,
+    shield: (command: string, ship: string, amount: number) => `Effect: ${command} — ${ship} +${amount} shield this round`,
+    disable: (command: string, ship: string) => `Effect: ${command} — ${ship} cannot attack this round`,
+    heal: (command: string, ship: string, amount: number) => `Effect: ${command} heals ${ship} for ${amount}`,
+    move: (command: string, ship: string, slot: string) => `Effect: ${command} — ${ship} moves to ${slot}`,
+    draw: (command: string, who: string, ships: number, commands: number) =>
+      `Effect: ${command} — ${who} +${ships} ship, +${commands} command`,
+    noEffect: (command: string, who: string) => `Effect: ${command} (${who}) has no effect`,
+    attack: (attacker: string, target: string, amount: number) => `Combat: ${attacker} fires at ${target} (${amount})`,
+    hit: (ship: string, amount: number) => `Combat: ${ship} takes ${amount} damage`,
+    selfDamage: (ship: string, amount: number) => `Cleanup: ${ship} takes ${amount} self-damage`,
+    destroyed: (ship: string) => `Destroyed: ${ship}`,
+  },
+  banner: {
+    command: (who: string, command: string) => `${who}: ${command}`,
+    noEffect: "no effect",
+    draw: (ships: number, commands: number) => `+${ships} ship, +${commands} command`,
+  },
+  float: {
+    damage: (amount: number) => `−${amount}`,
+    heal: (amount: number) => `+${amount} HP`,
+    shield: (amount: number) => `+${amount} Shield`,
+    attack: (delta: number) => `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ATK`,
+    disabled: "Disabled",
   },
   errors: {
     match_full: "This match is already full.",
+    match_over: "The match is over.",
     opponent_missing: "The opponent hasn't joined yet.",
     already_submitted: "You have already ended your turn this round.",
     ship_not_in_hand: "This ship card isn't in your hand.",
@@ -51,6 +85,7 @@ export const en = {
     target_required: "This command needs a target.",
     target_not_allowed: "This command takes no target.",
     target_not_own_ship: "The command target isn't one of your ships.",
+    target_wrong_lane: "This command can't target a ship in that lane.",
   } satisfies Record<ErrorCode, string>,
   lanes: { strike: "Strike", command: "Command" } satisfies Record<LaneType, string>,
   stats: { hp: "HP", atk: "ATK", shield: "Shield" },
@@ -89,7 +124,7 @@ export const en = {
     overcharge: { name: "Overcharge", effect: "Chosen ship gets +3 ATK this round. Takes 2 self-damage after combat." },
     power_surge: { name: "Power Surge", effect: "All allied ships in the Strike Line gain +1 ATK this round." },
     recall: { name: "Recall", effect: "A chosen Strike Line ship retreats to the Command Line. Heal 2 HP." },
-    scavenge: { name: "Scavenge", effect: "Draw 2 additional cards." },
+    scavenge: { name: "Scavenge", effect: "Draw 1 extra ship and 1 extra command." },
     sensor_sweep: { name: "Sensor Sweep", effect: "Reveal all cards in the enemy hand for the next round." },
     targeting_jammer: { name: "Targeting Jammer", effect: "All enemy ships in the Strike Line get -1 ATK this round (min 0)." },
     volley_fire: { name: "Volley Fire", effect: "Deal 1 damage to ALL enemy ships." },

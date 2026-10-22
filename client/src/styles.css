@@ -250,3 +250,78 @@ body {
 .command-card .keys span:nth-child(3) {
   width: 24px;
 }
+
+/* --- Rundenauflösung --- */
+
+.reveal-banner {
+  position: absolute;
+  top: 120px;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 280px;
+  padding: 10px 28px;
+  background: var(--panel);
+  border-top: 3px solid var(--banner-color);
+  border-radius: 3px;
+  opacity: 0;
+  --banner-color: var(--accent);
+}
+
+.reveal-banner[data-side="enemy"] {
+  --banner-color: rgb(255 128 108);
+}
+
+.reveal-banner strong {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--banner-color);
+}
+
+.reveal-banner span {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.reveal-banner.visible {
+  animation: banner 1.7s ease-out forwards;
+}
+
+@keyframes banner {
+  0% { opacity: 0; translate: -50% -10px; }
+  12% { opacity: 1; translate: -50% 0; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.float-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.float-text {
+  position: absolute;
+  translate: -50% -50%;
+  font-size: 22px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.9), 0 1px 2px rgb(0 0 0 / 0.9);
+  animation: float-up 1.4s ease-out forwards;
+}
+
+.float-text.damage { color: rgb(255 112 88); }
+.float-text.heal { color: rgb(120 236 140); }
+.float-text.shield { color: rgb(120 194 255); }
+.float-text.buff { color: rgb(255 214 102); }
+.float-text.debuff { color: rgb(200 150 255); }
+
+@keyframes float-up {
+  0% { opacity: 0; transform: translateY(10px) scale(0.8); }
+  15% { opacity: 1; transform: translateY(0) scale(1.1); }
+  30% { transform: translateY(-6px) scale(1); }
+  100% { opacity: 0; transform: translateY(-56px); }
+}

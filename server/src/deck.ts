@@ -30,6 +30,10 @@ export class Deck<T extends Card> {
     return result;
   }
 
+  some(predicate: (card: T) => boolean): boolean {
+    return this.cards.some(predicate);
+  }
+
   get size(): number {
     return this.cards.length;
   }

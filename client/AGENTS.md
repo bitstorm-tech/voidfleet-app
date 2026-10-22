@@ -10,9 +10,10 @@
 - `src/i18n/` — Übersetzungen. `en.ts` ist die Ausgangssprache und legt mit `Messages` Schlüssel und Parameter fest; jede weitere Sprache (`de.ts`, …) ist ein `Messages`-Objekt und wird in `index.ts` registriert. Die Sprache steht beim Start fest: `?lang=`, sonst die Browsersprache, sonst Englisch. Alle sichtbaren Texte laufen über `t`, auch Kartennamen und Effekttexte (`cardText`); `shared/` und der Server kennen nur Ids und Fehlercodes.
 - `src/game/match.ts` — Spielzustand aus Server-Sicht (Brett, Hände, Zugplan) ohne Rendering.
 - `src/net/connection.ts` — WebSocket zum Server; Match-Id aus `?match=`, Spieler-Token pro Tab im `sessionStorage`.
-- `src/scene/` — Babylon-Szene: `matchScene.ts` (Kamera-Rig mit Maus-Parallaxe, Lichter, Glow, Lanes), `slotPad.ts`, `laneLabel.ts`, `ship.ts` (glTF-Modell oder Kitbash-Fallback), `background.ts`.
-- `src/ui/` — DOM-Overlay über dem Canvas: `hud.ts` (Runde, Status, Log, Submit), `hand.ts` (Schiffs- und Befehlskarten), `roundLog.ts` (Rundenereignisse als Log-Text), `cursor.ts` (Maus-Cursor aus SVG, pro Pixeldichte gerastert).
-- `src/matchController.ts` — verbindet Server, Zustand, Szene und UI; die Szene spiegelt den Zustand nur.
+- `src/scene/` — Babylon-Szene: `matchScene.ts` (Kamera-Rig mit Maus-Parallaxe, Lichter, Glow, Lanes), `slotPad.ts`, `laneLabel.ts`, `ship.ts` (glTF-Modell oder Kitbash-Fallback, Deploy-/Treffer-/Zerstörungs-Animation), `effects.ts` (Laserbolzen, Impulse, Explosionen), `tween.ts` (Animationen im Render-Takt), `background.ts`.
+- `src/ui/` — DOM-Overlay über dem Canvas: `hud.ts` (Runde, Status, Log, Befehls-Banner, Submit), `hand.ts` (Schiffs- und Befehlskarten), `roundLog.ts` (Rundenereignisse als Log-Text), `floatingText.ts` (aufsteigende Zahlen über Schiffen), `cursor.ts` (Maus-Cursor aus SVG, pro Pixeldichte gerastert).
+- `src/roundPlayback.ts` — spielt die Ereignisse einer Runde Schritt für Schritt auf dem Brett ab; gleichartige Ereignisse laufen gemeinsam.
+- `src/matchController.ts` — verbindet Server, Zustand, Szene und UI; die Szene spiegelt den Zustand nur. Server-Nachrichten laufen durch eine Warteschlange: Erst wenn die Runde abgespielt ist, wird der neue Zustand übernommen und die Szene daran angeglichen.
 
 ## Koordinaten
 
@@ -20,4 +21,4 @@ Babylon ist linkshändig, Godot rechtshändig. Z-Werte aus der Godot-Szene (`mat
 
 ## Status
 
-Nur die Match-Szene ist portiert. Der Client plant den Zug und schickt ihn mit „Zug beenden“ an den Server; aufgelöst wird dort. „player“ ist immer die eigene Seite, der Server spiegelt für den zweiten Spieler.
+Nur die Match-Szene ist portiert. Der Client plant den Zug und schickt ihn mit „Zug beenden“ an den Server; aufgelöst wird dort, der Client animiert nur die gemeldeten Ereignisse. „player“ ist immer die eigene Seite, der Server spiegelt für den zweiten Spieler.

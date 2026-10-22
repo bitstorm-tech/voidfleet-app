@@ -2,6 +2,8 @@
 // Von Client und Server gemeinsam genutzt; Karten werden über ihre id übertragen.
 // Namen und Effekttexte sind Übersetzungen und liegen im Client (`client/src/i18n/`).
 
+import type { LaneType } from "./board.ts";
+
 export type ShipClass = "fighter" | "cruiser" | "battleship" | "support";
 export type CommandType = "attack" | "buff" | "debuff" | "tactic" | "reposition" | "special";
 export type TargetMode =
@@ -24,6 +26,8 @@ interface ShipStats {
 interface CommandStats {
   commandType: CommandType;
   targetMode: TargetMode;
+  /** Bei Zielwahl: nur Schiffe dieser Lane sind gültige Ziele. */
+  targetLane?: LaneType;
 }
 
 const SHIP_STATS = {
@@ -41,11 +45,11 @@ const COMMAND_STATS = {
   emergency_shields: { commandType: "buff", targetMode: "choose_friendly" },
   emp_blast: { commandType: "debuff", targetMode: "auto_highest_atk" },
   flanking_maneuver: { commandType: "tactic", targetMode: "choose_friendly" },
-  intercept: { commandType: "reposition", targetMode: "choose_friendly" },
+  intercept: { commandType: "reposition", targetMode: "choose_friendly", targetLane: "command" },
   orbital_strike: { commandType: "attack", targetMode: "auto_highest_hp" },
   overcharge: { commandType: "special", targetMode: "choose_friendly" },
   power_surge: { commandType: "buff", targetMode: "all_friendly_strike" },
-  recall: { commandType: "reposition", targetMode: "choose_friendly" },
+  recall: { commandType: "reposition", targetMode: "choose_friendly", targetLane: "strike" },
   scavenge: { commandType: "tactic", targetMode: "none" },
   sensor_sweep: { commandType: "special", targetMode: "none" },
   targeting_jammer: { commandType: "debuff", targetMode: "all_enemy_strike" },
@@ -92,4 +96,9 @@ export function commandById(id: CommandId): CommandCard {
 
 export function needsTarget(card: CommandCard): boolean {
   return card.targetMode === "choose_friendly";
+}
+
+/** Ob ein eigenes Schiff in dieser Lane ein gültiges Ziel für den Befehl ist. */
+export function canTargetLane(card: CommandCard, lane: LaneType): boolean {
+  return needsTarget(card) && (card.targetLane === undefined || card.targetLane === lane);
 }

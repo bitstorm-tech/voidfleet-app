@@ -1,13 +1,15 @@
 // Ein Match auf dem Server: zwei Sitzplätze, ein Brett, Decks und Hände.
 // Der Server ist autoritativ: Er prüft die Züge, hält sie bis zum Aufdecken
-// geheim und löst die Runde auf, sobald beide abgegeben haben.
+// geheim und löst die Runde auf, sobald beide abgegeben haben. Die Phasen nach
+// dem Deploy stehen in `resolution.ts`.
 // Intern sitzt Seat 0 auf der "player"-Seite des Bretts und Seat 1 auf der
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
-import { needsTarget, type CommandCard, type ShipCard } from "../../shared/cards.ts";
+import { canTargetLane, needsTarget, type CommandCard, type ShipCard } from "../../shared/cards.ts";
 import { Board, opposite, type BoardSnapshot, type Side } from "../../shared/board.ts";
-import type { ErrorCode, PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
+import type { ErrorCode, MatchResult, PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
+import { resolveCleanup, resolveCombat, resolveEffects, type Commander, type PlayedCommand } from "./resolution.ts";
 
 export type Seat = 0 | 1;
 
@@ -17,16 +19,21 @@ const STARTING_COMMANDS = 3;
 
 const SEAT_SIDE: Record<Seat, Side> = { 0: "player", 1: "enemy" };
 
-/** Übersetzt eine Brettseite in die Sicht des Seats. */
-function sideFor(seat: Seat, side: Side): Side {
-  return seat === 0 ? side : opposite(side);
-}
-
 function mirrorBoard(seat: Seat, board: BoardSnapshot): BoardSnapshot {
   return seat === 0 ? board : { player: board.enemy, enemy: board.player };
 }
 
-class Player {
+/** Spiegelt ein Ereignis für Seat 1: Jedes `side`-Feld, auch in verschachtelten Schiffen, wechselt die Seite. */
+function mirrorEvent<T>(value: T): T {
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, inner]) => [key, key === "side" ? opposite(inner as Side) : mirrorEvent(inner)]),
+  ) as T;
+}
+
+const hasOffensiveShip = (card: ShipCard) => card.atk > 0;
+
+class Player implements Commander {
   readonly shipDeck: Deck<ShipCard> = buildDefaultShipDeck();
   readonly commandDeck: Deck<CommandCard> = buildDefaultCommandDeck();
   readonly shipHand: ShipCard[];
@@ -50,17 +57,38 @@ class Player {
     drawInto(this.shipHand, this.shipDeck);
     drawInto(this.commandHand, this.commandDeck);
   }
+
+  drawExtra(): { ships: number; commands: number } {
+    return {
+      ships: drawInto(this.shipHand, this.shipDeck) ? 1 : 0,
+      commands: drawInto(this.commandHand, this.commandDeck) ? 1 : 0,
+    };
+  }
+
+  /** Kein angriffsfähiges Schiff mehr auf dem Feld, auf der Hand oder im Deck. */
+  isDefeated(board: Board): boolean {
+    return (
+      !board.ships(this.side).some((slot) => hasOffensiveShip(slot.card!)) &&
+      !this.shipHand.some(hasOffensiveShip) &&
+      !this.shipDeck.some(hasOffensiveShip)
+    );
+  }
 }
 
-function drawInto<T extends ShipCard | CommandCard>(hand: T[], deck: Deck<T>): void {
+/** Zieht eine Karte; true, wenn sie auf der Hand gelandet ist. */
+function drawInto<T extends ShipCard | CommandCard>(hand: T[], deck: Deck<T>): boolean {
   const card = deck.draw();
-  if (card !== null && hand.length < HAND_LIMIT) hand.push(card);
+  if (card === null || hand.length >= HAND_LIMIT) return false;
+  hand.push(card);
+  return true;
 }
 
 export class Match {
   readonly board = new Board();
   readonly players: Player[] = [];
   round = 1;
+  /** Gewinner aus Sicht des Bretts, "draw" bei Gleichstand; null, solange gespielt wird. */
+  winner: Side | "draw" | null = null;
 
   constructor(readonly id: string) {}
 
@@ -78,6 +106,7 @@ export class Match {
   submit(seat: Seat, plan: TurnPlan): ErrorCode | null {
     const player = this.players[seat]!;
     if (this.players.length < 2) return "opponent_missing";
+    if (this.winner !== null) return "match_over";
     if (player.plan !== null) return "already_submitted";
 
     if (plan.ship) {
@@ -94,6 +123,7 @@ export class Match {
       if (target && !this.board.lane(player.side, target.lane).slots[target.slotIndex]?.isOccupied) {
         return "target_not_own_ship";
       }
+      if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
     }
 
     player.plan = plan;
@@ -105,9 +135,9 @@ export class Match {
   }
 
   /**
-   * Deckt beide Züge auf und löst die Runde auf: Deploy, Befehle (noch ohne
-   * Wirkung), Nachziehen. Combat und Cleanup fehlen noch. Gibt die Ereignisse
-   * aus Sicht von Seat 0 zurück.
+   * Deckt beide Züge auf und löst die Runde in Phasen auf: Deploy, Effects,
+   * Combat, Cleanup. Danach wird geprüft, ob eine Flotte vernichtet ist; sonst
+   * ziehen beide nach. Gibt die Ereignisse aus Sicht von Seat 0 zurück.
    */
   resolveRound(): RoundEvent[] {
     const events: RoundEvent[] = [];
@@ -123,20 +153,45 @@ export class Match {
       }
     }
 
+    const commands: PlayedCommand[] = [];
     for (const player of this.players) {
       const command = player.plan!.command;
-      if (command) {
-        const [card] = player.commandHand.splice(command.handIndex, 1);
-        events.push({ kind: "command", side: player.side, cardId: card!.id, target: command.target });
-      }
+      if (!command) continue;
+      const [card] = player.commandHand.splice(command.handIndex, 1);
+      const { target } = command;
+      commands.push({
+        commander: player,
+        card: card!,
+        target: target && this.board.lane(player.side, target.lane).slots[target.slotIndex]!,
+      });
+      events.push({ kind: "command", side: player.side, cardId: card!.id, target });
     }
 
-    for (const player of this.players) {
-      player.drawForRound();
-      player.plan = null;
+    resolveEffects(this.board, commands, events);
+    resolveCombat(this.board, events);
+    resolveCleanup(this.board, events);
+
+    for (const player of this.players) player.plan = null;
+    this.winner = this.decideWinner();
+    if (this.winner === null) {
+      for (const player of this.players) player.drawForRound();
+      this.round += 1;
     }
-    this.round += 1;
     return events;
+  }
+
+  private decideWinner(): Side | "draw" | null {
+    const [first, second] = this.players.map((player) => player.isDefeated(this.board));
+    if (first && second) return "draw";
+    if (first) return this.players[1]!.side;
+    if (second) return this.players[0]!.side;
+    return null;
+  }
+
+  private resultFor(seat: Seat): MatchResult | null {
+    if (this.winner === null) return null;
+    if (this.winner === "draw") return "draw";
+    return this.winner === SEAT_SIDE[seat] ? "won" : "lost";
   }
 
   view(seat: Seat): PlayerView {
@@ -152,10 +207,11 @@ export class Match {
       commandDeckSize: player.commandDeck.size,
       submittedPlan: player.plan,
       opponent: { joined: opponent !== undefined, submitted: opponent?.plan != null },
+      result: this.resultFor(seat),
     };
   }
 
   eventsFor(seat: Seat, events: RoundEvent[]): RoundEvent[] {
-    return events.map((event) => ({ ...event, side: sideFor(seat, event.side) }));
+    return seat === 0 ? events : events.map(mirrorEvent);
   }
 }

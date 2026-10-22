@@ -5,26 +5,31 @@
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
-import { needsTarget } from "../../shared/cards.ts";
+import { canTargetLane, needsTarget } from "../../shared/cards.ts";
 import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, type Lane } from "../../shared/board.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
 import { Match } from "./game/match.ts";
 import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
+import { RoundPlayback } from "./roundPlayback.ts";
 import { MatchScene, pickedPad } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
+import { FloatingTexts } from "./ui/floatingText.ts";
 import { HandView } from "./ui/hand.ts";
 import { Hud } from "./ui/hud.ts";
-import { roundLogLines } from "./ui/roundLog.ts";
 
 export class MatchController {
   private readonly match = new Match();
   private readonly view: MatchScene;
   private readonly hud: Hud;
   private readonly hand: HandView;
+  private readonly playback: RoundPlayback;
   private readonly connection: ServerConnection;
   private isConnected = true;
+  /** Server-Nachrichten werden der Reihe nach verarbeitet; eine Runde wartet, bis ihre Animation fertig ist. */
+  private inbox: Promise<void> = Promise.resolve();
+  private isResolving = false;
 
   private selectedShipIndex: number | null = null;
   private selectedCommandIndex: number | null = null;
@@ -34,7 +39,9 @@ export class MatchController {
 
   constructor(canvas: HTMLCanvasElement, ui: HTMLElement) {
     this.view = new MatchScene(canvas, this.match.board);
+    const floats = new FloatingTexts(ui);
     this.hud = new Hud(ui);
+    this.playback = new RoundPlayback(this.view, this.hud, floats);
     this.hand = new HandView(ui, this.hud.submitButton, {
       onShipCardClick: (index) => this.onShipCardClick(index),
       onCommandCardClick: (index) => this.onCommandCardClick(index),
@@ -44,7 +51,9 @@ export class MatchController {
     this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
 
     this.connection = new ServerConnection({
-      onMessage: (message) => this.onServerMessage(message),
+      onMessage: (message) => {
+        this.inbox = this.inbox.then(() => this.onServerMessage(message));
+      },
       onClose: () => {
         this.isConnected = false;
         this.refreshSelectionVisuals();
@@ -53,14 +62,14 @@ export class MatchController {
     this.refreshSelectionVisuals();
   }
 
-  /** Geplant wird, solange der Zug dieser Runde noch nicht abgegeben ist. */
+  /** Geplant wird, solange der Zug dieser Runde noch nicht abgegeben und das Match nicht entschieden ist. */
   private get canPlan(): boolean {
-    return this.isConnected && this.match.round > 0 && !this.match.submitted;
+    return this.isConnected && this.match.round > 0 && !this.match.submitted && this.match.result === null;
   }
 
   // --- Server ---
 
-  private onServerMessage(message: ServerMessage): void {
+  private async onServerMessage(message: ServerMessage): Promise<void> {
     switch (message.type) {
       case "state":
         this.match.apply(message.view);
@@ -70,7 +79,12 @@ export class MatchController {
         this.refreshSelectionVisuals();
         break;
       case "round":
-        this.hud.appendLog(roundLogLines(message.round, message.events));
+        // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
+        this.isResolving = true;
+        this.clearGhost();
+        this.refreshSelectionVisuals();
+        await this.playback.play(message.round, message.events);
+        this.isResolving = false;
         break;
       case "error":
         this.hud.appendLog([`Server: ${t.errors[message.code]}`]);
@@ -153,14 +167,17 @@ export class MatchController {
 
   /**
    * Einzige Gültigkeitsregel für Highlight und Klick: gewähltes Schiff -> freie
-   * eigene Slots, gewählter Befehl -> eigene besetzte Slots. Ohne Auswahl leuchtet
-   * nur das bereits gewählte Befehlsziel weiter. Die Gegnerseite ist nie Ziel.
+   * eigene Slots, gewählter Befehl -> eigene Schiffe in einer erlaubten Lane. Ohne Auswahl leuchtet
+   * nur das bereits gewählte Befehlsziel weiter, bis die Runde aufgelöst wird.
+   * Die Gegnerseite ist nie Ziel.
    */
   private isValidTarget(pad: SlotPad): boolean {
     const lane: Lane = pad.slot.lane;
-    if (lane.side === "enemy") return false;
+    if (lane.side === "enemy" || this.isResolving) return false;
     if (this.selectedShipIndex !== null) return this.match.board.canPlace(lane, pad.slot.index);
-    if (this.selectedCommandIndex !== null) return pad.slot.isOccupied;
+    if (this.selectedCommandIndex !== null) {
+      return pad.slot.isOccupied && canTargetLane(this.match.commandHand[this.selectedCommandIndex]!, lane.type);
+    }
     const target = this.match.plan.command?.target;
     return target !== undefined && target !== null && target.lane === lane.type && target.slotIndex === pad.slot.index;
   }
@@ -204,12 +221,12 @@ export class MatchController {
     this.connection.send({ type: "submit", plan: this.match.plan });
   }
 
-  /** Szene an den neuen Zustand angleichen; der Geist kommt erst nach den echten Schiffen. */
+  /** Szene an den neuen Zustand angleichen (auch Schiffe, die die Lane gewechselt haben); der Geist kommt zuletzt. */
   private syncBoard(): void {
     this.clearGhost();
     for (const pad of this.view.pads) {
       const slot = pad.slot;
-      if (slot.isOccupied && pad.ship === null) {
+      if (slot.isOccupied && pad.ship?.card !== slot.card) {
         pad.attachShip(new ShipView(this.view.scene, slot.card!, false));
       } else if (!slot.isOccupied && pad.ship !== null) {
         pad.clearShip();
@@ -254,6 +271,8 @@ export class MatchController {
   private buildStatusText(): string {
     if (!this.isConnected) return t.status.disconnected;
     if (this.match.round === 0) return t.status.connecting;
+    if (this.isResolving) return t.status.resolving;
+    if (this.match.result !== null) return t.status.result[this.match.result];
     if (this.match.submitted) return t.status.submitted;
     if (!this.match.opponent.joined) return t.status.waitingForOpponent(this.shareLink());
     const fleet = t.status.fleet(this.match.board.shipCount("player"), MAX_SHIPS_PER_SIDE);

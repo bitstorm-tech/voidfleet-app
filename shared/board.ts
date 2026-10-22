@@ -1,5 +1,6 @@
 // Das Spielbrett: zwei Lanes pro Seite, Strike vorne, Command hinten.
-// Kennt als einzige Stelle die Platzierungsregeln. "player" ist immer die
+// Kennt als einzige Stelle die Platzierungsregeln; die Slots tragen den
+// Live-Zustand der Schiffe (HP, Schild, Rundenmodifikatoren). "player" ist immer die
 // Seite des Betrachters; der Server spiegelt das Brett für den zweiten Spieler.
 
 import { shipById, type ShipCard, type ShipId } from "./cards.ts";
@@ -29,6 +30,13 @@ export class Slot {
   hp = 0;
   shield = 0;
 
+  // Nur für die laufende Runde, im Cleanup zurückgesetzt. Zwischen den Runden
+  // sind sie immer neutral und gehören deshalb nicht in den Snapshot.
+  attackBonus = 0;
+  shieldBonus = 0;
+  disabled = false;
+  selfDamageAfterCombat = 0;
+
   constructor(
     readonly lane: Lane,
     readonly index: number,
@@ -38,7 +46,21 @@ export class Slot {
     return this.card !== null;
   }
 
+  get isDestroyed(): boolean {
+    return this.isOccupied && this.hp <= 0;
+  }
+
+  get attack(): number {
+    return this.card ? Math.max(0, this.card.atk + this.attackBonus) : 0;
+  }
+
+  /** Support-Schiffe (Basis-ATK 0) greifen nie an, auch nicht mit Bonus. */
+  get canAttack(): boolean {
+    return this.card !== null && this.card.atk > 0 && this.attack > 0 && !this.disabled && !this.isDestroyed;
+  }
+
   place(card: ShipCard): void {
+    this.clear();
     this.card = card;
     this.hp = card.hp;
     this.shield = card.shield;
@@ -48,6 +70,49 @@ export class Slot {
     this.card = null;
     this.hp = 0;
     this.shield = 0;
+    this.attackBonus = 0;
+    this.shieldBonus = 0;
+    this.disabled = false;
+    this.selfDamageAfterCombat = 0;
+  }
+
+  /** Schaden geht erst auf den Schild, der Rest auf die HP. */
+  damage(amount: number): void {
+    const absorbed = Math.min(this.shield, amount);
+    this.shield -= absorbed;
+    this.shieldBonus = Math.min(this.shieldBonus, this.shield);
+    this.hp -= amount - absorbed;
+  }
+
+  /** Heilt höchstens bis zur HP der Karte. */
+  heal(amount: number): void {
+    this.hp = Math.min(this.hp + amount, this.card!.hp);
+  }
+
+  addShield(amount: number): void {
+    this.shield += amount;
+    this.shieldBonus += amount;
+  }
+
+  /** Rundenmodifikatoren zurücksetzen; ein Bonus-Schild verfällt, soweit er noch steht. */
+  endRound(): void {
+    this.shield -= this.shieldBonus;
+    this.attackBonus = 0;
+    this.shieldBonus = 0;
+    this.disabled = false;
+    this.selfDamageAfterCombat = 0;
+  }
+
+  /** Übernimmt Schiff samt Live-Zustand eines anderen Slots und leert diesen. */
+  takeFrom(other: Slot): void {
+    this.card = other.card;
+    this.hp = other.hp;
+    this.shield = other.shield;
+    this.attackBonus = other.attackBonus;
+    this.shieldBonus = other.shieldBonus;
+    this.disabled = other.disabled;
+    this.selfDamageAfterCombat = other.selfDamageAfterCombat;
+    other.clear();
   }
 
   get state(): SlotState | null {
@@ -55,10 +120,8 @@ export class Slot {
   }
 
   set state(state: SlotState | null) {
-    if (state === null) {
-      this.clear();
-      return;
-    }
+    this.clear();
+    if (state === null) return;
     this.card = shipById(state.cardId);
     this.hp = state.hp;
     this.shield = state.shield;
@@ -82,6 +145,21 @@ export class Lane {
   get isFull(): boolean {
     return this.occupiedSlots.length >= MAX_SHIPS_PER_LANE;
   }
+
+  /** Freier Slot für ein Schiff, das hierher wechselt: derselbe Index, sonst der nächstgelegene. */
+  freeSlotNear(index: number): Slot | null {
+    if (this.isFull) return null;
+    return nearest(this.slots.filter((slot) => !slot.isOccupied), index);
+  }
+}
+
+/** Slot mit dem kleinsten Indexabstand; bei Gleichstand gewinnt der niedrigere Index. */
+export function nearest(slots: readonly Slot[], index: number): Slot | null {
+  let best: Slot | null = null;
+  for (const slot of slots) {
+    if (best === null || Math.abs(slot.index - index) < Math.abs(best.index - index)) best = slot;
+  }
+  return best;
 }
 
 export class Board {
@@ -100,8 +178,13 @@ export class Board {
     return this.lanes.filter((lane) => lane.side === side);
   }
 
+  /** Schiffe einer Seite, Strike vor Command, jeweils nach Slot-Index. */
+  ships(side: Side): Slot[] {
+    return [this.lane(side, "strike"), this.lane(side, "command")].flatMap((lane) => lane.occupiedSlots);
+  }
+
   shipCount(side: Side): number {
-    return this.lanesFor(side).reduce((sum, lane) => sum + lane.occupiedSlots.length, 0);
+    return this.ships(side).length;
   }
 
   canPlace(lane: Lane, slotIndex: number): boolean {
