@@ -6,7 +6,7 @@
 
 import { needsTarget, type CommandCard, type ShipCard } from "../../shared/cards.ts";
 import { Board, opposite, type BoardSnapshot, type Side } from "../../shared/board.ts";
-import type { PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
+import type { ErrorCode, PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
 
 export type Seat = 0 | 1;
@@ -74,26 +74,25 @@ export class Match {
     return seat;
   }
 
-  /** Nimmt den Zug an. Gibt eine Fehlermeldung zurück, wenn er nicht gilt. */
-  submit(seat: Seat, plan: TurnPlan): string | null {
+  /** Nimmt den Zug an. Gibt einen Fehlercode zurück, wenn er nicht gilt. */
+  submit(seat: Seat, plan: TurnPlan): ErrorCode | null {
     const player = this.players[seat]!;
-    if (this.players.length < 2) return "Der Gegner ist noch nicht beigetreten.";
-    if (player.plan !== null) return "Der Zug dieser Runde ist bereits beendet.";
+    if (this.players.length < 2) return "opponent_missing";
+    if (player.plan !== null) return "already_submitted";
 
     if (plan.ship) {
       const { handIndex, target } = plan.ship;
-      if (player.shipHand[handIndex] === undefined) return "Diese Schiffskarte ist nicht auf der Hand.";
-      if (!this.board.canPlace(this.board.lane(player.side, target.lane), target.slotIndex)) {
-        return "Auf diesem Slot kann kein Schiff landen.";
-      }
+      if (player.shipHand[handIndex] === undefined) return "ship_not_in_hand";
+      if (!this.board.canPlace(this.board.lane(player.side, target.lane), target.slotIndex)) return "slot_unavailable";
     }
     if (plan.command) {
       const { handIndex, target } = plan.command;
       const card = player.commandHand[handIndex];
-      if (card === undefined) return "Diese Befehlskarte ist nicht auf der Hand.";
-      if (needsTarget(card) !== (target !== null)) return `${card.name} braucht ${target ? "kein" : "ein"} Ziel.`;
+      if (card === undefined) return "command_not_in_hand";
+      if (needsTarget(card) && target === null) return "target_required";
+      if (!needsTarget(card) && target !== null) return "target_not_allowed";
       if (target && !this.board.lane(player.side, target.lane).slots[target.slotIndex]?.isOccupied) {
-        return "Das Befehlsziel ist kein eigenes Schiff.";
+        return "target_not_own_ship";
       }
     }
 

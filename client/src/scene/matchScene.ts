@@ -20,6 +20,7 @@ import { Scene } from "@babylonjs/core/scene";
 import "@babylonjs/core/Culling/ray";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
 import type { Board, Lane, Side } from "../../../shared/board.ts";
+import { t, upper } from "../i18n/index.ts";
 import { Background } from "./background.ts";
 import { LaneLabel } from "./laneLabel.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";
@@ -127,7 +128,7 @@ export class MatchScene {
       const laneRoot = new TransformNode(`lane-${lane.side}-${lane.type}`, this.scene);
       laneRoot.parent = boardRoot;
       laneRoot.position.x = LANE_X[lane.side][lane.type];
-      this.laneLabels.push(new LaneLabel(this.scene, laneRoot, lane.type.toUpperCase(), LABEL_COLORS[lane.side]));
+      this.laneLabels.push(new LaneLabel(this.scene, laneRoot, upper(t.lanes[lane.type]), LABEL_COLORS[lane.side]));
 
       const facing = lane.side === "player" ? 1 : -1;
       const pads = lane.slots.map(

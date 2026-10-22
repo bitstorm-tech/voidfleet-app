@@ -3,6 +3,7 @@
 // "enemy" die des Gegners. Karten werden über ihre id übertragen.
 
 import type { BoardSnapshot, LaneType, Side } from "./board.ts";
+import type { CommandId, ShipId } from "./cards.ts";
 
 /** Ein Slot auf der eigenen Seite des Bretts. */
 export interface SlotTarget {
@@ -20,8 +21,8 @@ export interface PlayerView {
   matchId: string;
   round: number;
   board: BoardSnapshot;
-  shipHand: string[];
-  commandHand: string[];
+  shipHand: ShipId[];
+  commandHand: CommandId[];
   shipDeckSize: number;
   commandDeckSize: number;
   /** Der abgegebene Zug dieser Runde; null, solange noch geplant wird. */
@@ -31,14 +32,26 @@ export interface PlayerView {
 
 /** Was in einer Runde aufgedeckt und aufgelöst wurde, in Auflösungsreihenfolge. */
 export type RoundEvent =
-  | { kind: "deploy"; side: Side; cardId: string; target: SlotTarget }
+  | { kind: "deploy"; side: Side; cardId: ShipId; target: SlotTarget }
   | { kind: "pass"; side: Side }
-  | { kind: "command"; side: Side; cardId: string; target: SlotTarget | null };
+  | { kind: "command"; side: Side; cardId: CommandId; target: SlotTarget | null };
 
 /** Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`. */
 export type ClientMessage = { type: "submit"; plan: TurnPlan };
 
+/** Fehler werden als Code übertragen, der Client formuliert sie in seiner Sprache. */
+export type ErrorCode =
+  | "match_full"
+  | "opponent_missing"
+  | "already_submitted"
+  | "ship_not_in_hand"
+  | "slot_unavailable"
+  | "command_not_in_hand"
+  | "target_required"
+  | "target_not_allowed"
+  | "target_not_own_ship";
+
 export type ServerMessage =
   | { type: "state"; view: PlayerView }
   | { type: "round"; round: number; events: RoundEvent[] }
-  | { type: "error"; message: string };
+  | { type: "error"; code: ErrorCode };

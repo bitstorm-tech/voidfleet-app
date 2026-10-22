@@ -2,13 +2,13 @@
 // Kennt als einzige Stelle die Platzierungsregeln. "player" ist immer die
 // Seite des Betrachters; der Server spiegelt das Brett für den zweiten Spieler.
 
-import { shipById, type ShipCard } from "./cards.ts";
+import { shipById, type ShipCard, type ShipId } from "./cards.ts";
 
 export type Side = "player" | "enemy";
 export type LaneType = "strike" | "command";
 
 export interface SlotState {
-  cardId: string;
+  cardId: ShipId;
   hp: number;
   shield: number;
 }

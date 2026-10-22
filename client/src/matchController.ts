@@ -6,9 +6,10 @@
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { needsTarget } from "../../shared/cards.ts";
-import { MAX_SHIPS_PER_SIDE, type Lane } from "../../shared/board.ts";
+import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, type Lane } from "../../shared/board.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
 import { Match } from "./game/match.ts";
+import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
 import { MatchScene, pickedPad } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
@@ -72,7 +73,7 @@ export class MatchController {
         this.hud.appendLog(roundLogLines(message.round, message.events));
         break;
       case "error":
-        this.hud.appendLog([`Server: ${message.message}`]);
+        this.hud.appendLog([`Server: ${t.errors[message.code]}`]);
         break;
     }
   }
@@ -251,31 +252,36 @@ export class MatchController {
   }
 
   private buildStatusText(): string {
-    if (!this.isConnected) return "Verbindung zum Server verloren — Seite neu laden.";
-    if (this.match.round === 0) return "Verbinde mit dem Server …";
-    if (this.match.submitted) return "Zug beendet — warte auf den Gegner.";
-    if (!this.match.opponent.joined) return `Warte auf den Gegner — Link teilen: ${location.href}`;
-    const opponent = this.match.opponent.submitted ? " Der Gegner hat seinen Zug schon beendet." : "";
-    return this.buildPlanningText() + opponent;
+    if (!this.isConnected) return t.status.disconnected;
+    if (this.match.round === 0) return t.status.connecting;
+    if (this.match.submitted) return t.status.submitted;
+    if (!this.match.opponent.joined) return t.status.waitingForOpponent(this.shareLink());
+    const fleet = t.status.fleet(this.match.board.shipCount("player"), MAX_SHIPS_PER_SIDE);
+    const opponent = this.match.opponent.submitted ? ` ${t.status.opponentSubmitted}` : "";
+    return `${fleet} — ${this.buildPlanningText()}${opponent}`;
+  }
+
+  /** Der Match-Link ohne `?lang=`, damit der Gegner seine eigene Sprache bekommt. */
+  private shareLink(): string {
+    const url = new URL(location.href);
+    url.searchParams.delete("lang");
+    return url.href;
   }
 
   private buildPlanningText(): string {
-    const fleet = `Flotte ${this.match.board.shipCount("player")}/${MAX_SHIPS_PER_SIDE}`;
     if (this.selectedShipIndex !== null) {
-      const name = this.match.shipHand[this.selectedShipIndex]!.name;
-      if (this.validTargetCount === 0) return `${fleet} — kein freier Slot für ${name} (max. 4 pro Lane, 8 pro Seite).`;
-      return `${fleet} — ${name}: leuchtenden Slot antippen. Nochmal auf die Karte klicken nimmt zurück.`;
+      const name = cardText(this.match.shipHand[this.selectedShipIndex]!).name;
+      if (this.validTargetCount === 0) return t.status.noFreeSlot(name, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE);
+      return t.status.placeShip(name);
     }
     if (this.selectedCommandIndex !== null) {
-      const name = this.match.commandHand[this.selectedCommandIndex]!.name;
-      if (this.validTargetCount === 0) return `${fleet} — kein eigenes Schiff als Ziel für ${name}.`;
-      return `${fleet} — ${name}: eigenes Schiff antippen. Nochmal auf die Karte klicken nimmt zurück.`;
+      const name = cardText(this.match.commandHand[this.selectedCommandIndex]!).name;
+      if (this.validTargetCount === 0) return t.status.noCommandTarget(name);
+      return t.status.chooseCommandTarget(name);
     }
-    const planned = [this.match.plannedShip?.name, this.match.plannedCommand?.name].filter((name) => name !== undefined);
-    if (planned.length > 0) {
-      return `${fleet} — ${planned.join(" + ")} steht bereit. „Zug beenden“ oder Karte antippen zum Zurücknehmen.`;
-    }
-    return `${fleet} — Schiffs- oder Befehlskarte antippen, oder ohne Karte „Zug beenden“ (Pass).`;
+    const planned = [this.match.plannedShip, this.match.plannedCommand].filter((card) => card !== null);
+    if (planned.length > 0) return t.status.planned(planned.map((card) => cardText(card).name).join(" + "));
+    return t.status.idle;
   }
 
   private setHoveredPad(pad: SlotPad | null): void {

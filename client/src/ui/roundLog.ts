@@ -1,29 +1,28 @@
 // Formuliert die aufgedeckten Ereignisse einer Runde als Log-Zeilen.
 
 import { commandById, shipById } from "../../../shared/cards.ts";
-import type { LaneType, Side } from "../../../shared/board.ts";
+import type { Side } from "../../../shared/board.ts";
 import type { RoundEvent, SlotTarget } from "../../../shared/protocol.ts";
-
-const WHO: Record<Side, string> = { player: "Du", enemy: "Gegner" };
+import { t } from "../i18n/index.ts";
 
 function slotLabel(side: Side, target: SlotTarget): string {
-  const lane: Record<LaneType, string> = { strike: "Strike", command: "Command" };
-  return `${side === "player" ? "eigene" : "gegnerische"} ${lane[target.lane]} Slot ${target.slotIndex + 1}`;
+  return t.log.slot(side, t.lanes[target.lane], target.slotIndex + 1);
 }
 
 function describe(event: RoundEvent): string {
+  const who = t.log.who[event.side];
   switch (event.kind) {
     case "deploy":
-      return `Deploy: ${WHO[event.side]} — ${shipById(event.cardId).name} auf ${slotLabel(event.side, event.target)}`;
+      return t.log.deploy(who, t.ships[event.cardId].name, slotLabel(event.side, event.target));
     case "pass":
-      return `Deploy: ${WHO[event.side]} — kein Schiff`;
+      return t.log.pass(who);
     case "command": {
-      const target = event.target ? ` auf ${slotLabel(event.side, event.target)}` : "";
-      return `Befehl: ${WHO[event.side]} — ${commandById(event.cardId).name}${target} (noch ohne Wirkung)`;
+      const name = t.commands[event.cardId].name;
+      return event.target ? t.log.commandOn(who, name, slotLabel(event.side, event.target)) : t.log.command(who, name);
     }
   }
 }
 
 export function roundLogLines(round: number, events: readonly RoundEvent[]): string[] {
-  return [`— Runde ${round} —`, ...events.map(describe)];
+  return [t.log.roundHeader(round), ...events.map(describe)];
 }

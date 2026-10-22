@@ -1,5 +1,7 @@
 // Kopfzeile (Runde + Status), Log-Panel und Submit-Button als DOM-Overlay.
 
+import { t } from "../i18n/index.ts";
+
 export class Hud {
   private readonly roundLabel: HTMLElement;
   private readonly statusLabel: HTMLElement;
@@ -17,7 +19,7 @@ export class Hud {
         <span class="status-label"></span>
       </div>
       <div class="log-panel">
-        <button type="button" class="log-toggle">Log einblenden</button>
+        <button type="button" class="log-toggle"></button>
         <div class="log-text"></div>
       </div>`,
     );
@@ -26,16 +28,17 @@ export class Hud {
     this.logPanel = container.querySelector(".log-panel")!;
     this.logToggle = container.querySelector(".log-toggle")!;
     this.logText = container.querySelector(".log-text")!;
+    this.logToggle.textContent = t.hud.showLog;
     this.logToggle.addEventListener("click", () => this.toggleLog());
 
     this.submitButton = document.createElement("button");
     this.submitButton.type = "button";
     this.submitButton.className = "submit-button";
-    this.submitButton.textContent = "Zug beenden";
+    this.submitButton.textContent = t.hud.endTurn;
   }
 
   setRound(round: number): void {
-    this.roundLabel.textContent = `Runde ${round}`;
+    this.roundLabel.textContent = t.hud.round(round);
   }
 
   setStatus(text: string): void {
@@ -50,6 +53,6 @@ export class Hud {
 
   private toggleLog(): void {
     const expanded = this.logPanel.classList.toggle("expanded");
-    this.logToggle.textContent = expanded ? "Log ausblenden" : "Log einblenden";
+    this.logToggle.textContent = expanded ? t.hud.hideLog : t.hud.showLog;
   }
 }

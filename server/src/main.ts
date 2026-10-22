@@ -44,7 +44,7 @@ function broadcastState(room: Room): void {
 function onSubmit(socket: Socket, room: Room, seat: Seat, message: ClientMessage): void {
   const error = room.match.submit(seat, message.plan);
   if (error) {
-    send(socket, { type: "error", message: error });
+    send(socket, { type: "error", code: error });
     return;
   }
   if (room.match.isRoundComplete) {
@@ -77,7 +77,7 @@ const server = Bun.serve({
       const room = roomFor(socket.data.matchId);
       const seat = room.match.join(socket.data.token);
       if (seat === null) {
-        send(socket, { type: "error", message: "Dieses Match ist bereits voll." });
+        send(socket, { type: "error", code: "match_full" });
         socket.close();
         return;
       }

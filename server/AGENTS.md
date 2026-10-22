@@ -9,6 +9,7 @@
 - `src/match.ts` — autoritatives Match: Sitzplätze per Token, Zugprüfung, Auflösung, Sicht pro Spieler. Seat 0 ist intern die „player“-Seite des Bretts, für Seat 1 werden Brett und Ereignisse gespiegelt.
 - `src/deck.ts` — gemischte Nachziehstapel.
 - Gemeinsamer Code mit dem Client liegt in `../shared/`.
+- Der Server verschickt keine Texte für Spieler: Karten gehen als Id, Fehler als `ErrorCode` (`shared/protocol.ts`); formuliert wird im Client (`client/src/i18n/`).
 
 ## Status
 

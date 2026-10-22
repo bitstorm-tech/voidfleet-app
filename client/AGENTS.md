@@ -7,6 +7,7 @@
 
 - `../shared/` — mit dem Server geteilt: `cards.ts` (Kartendefinitionen), `board.ts` (Lanes, Slots, Platzierungsregeln, Snapshot), `protocol.ts` (Nachrichten).
 - `src/data/cardColors.ts` — Kartenfarben und Farb-Helfer.
+- `src/i18n/` — Übersetzungen. `en.ts` ist die Ausgangssprache und legt mit `Messages` Schlüssel und Parameter fest; jede weitere Sprache (`de.ts`, …) ist ein `Messages`-Objekt und wird in `index.ts` registriert. Die Sprache steht beim Start fest: `?lang=`, sonst die Browsersprache, sonst Englisch. Alle sichtbaren Texte laufen über `t`, auch Kartennamen und Effekttexte (`cardText`); `shared/` und der Server kennen nur Ids und Fehlercodes.
 - `src/game/match.ts` — Spielzustand aus Server-Sicht (Brett, Hände, Zugplan) ohne Rendering.
 - `src/net/connection.ts` — WebSocket zum Server; Match-Id aus `?match=`, Spieler-Token pro Tab im `sessionStorage`.
 - `src/scene/` — Babylon-Szene: `matchScene.ts` (Kamera-Rig mit Maus-Parallaxe, Lichter, Glow, Lanes), `slotPad.ts`, `laneLabel.ts`, `ship.ts` (glTF-Modell oder Kitbash-Fallback), `background.ts`.

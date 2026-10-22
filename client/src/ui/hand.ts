@@ -1,8 +1,9 @@
 // Die Hand: Schiffskarten links, Submit in der Mitte, Befehlskarten rechts.
 // Karten werden bei jedem Refresh aus der Hand neu aufgebaut.
 
-import { targetLabel, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
+import type { CommandCard, ShipCard } from "../../../shared/cards.ts";
 import { cardColor, darkened, toCss } from "../data/cardColors.ts";
+import { cardText, t, upper } from "../i18n/index.ts";
 
 export interface HandCallbacks {
   onShipCardClick: (handIndex: number) => void;
@@ -63,12 +64,15 @@ export class HandView {
       <div class="name"></div>
       <div class="class"></div>
       <div class="stats">
-        <span>HP</span><b class="hp"></b>
-        <span>ATK</span><b class="atk"></b>
-        <span>SHIELD</span><b class="shield"></b>
+        <span class="hp-label"></span><b class="hp"></b>
+        <span class="atk-label"></span><b class="atk"></b>
+        <span class="shield-label"></span><b class="shield"></b>
       </div>`;
-    element.querySelector(".name")!.textContent = card.name;
-    element.querySelector(".class")!.textContent = card.shipClass.toUpperCase();
+    element.querySelector(".name")!.textContent = cardText(card).name;
+    element.querySelector(".class")!.textContent = upper(t.shipClasses[card.shipClass]);
+    element.querySelector(".hp-label")!.textContent = upper(t.stats.hp);
+    element.querySelector(".atk-label")!.textContent = upper(t.stats.atk);
+    element.querySelector(".shield-label")!.textContent = upper(t.stats.shield);
     element.querySelector(".hp")!.textContent = String(card.hp);
     element.querySelector(".atk")!.textContent = String(card.atk);
     element.querySelector(".shield")!.textContent = String(card.shield);
@@ -86,9 +90,10 @@ export class HandView {
         <div class="effect"></div>
       </div>
       <div class="keys"><span></span><span></span><span></span><span></span></div>`;
-    element.querySelector(".name")!.textContent = card.name;
-    element.querySelector(".target")!.textContent = targetLabel(card);
-    element.querySelector(".effect")!.textContent = card.effectText;
+    const text = cardText(card);
+    element.querySelector(".name")!.textContent = text.name;
+    element.querySelector(".target")!.textContent = t.targets[card.targetMode];
+    element.querySelector(".effect")!.textContent = text.effect;
     return element;
   }
 }
