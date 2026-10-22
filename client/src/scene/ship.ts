@@ -20,7 +20,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { ShipCard } from "../../../shared/cards.ts";
 import { cardColor, lightened, type Rgb } from "../data/cardColors.ts";
 import voidInterceptorUrl from "../../assets/models/void_interceptor_low_poly.glb";
-import { easeInCubic, easeOutBack, easeOutCubic, tween } from "./tween.ts";
+import { easeInCubic, easeOutCubic, tween } from "./tween.ts";
 
 const MODEL_URLS: Record<string, string> = {
   void_interceptor: voidInterceptorUrl,
@@ -28,8 +28,10 @@ const MODEL_URLS: Record<string, string> = {
 /** Schiffe sind für den Hangar modelliert und auf dem Brett zu groß. */
 const BOARD_SCALE = 0.6;
 const MODEL_SCALE = 0.55;
-/** Höhe, aus der ein Schiff beim Deploy auf den Pad sinkt. */
-const WARP_IN_HEIGHT = 1.6;
+/** Deploy: Das Schiff kommt aus dieser Höhe über dem Pad herunter und richtet sich beim Abbremsen auf. */
+const LANDING_HEIGHT = 7;
+const LANDING_DURATION = 950;
+const LANDING_PITCH = Tools.ToRadians(-16);
 /** Geist-Schiffe zeigen einen geplanten, noch nicht ausgeführten Zug. */
 const GHOST_VISIBILITY = 0.3;
 
@@ -113,12 +115,15 @@ export class ShipView {
     if (shieldMax > 0) this.setFill(this.shieldFill, ratio(shield, shieldMax));
   }
 
-  /** Deploy: wächst aus dem Nichts und sinkt auf den Pad. */
-  async warpIn(): Promise<void> {
-    await tween(this.scene, 560, (progress) => {
-      this.root.scaling.setAll(BOARD_SCALE * Math.max(easeOutBack(progress), 0));
-      this.root.position.y = (1 - easeOutCubic(progress)) * WARP_IN_HEIGHT;
+  /** Deploy: landet von oben auf dem Pad und bremst vor dem Aufsetzen ab; die Balken erscheinen erst danach. */
+  async land(): Promise<void> {
+    this.statusBars.setEnabled(false);
+    await tween(this.scene, LANDING_DURATION, (progress) => {
+      const remaining = 1 - easeOutCubic(progress);
+      this.root.position.y = remaining * LANDING_HEIGHT;
+      this.modelRoot.rotation.x = remaining * LANDING_PITCH;
     });
+    this.statusBars.setEnabled(true);
   }
 
   /** Treffer: das Modell zittert kurz, die Balken bleiben ruhig. */

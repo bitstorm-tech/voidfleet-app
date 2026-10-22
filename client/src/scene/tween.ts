@@ -27,5 +27,3 @@ export function wait(scene: Scene, duration: number): Promise<void> {
 export const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 export const easeInCubic = (t: number) => t ** 3;
 export const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
-/** Schießt leicht über das Ziel hinaus und federt zurück. */
-export const easeOutBack = (t: number) => 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
