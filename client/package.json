@@ -1,0 +1,19 @@
+{
+  "name": "voidfleet-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun index.html",
+    "build": "bun build index.html --outdir dist --minify",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^9.32.0",
+    "@babylonjs/loaders": "^9.32.0"
+  },
+  "devDependencies": {
+    "bun-types": "^1.4.4",
+    "typescript": "^7.0.2"
+  }
+}

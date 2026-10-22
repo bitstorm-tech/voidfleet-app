@@ -1,0 +1,255 @@
+:root {
+  --font: "Open Sans", "Segoe UI", system-ui, sans-serif;
+  --text: rgb(242 247 255);
+  --text-dim: rgb(199 219 250 / 0.92);
+  --accent: rgb(120 194 255);
+  --select: rgb(115 235 255);
+  --panel: rgb(28 32 40 / 0.95);
+  --panel-hover: rgb(44 50 62 / 0.95);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #04050a;
+  font-family: var(--font);
+  color: var(--text);
+  user-select: none;
+}
+
+#render-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+  touch-action: none;
+}
+
+/* Das UI liegt über dem Canvas; nur interaktive Kinder fangen Pointer-Events. */
+#ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#ui button {
+  pointer-events: auto;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+#ui button:hover {
+  background: var(--panel-hover);
+}
+
+#ui button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.top-bar {
+  position: absolute;
+  top: 24px;
+  left: 32px;
+  right: 32px;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.round-label {
+  font-size: 22px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.status-label {
+  font-size: 18px;
+  color: var(--text-dim);
+  padding-top: 3px;
+}
+
+.log-panel {
+  position: absolute;
+  top: 72px;
+  right: 32px;
+  width: 428px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px;
+  background: var(--panel);
+  border-radius: 3px;
+}
+
+.log-panel button {
+  height: 32px;
+  font-size: 15px;
+}
+
+.log-text {
+  display: none;
+  height: 420px;
+  overflow-y: auto;
+  padding: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+.log-panel.expanded .log-text {
+  display: block;
+}
+
+.hand-bar {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: 20px;
+  height: 206px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.hand {
+  display: flex;
+  gap: 10px;
+}
+
+.submit-area {
+  display: flex;
+  align-items: center;
+  align-self: center;
+}
+
+.submit-button {
+  width: 240px;
+  height: 64px;
+  font-size: 20px;
+}
+
+/* --- Karten --- */
+
+.card {
+  pointer-events: auto;
+  position: relative;
+  width: 140px;
+  height: 196px;
+  cursor: pointer;
+  background: var(--card-bg, #14181f);
+}
+
+.card.selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--select);
+  pointer-events: none;
+}
+
+.ship-card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 10px 12px;
+  border-top: 7px solid var(--card-accent, #666);
+}
+
+.ship-card .name {
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.ship-card .class {
+  margin-top: 4px;
+  font-size: 10px;
+  color: rgb(168 199 242 / 0.85);
+}
+
+.ship-card .stats {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 4px;
+  font-size: 12px;
+  color: rgb(158 184 224 / 0.9);
+}
+
+.ship-card .stats b {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+}
+
+/* Befehlskarten als Datapad: dunkler Rahmen, farbiger Screen, Tastenleiste unten. */
+.command-card {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 6px 6px;
+  background: #1a1c22;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 4px;
+}
+
+.command-card .screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 7px;
+  text-align: center;
+  background: var(--card-bg);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.35);
+}
+
+.command-card .name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgb(247 252 255);
+}
+
+.command-card .target {
+  font-size: 8px;
+  color: rgb(191 224 255 / 0.9);
+}
+
+.command-card .effect {
+  font-size: 7.5px;
+  line-height: 1.35;
+  color: rgb(235 242 255);
+}
+
+.command-card .keys {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.command-card .keys span {
+  width: 14px;
+  height: 7px;
+  background: #0e1014;
+  border-radius: 1px;
+}
+
+.command-card .keys span:nth-child(3) {
+  width: 24px;
+}
