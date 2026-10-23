@@ -27,6 +27,7 @@ import { t, upper } from "../i18n/index.ts";
 import { Background } from "./background.ts";
 import { BoardEffects } from "./effects.ts";
 import { LaneLabel } from "./laneLabel.ts";
+import type { ShipView } from "./ship.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";
 
 const CAMERA_RIG_POSITION = new Vector3(0, 14.7, -15.7);
@@ -37,6 +38,8 @@ const LANE_X: Record<Side, Record<Lane["type"], number>> = {
   player: { command: -5.8, strike: -2.6 },
   enemy: { strike: 2.6, command: 5.8 },
 };
+/** Neue Schiffe fliegen von hier aus ein, außerhalb des Bildes am Rand ihrer Seite (Welt-|x|). */
+const ARRIVAL_X = 19;
 /** Slot 0 liegt am hinteren Ende der Lane (weit von der Kamera). */
 const SLOT_Z = [4.75, 2.85, 0.95, -0.95, -2.85, -4.75];
 /** Die HDR-Umgebung (tools/ships/env.py) liefert Reflexionen und indirektes Licht der PBR-Schiffe. */
@@ -143,6 +146,17 @@ export class MatchScene {
 
   pad(side: Side, lane: LaneType, slotIndex: number): SlotPad {
     return this.padsByLane.get(this.board.lane(side, lane))![slotIndex]!;
+  }
+
+  /**
+   * Stellt ein neues Schiff auf den Slot und lässt es vom Bildrand seiner Seite einfliegen. Die
+   * Command-Lane liegt näher am Rand: Steht dort im selben Slot ein Schiff, überfliegt es ein Schiff für die Strike-Lane.
+   */
+  async deploy(ship: ShipView, side: Side, lane: LaneType, slotIndex: number): Promise<void> {
+    this.pad(side, lane, slotIndex).attachShip(ship);
+    const x = Math.abs(LANE_X[side][lane]);
+    const blocked = lane === "strike" && this.pad(side, "command", slotIndex).ship !== null;
+    await ship.arrive(ARRIVAL_X - x, blocked ? Math.abs(LANE_X[side].command) - x : null);
   }
 
   /** Bildschirmposition eines Weltpunkts in CSS-Pixeln, für DOM-Overlays. */

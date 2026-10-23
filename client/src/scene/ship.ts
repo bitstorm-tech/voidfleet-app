@@ -21,7 +21,7 @@ import "@babylonjs/core/Rendering/outlineRenderer";
 import type { ShipCard } from "../../../shared/cards.ts";
 import { color3 } from "../data/palette.ts";
 import { shipModel } from "../data/shipModels.ts";
-import { easeInCubic, easeOutCubic, tween } from "./tween.ts";
+import { easeInCubic, easeInOutSine, easeOutCubic, tween } from "./tween.ts";
 
 /** Schiffe sind für den Hangar modelliert und auf dem Brett zu groß. */
 const BOARD_SCALE = 0.6;
@@ -29,10 +29,12 @@ const MODEL_SCALE = 0.5;
 /** Die Balken schweben mindestens so hoch, bei hohen Aufbauten knapp über dem Modell. */
 const BAR_MIN_HEIGHT = 1.15;
 const BAR_MARGIN = 0.3;
-/** Deploy: Das Schiff kommt aus dieser Höhe über dem Pad herunter und richtet sich beim Abbremsen auf. */
-const LANDING_HEIGHT = 7;
-const LANDING_DURATION = 950;
-const LANDING_PITCH = Tools.ToRadians(-16);
+/** Deploy: Das Schiff fliegt von hinten waagerecht ein und bremst vor dem Pad ab. */
+const ARRIVAL_DURATION = 1300;
+/** Überflug: so hoch über einem Schiff im Weg, Sinkflug ab knapp hinter dessen Mitte, Nase dabei leicht gesenkt. */
+const OVERFLIGHT_HEIGHT = 1.7;
+const DESCENT_START = 0.9;
+const DESCENT_PITCH = Tools.ToRadians(12);
 /** Treffer: Die Hülle leuchtet kurz auf und klingt wieder ab. */
 const HIT_FLASH_COLOR = new Color3(1, 0.93, 0.8);
 const HIT_FLASH_ALPHA = 0.75;
@@ -113,13 +115,21 @@ export class ShipView {
     if (shieldMax > 0) this.setFill(this.shieldFill, ratio(shield, shieldMax));
   }
 
-  /** Deploy: landet von oben auf dem Pad und bremst vor dem Aufsetzen ab; die Balken erscheinen erst danach. */
-  async land(): Promise<void> {
+  /**
+   * Deploy: fliegt aus `distance` hinter dem Pad ein und bremst ab; die Balken erscheinen erst danach.
+   * Steht `obstacle` weiter hinten ein Schiff im Weg, kommt es in Überflughöhe und sinkt erst danach.
+   */
+  async arrive(distance: number, obstacle: number | null): Promise<void> {
     this.statusBars.setEnabled(false);
-    await tween(this.scene, LANDING_DURATION, (progress) => {
-      const remaining = 1 - easeOutCubic(progress);
-      this.root.position.y = remaining * LANDING_HEIGHT;
-      this.modelRoot.rotation.x = remaining * LANDING_PITCH;
+    const descentStart = obstacle === null ? 0 : -obstacle + DESCENT_START;
+    await tween(this.scene, ARRIVAL_DURATION, (progress) => {
+      const z = -distance * (1 - easeOutCubic(progress));
+      this.root.position.z = z;
+      if (obstacle === null) return;
+      // 1 bis zum Beginn des Sinkflugs, 0 auf dem Pad.
+      const altitude = Math.min(z / descentStart, 1);
+      this.root.position.y = OVERFLIGHT_HEIGHT * easeInOutSine(altitude);
+      this.modelRoot.rotation.x = DESCENT_PITCH * Math.sin(Math.PI * altitude);
     });
     this.statusBars.setEnabled(true);
   }

@@ -145,10 +145,7 @@ export class RoundPlayback {
   // --- Einzelne Ereignisse ---
 
   private async deploy(side: Side, cardId: ShipId, target: SlotTarget): Promise<void> {
-    const pad = this.view.pad(side, target.lane, target.slotIndex);
-    const ship = new ShipView(this.view.scene, shipById(cardId), false);
-    pad.attachShip(ship);
-    await ship.land();
+    await this.view.deploy(new ShipView(this.view.scene, shipById(cardId), false), side, target.lane, target.slotIndex);
   }
 
   private async effect(event: Extract<RoundEvent, { kind: "effect" }>): Promise<void> {
