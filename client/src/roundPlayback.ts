@@ -5,11 +5,12 @@
 // übernimmt danach der Server-Snapshot (`MatchController.syncBoard`) — auch
 // dann, wenn der Spieler die Animation per `skip` abbricht.
 
-import { Color3 } from "@babylonjs/core/Maths/math.color";
+import type { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Side } from "../../shared/board.ts";
 import { shipById, type ShipId } from "../../shared/cards.ts";
 import type { RoundEvent, ShipRef, ShipStats, SlotTarget } from "../../shared/protocol.ts";
+import { color3 } from "./data/palette.ts";
 import { t } from "./i18n/index.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
@@ -20,15 +21,15 @@ import type { Hud } from "./ui/hud.ts";
 import { describeEvent } from "./ui/roundLog.ts";
 
 const SIDE_COLORS: Record<Side, Color3> = {
-  player: new Color3(0.35, 0.85, 1),
-  enemy: new Color3(1, 0.42, 0.32),
+  player: color3("player"),
+  enemy: color3("enemy"),
 };
 const TONE_COLORS: Record<FloatTone, Color3> = {
-  damage: new Color3(1, 0.5, 0.2),
-  heal: new Color3(0.4, 1, 0.5),
-  shield: new Color3(0.35, 0.7, 1),
-  buff: new Color3(1, 0.82, 0.3),
-  debuff: new Color3(0.72, 0.45, 1),
+  damage: color3("damage"),
+  heal: color3("heal"),
+  shield: color3("shield"),
+  buff: color3("buff"),
+  debuff: color3("debuff"),
 };
 
 /** Pause zwischen zwei Schritten, damit man sie auseinanderhalten kann. */

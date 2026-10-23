@@ -22,6 +22,7 @@ import "@babylonjs/core/Culling/ray";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
 import environmentUrl from "../../assets/env/space.hdr";
 import type { Board, Lane, LaneType, Side } from "../../../shared/board.ts";
+import { color3 } from "../data/palette.ts";
 import { t, upper } from "../i18n/index.ts";
 import { Background } from "./background.ts";
 import { BoardEffects } from "./effects.ts";
@@ -99,7 +100,7 @@ export class MatchScene {
     registerBuiltInLoaders();
     this.engine = new Engine(canvas, true, { adaptToDeviceRatio: true });
     this.scene = new Scene(this.engine);
-    this.scene.clearColor = new Color4(0.015, 0.02, 0.035, 1);
+    this.scene.clearColor = Color4.FromColor3(color3("background"), 1);
     this.background = new Background(this.scene);
 
     this.cameraRig = new TransformNode("camera-rig", this.scene);

@@ -10,6 +10,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import type { Slot } from "../../../shared/board.ts";
+import { color3 } from "../data/palette.ts";
 import type { ShipView } from "./ship.ts";
 
 export const PAD_WIDTH = 2.5;
@@ -33,7 +34,7 @@ export function createPadMaterials(scene: Scene): PadMaterials {
 
   const valid = new StandardMaterial("pad-valid", scene);
   valid.disableLighting = true;
-  valid.emissiveColor = new Color3(0.24, 0.86, 1);
+  valid.emissiveColor = color3("select");
   valid.alpha = 0.42;
 
   const hover = new StandardMaterial("pad-hover", scene);

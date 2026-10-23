@@ -4,7 +4,8 @@
 
 import type { CommandCard, ShipCard } from "../../../shared/cards.ts";
 import { cardArt } from "../data/cardArt.ts";
-import { cardColor, darkened, toCss, toCssChannels } from "../data/cardColors.ts";
+import { cardColor } from "../data/cardColors.ts";
+import { darkened, toCss, toCssChannels } from "../data/palette.ts";
 import { cardText, t, upper } from "../i18n/index.ts";
 
 export interface HandCallbacks {

@@ -1,3 +1,4 @@
+import { installPalette } from "./data/palette.ts";
 import { locale } from "./i18n/index.ts";
 import { MatchController } from "./matchController.ts";
 import { animationTimeScale, onSettingsChange } from "./settings.ts";
@@ -11,5 +12,6 @@ const applyAnimationSpeed = () =>
   document.documentElement.style.setProperty("--animation-time-scale", String(animationTimeScale()));
 applyAnimationSpeed();
 onSettingsChange(applyAnimationSpeed);
+installPalette();
 installCursor();
 new MatchController(canvas, ui);

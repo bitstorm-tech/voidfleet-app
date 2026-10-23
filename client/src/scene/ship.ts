@@ -19,6 +19,7 @@ import type { Scene } from "@babylonjs/core/scene";
 // Registriert `renderOverlay` auf Mesh: zeichnet das Modell in einer Farbe darüber (Treffer-Blitz).
 import "@babylonjs/core/Rendering/outlineRenderer";
 import type { ShipCard } from "../../../shared/cards.ts";
+import { color3 } from "../data/palette.ts";
 import { shipModel } from "../data/shipModels.ts";
 import { easeInCubic, easeOutCubic, tween } from "./tween.ts";
 
@@ -43,9 +44,10 @@ const GHOST_TINT = new Color3(0.2, 0.62, 0.95);
 const GHOST_ALBEDO = new Color3(0.45, 0.6, 0.75);
 
 const BAR_WIDTH = 2.56;
-const HP_COLOR_EMPTY = new Color3(0.93, 0.22, 0.18);
-const HP_COLOR_HALF = new Color3(0.95, 0.74, 0.2);
-const HP_COLOR_FULL = new Color3(0.3, 0.86, 0.38);
+const HP_COLOR_EMPTY = color3("hpEmpty");
+const HP_COLOR_HALF = color3("hpHalf");
+const HP_COLOR_FULL = color3("hpFull");
+const BAR_TRACK_COLOR = new Color3(0.13, 0.15, 0.22);
 
 const containerCache = new Map<string, Promise<AssetContainer>>();
 
@@ -87,14 +89,14 @@ export class ShipView {
     this.statusBars.position.y = BAR_MIN_HEIGHT;
     this.statusBars.setEnabled(!isGhost);
 
-    this.createBar("hp-track", 2.72, 0.3, new Color3(0.13, 0.15, 0.22), 0.92, this.statusBars, 1);
+    this.createBar("hp-track", 2.72, 0.3, BAR_TRACK_COLOR, 0.92, this.statusBars, 1);
     this.hpFill = this.createBar("hp-fill", BAR_WIDTH, 0.19, HP_COLOR_FULL, 0.999, this.statusBars, 2);
 
     this.shieldRow = new TransformNode("shield-row", scene);
     this.shieldRow.parent = this.statusBars;
     this.shieldRow.position.y = -0.29;
-    this.createBar("shield-track", 2.72, 0.21, new Color3(0.13, 0.15, 0.22), 0.92, this.shieldRow, 1);
-    this.shieldFill = this.createBar("shield-fill", BAR_WIDTH, 0.12, new Color3(0.36, 0.72, 1), 0.999, this.shieldRow, 2);
+    this.createBar("shield-track", 2.72, 0.21, BAR_TRACK_COLOR, 0.92, this.shieldRow, 1);
+    this.shieldFill = this.createBar("shield-fill", BAR_WIDTH, 0.12, color3("shield"), 0.999, this.shieldRow, 2);
 
     void this.addModel(shipModel(card));
     this.setStats(card.hp, card.shield);

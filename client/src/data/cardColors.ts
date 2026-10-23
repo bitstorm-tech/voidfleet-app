@@ -1,9 +1,7 @@
-// Kartenfarben nach Schiffsklasse bzw. Befehlstyp, plus Farb-Helfer wie in Godot.
+// Kartenfarben nach Schiffsklasse bzw. Befehlstyp.
 
 import type { Card, CommandType, ShipClass } from "../../../shared/cards.ts";
-
-/** Farbe als RGB-Tripel im Bereich 0..1, wie Godots Color. */
-export type Rgb = readonly [number, number, number];
+import type { Rgb } from "./palette.ts";
 
 const SHIP_COLORS: Record<ShipClass, Rgb> = {
   fighter: [0.9, 0.3, 0.2],
@@ -25,25 +23,3 @@ export function cardColor(card: Card): Rgb {
   return card.kind === "ship" ? SHIP_COLORS[card.shipClass] : COMMAND_COLORS[card.commandType];
 }
 
-/** Entspricht Godots Color.darkened(). */
-export function darkened(color: Rgb, amount: number): Rgb {
-  return [color[0] * (1 - amount), color[1] * (1 - amount), color[2] * (1 - amount)];
-}
-
-/** Entspricht Godots Color.lightened(). */
-export function lightened(color: Rgb, amount: number): Rgb {
-  return [
-    color[0] + (1 - color[0]) * amount,
-    color[1] + (1 - color[1]) * amount,
-    color[2] + (1 - color[2]) * amount,
-  ];
-}
-
-/** Nur die drei Kanäle (0..255), für `rgb(var(--x) / alpha)` im CSS. */
-export function toCssChannels(color: Rgb): string {
-  return color.map((c) => Math.round(c * 255)).join(" ");
-}
-
-export function toCss(color: Rgb, alpha = 1): string {
-  return `rgb(${toCssChannels(color)} / ${alpha})`;
-}

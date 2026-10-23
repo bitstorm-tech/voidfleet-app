@@ -2,8 +2,8 @@
   --font: "Open Sans", "Segoe UI", system-ui, sans-serif;
   --text: rgb(242 247 255);
   --text-dim: rgb(199 219 250 / 0.92);
-  --accent: rgb(120 194 255);
-  --select: rgb(115 235 255);
+  /* Die Farbkanäle (--player, --enemy, --select, --damage …) setzt `installPalette()`. */
+  --accent: rgb(var(--player));
   --panel: rgb(28 32 40 / 0.95);
   --panel-hover: rgb(44 50 62 / 0.95);
 }
@@ -25,7 +25,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #04050a;
+  background: rgb(var(--background));
   font-family: var(--font);
   color: var(--text);
   user-select: none;
@@ -275,7 +275,7 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  border: 3px solid var(--select);
+  border: 3px solid rgb(var(--select));
   pointer-events: none;
 }
 
@@ -408,7 +408,7 @@ body {
 }
 
 .reveal-banner[data-side="enemy"] {
-  --banner-color: rgb(255 128 108);
+  --banner-color: rgb(var(--enemy));
 }
 
 .reveal-banner strong {
@@ -444,7 +444,7 @@ body {
   gap: 4px;
   padding: 14px 72px;
   background: linear-gradient(90deg, transparent, var(--panel) 25%, var(--panel) 75%, transparent);
-  border-block: 1px solid rgb(120 194 255 / 0.45);
+  border-block: 1px solid rgb(var(--player) / 0.45);
   pointer-events: none;
   opacity: 0;
 }
@@ -491,11 +491,11 @@ body {
   animation: float-up calc(1.4s * var(--animation-time-scale)) ease-out forwards;
 }
 
-.float-text.damage { color: rgb(255 112 88); }
-.float-text.heal { color: rgb(120 236 140); }
-.float-text.shield { color: rgb(120 194 255); }
-.float-text.buff { color: rgb(255 214 102); }
-.float-text.debuff { color: rgb(200 150 255); }
+.float-text.damage { color: rgb(var(--damage)); }
+.float-text.heal { color: rgb(var(--heal)); }
+.float-text.shield { color: rgb(var(--shield)); }
+.float-text.buff { color: rgb(var(--buff)); }
+.float-text.debuff { color: rgb(var(--debuff)); }
 
 @keyframes float-up {
   0% { opacity: 0; transform: translateY(10px) scale(0.8); }
@@ -517,7 +517,7 @@ body {
   align-items: center;
   justify-content: center;
   pointer-events: auto;
-  background: radial-gradient(ellipse at center, rgb(var(--result-rgb) / 0.18), rgb(4 5 10 / 0.82) 70%);
+  background: radial-gradient(ellipse at center, rgb(var(--result-rgb) / 0.18), rgb(var(--background) / 0.82) 70%);
   animation: result-fade 0.6s ease-out;
 }
 
@@ -528,19 +528,19 @@ body {
 
 .result-overlay,
 .result-badge {
-  --result-rgb: 120 194 255;
+  --result-rgb: var(--player);
 }
 
 [data-result="won"] {
-  --result-rgb: 255 214 102;
+  --result-rgb: var(--won);
 }
 
 [data-result="lost"] {
-  --result-rgb: 255 96 80;
+  --result-rgb: var(--lost);
 }
 
 [data-result="draw"] {
-  --result-rgb: 176 188 206;
+  --result-rgb: var(--draw);
 }
 
 .result-panel {
