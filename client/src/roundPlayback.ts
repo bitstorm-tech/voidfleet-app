@@ -2,7 +2,8 @@
 // Befehle, Kampf und Cleanup nacheinander, gleichartige Ereignisse jeweils
 // gleichzeitig. Nur die Schüsse im Kampf laufen einzeln ab, damit man bei
 // vollem Brett nachvollziehen kann, wer wen trifft. Die Szene läuft dabei dem Spielzustand voraus; den Endzustand
-// übernimmt danach der Server-Snapshot (`MatchController.syncBoard`).
+// übernimmt danach der Server-Snapshot (`MatchController.syncBoard`) — auch
+// dann, wenn der Spieler die Animation per `skip` abbricht.
 
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -13,7 +14,7 @@ import { t } from "./i18n/index.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
-import { easeInOutSine, tween, wait } from "./scene/tween.ts";
+import { easeInOutSine, skipAnimations, tween, wait } from "./scene/tween.ts";
 import type { FloatingTexts, FloatTone } from "./ui/floatingText.ts";
 import type { Hud } from "./ui/hud.ts";
 import { describeEvent } from "./ui/roundLog.ts";
@@ -68,6 +69,8 @@ function groupSteps(events: readonly RoundEvent[]): RoundEvent[][] {
 }
 
 export class RoundPlayback {
+  private isSkipped = false;
+
   constructor(
     private readonly view: MatchScene,
     private readonly hud: Hud,
@@ -76,11 +79,22 @@ export class RoundPlayback {
 
   async play(round: number, events: readonly RoundEvent[]): Promise<void> {
     this.hud.appendLog([t.log.roundHeader(round)]);
+    this.isSkipped = false;
     for (const step of groupSteps(events)) {
       this.hud.appendLog(step.map(describeEvent));
+      if (this.isSkipped) continue;
       await this.playStep(step);
       await wait(this.view.scene, STEP_PAUSE);
     }
+    skipAnimations(false);
+  }
+
+  /** Bricht die laufende Runde ab: Animationen springen ans Ende, die restlichen Schritte landen nur noch im Log. */
+  skip(): void {
+    this.isSkipped = true;
+    skipAnimations(true);
+    this.floats.clear();
+    this.hud.hideBanner();
   }
 
   private async playStep(step: readonly RoundEvent[]): Promise<void> {

@@ -42,12 +42,13 @@ export class MatchController {
     const floats = new FloatingTexts(ui);
     this.hud = new Hud(ui);
     this.playback = new RoundPlayback(this.view, this.hud, floats);
-    this.hand = new HandView(ui, this.hud.submitButton, {
+    this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton], {
       onShipCardClick: (index) => this.onShipCardClick(index),
       onCommandCardClick: (index) => this.onCommandCardClick(index),
     });
 
     this.hud.submitButton.addEventListener("click", () => this.submit());
+    this.hud.skipButton.addEventListener("click", () => this.playback.skip());
     this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
 
     this.connection = new ServerConnection({
@@ -81,10 +82,12 @@ export class MatchController {
       case "round":
         // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
         this.isResolving = true;
+        this.hud.setResolving(true);
         this.clearGhost();
         this.refreshSelectionVisuals();
         await this.playback.play(message.round, message.events);
         this.isResolving = false;
+        this.hud.setResolving(false);
         break;
       case "error":
         this.hud.appendLog([`Server: ${t.errors[message.code]}`]);

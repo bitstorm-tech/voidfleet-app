@@ -16,7 +16,7 @@ export class HandView {
 
   constructor(
     container: HTMLElement,
-    submitButton: HTMLButtonElement,
+    actionButtons: readonly HTMLButtonElement[],
     private readonly callbacks: HandCallbacks,
   ) {
     container.insertAdjacentHTML(
@@ -29,7 +29,7 @@ export class HandView {
     );
     this.shipRow = container.querySelector(".ship-hand")!;
     this.commandRow = container.querySelector(".command-hand")!;
-    container.querySelector(".submit-area")!.append(submitButton);
+    container.querySelector(".submit-area")!.append(...actionButtons);
   }
 
   renderShips(hand: readonly ShipCard[], markedIndices: ReadonlySet<number>): void {

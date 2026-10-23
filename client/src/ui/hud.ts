@@ -1,4 +1,5 @@
-// Kopfzeile (Runde + Status), Log-Panel, Befehls-Banner und Submit-Button als DOM-Overlay.
+// Kopfzeile (Runde + Status), Log-Panel, Befehls-Banner sowie Submit- und
+// Überspringen-Button als DOM-Overlay.
 
 import type { Side } from "../../../shared/board.ts";
 import { t } from "../i18n/index.ts";
@@ -11,6 +12,8 @@ export class Hud {
   private readonly logText: HTMLElement;
   private readonly banner: HTMLElement;
   readonly submitButton: HTMLButtonElement;
+  /** Steht während der Rundenauflösung an der Stelle des Submit-Buttons. */
+  readonly skipButton: HTMLButtonElement;
   private readonly logLines: string[] = [];
 
   constructor(container: HTMLElement) {
@@ -35,10 +38,14 @@ export class Hud {
     this.logToggle.textContent = t.hud.showLog;
     this.logToggle.addEventListener("click", () => this.toggleLog());
 
-    this.submitButton = document.createElement("button");
-    this.submitButton.type = "button";
-    this.submitButton.className = "submit-button";
-    this.submitButton.textContent = t.hud.endTurn;
+    this.submitButton = createButton("submit-button", t.hud.endTurn);
+    this.skipButton = createButton("submit-button", t.hud.skip);
+    this.setResolving(false);
+  }
+
+  setResolving(resolving: boolean): void {
+    this.submitButton.hidden = resolving;
+    this.skipButton.hidden = !resolving;
   }
 
   setRound(round: number): void {
@@ -66,8 +73,16 @@ export class Hud {
     this.banner.classList.add("visible");
   }
 
+  hideBanner(): void {
+    this.banner.classList.remove("visible");
+  }
+
   private toggleLog(): void {
     const expanded = this.logPanel.classList.toggle("expanded");
     this.logToggle.textContent = expanded ? t.hud.hideLog : t.hud.showLog;
   }
+}
+
+function createButton(className: string, text: string): HTMLButtonElement {
+  return Object.assign(document.createElement("button"), { type: "button", className, textContent: text });
 }

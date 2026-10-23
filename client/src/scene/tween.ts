@@ -10,21 +10,38 @@ import type { Scene } from "@babylonjs/core/scene";
  */
 export const ANIMATION_TIME_SCALE = 2;
 
+/** Laufende Tweens, die `skipAnimations` sofort auf ihren Endzustand setzen kann. */
+const running = new Set<() => void>();
+let isSkipping = false;
+
+/**
+ * Überspringen an/aus: Beim Einschalten springen alle laufenden Tweens auf ihr
+ * Ende, und solange es an ist, enden neue Tweens sofort.
+ */
+export function skipAnimations(skip: boolean): void {
+  isSkipping = skip;
+  if (skip) for (const finish of [...running]) finish();
+}
+
 /** Ruft `update` jeden Frame mit dem Fortschritt 0..1 auf und endet nach `duration` ms (vor der Streckung). */
 export function tween(scene: Scene, duration: number, update: (progress: number) => void): Promise<void> {
   const scaledDuration = duration * ANIMATION_TIME_SCALE;
   return new Promise((resolve) => {
+    const finish = () => {
+      scene.onBeforeRenderObservable.remove(observer);
+      running.delete(finish);
+      update(1);
+      resolve();
+    };
     let elapsed = 0;
     update(0);
     const observer = scene.onBeforeRenderObservable.add(() => {
       elapsed += scene.getEngine().getDeltaTime();
-      const progress = Math.min(elapsed / scaledDuration, 1);
-      update(progress);
-      if (progress === 1) {
-        scene.onBeforeRenderObservable.remove(observer);
-        resolve();
-      }
+      if (elapsed >= scaledDuration) return finish();
+      update(elapsed / scaledDuration);
     });
+    running.add(finish);
+    if (isSkipping) finish();
   });
 }
 

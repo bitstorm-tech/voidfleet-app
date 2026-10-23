@@ -21,4 +21,8 @@ export class FloatingTexts {
     element.addEventListener("animationend", () => element.remove());
     this.layer.append(element);
   }
+
+  clear(): void {
+    this.layer.replaceChildren();
+  }
 }
