@@ -1,5 +1,5 @@
-// Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe, Lichter,
-// Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen.
+// Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe und
+// Mausrad-Zoom, Lichter, Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen.
 //
 // Koordinaten: Babylon ist linkshändig, die Godot-Szene rechtshändig. Alle
 // Z-Werte aus der Godot-Szene sind hier negiert; x (Lanes) und y bleiben.
@@ -52,6 +52,18 @@ const FOLLOW_SPEED = 4;
 /** Hintergrund-Versatz als Anteil des Viewports pro Welteinheit Kameraversatz. */
 const BACKGROUND_SCROLL_STRENGTH = new Vector2(0.0125, 0.011);
 
+/**
+ * Mausrad-Zoom: Die Kamera fährt auf den Brettpunkt unter dem Zeiger zu und
+ * beim Herauszoomen zurück in die Ruhelage. Höhe der Kamera als Grenze nach unten.
+ */
+const ZOOM_MIN_HEIGHT = 2.6;
+/** Höhenfaktor pro Pixel Mausrad (exponentiell, damit Trackpads und Rasterräder gleich wirken). */
+const ZOOM_SPEED = 0.0018;
+const ZOOM_FOLLOW_SPEED = 8;
+/** Brettbereich, auf den gezoomt werden kann (Welt-x und -z). */
+const ZOOM_FOCUS_X = 7;
+const ZOOM_FOCUS_Z: [number, number] = [BOARD_Z - 6, BOARD_Z + 6];
+
 const isPadHitbox = (mesh: AbstractMesh): boolean => mesh.metadata?.pad !== undefined;
 
 /** Der SlotPad unter dem Zeiger eines Pointer-Events, sofern einer getroffen wurde. */
@@ -71,6 +83,9 @@ export class MatchScene {
   private readonly background: Background;
   private readonly laneLabels: LaneLabel[] = [];
   private readonly scrollOffset = new Vector2(0, 0);
+  /** Versatz der Kamera aus der Ruhelage durch den Zoom: Ziel und geglätteter Ist-Wert. */
+  private readonly zoomTarget = Vector3.Zero();
+  private readonly zoomOffset = Vector3.Zero();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -105,7 +120,8 @@ export class MatchScene {
 
     this.createBoard(board);
 
-    this.scene.onBeforeRenderObservable.add(() => this.updateCameraParallax());
+    this.scene.onBeforeRenderObservable.add(() => this.updateCamera());
+    canvas.addEventListener("wheel", (event) => this.onWheel(event), { passive: false });
     window.addEventListener("resize", () => this.engine.resize());
     this.engine.runRenderLoop(() => this.scene.render());
   }
@@ -167,21 +183,67 @@ export class MatchScene {
     }
   }
 
-  private updateCameraParallax(): void {
+  /** Zoomt auf den Brettpunkt unter dem Zeiger zu oder zurück in Richtung Ruhelage. */
+  private onWheel(event: WheelEvent): void {
+    event.preventDefault();
+    const pixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY;
+    const factor = Math.exp(pixels * ZOOM_SPEED);
+    const rest = CAMERA_RIG_POSITION;
+    const height = rest.y + this.zoomTarget.y;
+
+    if (factor < 1) {
+      const focus = this.boardPointUnderPointer();
+      if (!focus) return;
+      const nextHeight = Math.max(height * factor, ZOOM_MIN_HEIGHT);
+      // Auf der Geraden Kamera → Fokus bleibt der Punkt unter dem Zeiger stehen.
+      const camera = rest.add(this.zoomTarget);
+      const next = Vector3.Lerp(focus, camera, (nextHeight - focus.y) / (camera.y - focus.y));
+      this.zoomTarget.copyFrom(next.subtract(rest));
+    } else {
+      // Herauszoomen schrumpft den Versatz, bis die Kamera wieder in der Ruhelage steht.
+      if (height >= rest.y) return;
+      const nextHeight = Math.min(height * factor, rest.y);
+      this.zoomTarget.scaleInPlace((rest.y - nextHeight) / (rest.y - height));
+    }
+  }
+
+  /** Schnittpunkt des Zeigerstrahls mit der Brettebene, auf den Brettbereich begrenzt. */
+  private boardPointUnderPointer(): Vector3 | null {
+    const ray = this.scene.createPickingRay(this.scene.pointerX, this.scene.pointerY, Matrix.Identity(), this.camera);
+    if (ray.direction.y >= 0) return null;
+    const point = ray.origin.add(ray.direction.scale(-ray.origin.y / ray.direction.y));
+    point.x = Math.min(Math.max(point.x, -ZOOM_FOCUS_X), ZOOM_FOCUS_X);
+    point.z = Math.min(Math.max(point.z, ZOOM_FOCUS_Z[0]), ZOOM_FOCUS_Z[1]);
+    return point;
+  }
+
+  private updateCamera(): void {
+    const seconds = this.engine.getDeltaTime() / 1000;
+    this.updateCameraParallax(seconds);
+    const t = Math.min(seconds * ZOOM_FOLLOW_SPEED, 1);
+    this.zoomOffset.addInPlace(this.zoomTarget.subtract(this.zoomOffset).scaleInPlace(t));
+    this.cameraRig.position.set(
+      CAMERA_RIG_POSITION.x + this.scrollOffset.x + this.zoomOffset.x,
+      CAMERA_RIG_POSITION.y + this.scrollOffset.y + this.zoomOffset.y,
+      CAMERA_RIG_POSITION.z + this.zoomOffset.z,
+    );
+  }
+
+  private updateCameraParallax(seconds: number): void {
     // Zeigerposition und Canvas-Größe beide in CSS-Pixeln; die Render-Größe
     // wäre auf HiDPI-Displays um den Device-Pixel-Ratio größer.
     const { clientWidth: width, clientHeight: height } = this.canvas;
     if (width === 0 || height === 0) return;
     const ratioX = Math.min(Math.max(this.scene.pointerX / width, 0), 1) - 0.5;
     const ratioY = Math.min(Math.max(this.scene.pointerY / height, 0), 1) - 0.5;
-    const targetX = -ratioX * MAX_SCROLL_OFFSET.x * 2;
-    const targetY = ratioY * MAX_SCROLL_OFFSET.y * 2;
+    // Nah am Brett wäre die volle Parallaxe zu unruhig; sie schrumpft mit der Kamerahöhe.
+    const closeness = (CAMERA_RIG_POSITION.y + this.zoomOffset.y) / CAMERA_RIG_POSITION.y;
+    const targetX = -ratioX * MAX_SCROLL_OFFSET.x * 2 * closeness;
+    const targetY = ratioY * MAX_SCROLL_OFFSET.y * 2 * closeness;
 
-    const t = Math.min((this.engine.getDeltaTime() / 1000) * FOLLOW_SPEED, 1);
+    const t = Math.min(seconds * FOLLOW_SPEED, 1);
     this.scrollOffset.x += (targetX - this.scrollOffset.x) * t;
     this.scrollOffset.y += (targetY - this.scrollOffset.y) * t;
-    this.cameraRig.position.x = CAMERA_RIG_POSITION.x + this.scrollOffset.x;
-    this.cameraRig.position.y = CAMERA_RIG_POSITION.y + this.scrollOffset.y;
     this.background.setScrollOffset(
       -this.scrollOffset.x * BACKGROUND_SCROLL_STRENGTH.x,
       -this.scrollOffset.y * BACKGROUND_SCROLL_STRENGTH.y,
