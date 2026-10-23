@@ -39,6 +39,17 @@ describe("Combat", () => {
     expect(events.filter((event) => event.kind === "destroyed")).toHaveLength(2);
   });
 
+  test("Schüsse wechseln sich zwischen den Seiten ab", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "horizon_cruiser");
+    place(board, "player", "strike", 1, "horizon_cruiser");
+    place(board, "player", "strike", 2, "horizon_cruiser");
+    place(board, "enemy", "strike", 0, "titan_carrier");
+    place(board, "enemy", "strike", 1, "titan_carrier");
+    const sides = round(board).flatMap((event) => (event.kind === "attack" ? [event.attacker.side] : []));
+    expect(sides).toEqual(["player", "enemy", "player", "enemy", "player"]);
+  });
+
   test("Command-Lane ist geschützt, solange in der Strike-Lane ein Schiff steht", () => {
     const board = new Board();
     place(board, "player", "strike", 0, "horizon_cruiser");

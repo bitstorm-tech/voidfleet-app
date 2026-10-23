@@ -180,17 +180,18 @@ function chooseTarget(attacker: Slot, lane: Lane): Slot {
 /**
  * Alle Schiffe feuern gleichzeitig: erst alle Ziele wählen, dann den Schaden
  * Schuss für Schuss anwenden und jeden Schuss mit den Werten des Ziels danach melden.
+ * Die Schüsse wechseln sich zwischen den Seiten ab, damit die Animation hin und her geht.
  */
 export function resolveCombat(board: Board, events: RoundEvent[]): void {
-  const shots: [attacker: Slot, target: Slot][] = [];
-  for (const side of SIDES) {
+  const shotsBySide = SIDES.map((side) => {
     const lane = targetLane(board, opposite(side));
-    if (lane === null) continue;
-    for (const attacker of board.ships(side)) {
-      if (attacker.canAttack) shots.push([attacker, chooseTarget(attacker, lane)]);
-    }
-  }
-  for (const [attacker, target] of shots) {
+    if (lane === null) return [];
+    return board
+      .ships(side)
+      .filter((attacker) => attacker.canAttack)
+      .map((attacker): [attacker: Slot, target: Slot] => [attacker, chooseTarget(attacker, lane)]);
+  });
+  for (const [attacker, target] of interleave(shotsBySide)) {
     target.damage(attacker.attack);
     events.push({
       kind: "attack",
@@ -200,6 +201,18 @@ export function resolveCombat(board: Board, events: RoundEvent[]): void {
       after: stats(target),
     });
   }
+}
+
+/** Reißverschluss: abwechselnd ein Element aus jeder Liste, bis alle leer sind. */
+function interleave<T>(lists: readonly (readonly T[])[]): T[] {
+  const result: T[] = [];
+  const length = Math.max(0, ...lists.map((list) => list.length));
+  for (let index = 0; index < length; index++) {
+    for (const list of lists) {
+      if (index < list.length) result.push(list[index]!);
+    }
+  }
+  return result;
 }
 
 // --- Cleanup ---
