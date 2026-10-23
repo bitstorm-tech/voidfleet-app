@@ -64,8 +64,8 @@ export class HandView {
       <div class="name"></div>
       <div class="class"></div>
       <div class="stats">
-        <span class="hp-label"></span><b class="hp"></b>
         <span class="atk-label"></span><b class="atk"></b>
+        <span class="hp-label"></span><b class="hp"></b>
         <span class="shield-label"></span><b class="shield"></b>
       </div>`;
     element.querySelector(".name")!.textContent = cardText(card).name;
