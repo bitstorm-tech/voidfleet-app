@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { TurnPlan } from "../../shared/protocol.ts";
-import { SHIPS, shipById } from "../../shared/cards.ts";
+import { commandById, SHIPS, shipById } from "../../shared/cards.ts";
 import { Match } from "./match.ts";
 
 function startedMatch(): Match {
@@ -28,8 +28,25 @@ test("Befehlsziele müssen in der passenden Lane stehen", () => {
   match.board.place(match.board.lane("player", "strike"), 0, player.shipHand[0]!);
   player.commandHand.splice(0, player.commandHand.length);
   player.commandHand.push({ kind: "command", id: "intercept", commandType: "reposition", targetMode: "choose_friendly", targetLane: "command" });
-  const plan = { ship: null, command: { handIndex: 0, target: { lane: "strike" as const, slotIndex: 0 } } };
+  const plan = { ship: null, command: { handIndex: 0, target: { lane: "strike" as const, slotIndex: 0 }, destination: 1 } };
   expect(match.submit(0, plan)).toBe("target_wrong_lane");
+});
+
+test("Verlegende Befehle brauchen einen freien Ziel-Slot in der anderen Lane, auch nach dem eigenen Deploy", () => {
+  const match = startedMatch();
+  const player = match.players[0]!;
+  const ship = player.shipHand[0]!;
+  match.board.place(match.board.lane("player", "command"), 2, ship);
+  match.board.place(match.board.lane("player", "strike"), 0, ship);
+  player.commandHand.splice(0, player.commandHand.length, commandById("intercept"));
+  const intercept = (destination: number | null, deployTo: number | null = null): TurnPlan => ({
+    ship: deployTo === null ? null : { handIndex: 0, target: { lane: "strike", slotIndex: deployTo } },
+    command: { handIndex: 0, target: { lane: "command", slotIndex: 2 }, destination },
+  });
+  expect(match.submit(0, intercept(null))).toBe("destination_required");
+  expect(match.submit(0, intercept(0))).toBe("destination_unavailable");
+  expect(match.submit(0, intercept(4, 4))).toBe("destination_unavailable");
+  expect(match.submit(0, intercept(5, 4))).toBeNull();
 });
 
 test("Die Starthand hat genau 1 Support- und 2 Kampfschiffe", () => {

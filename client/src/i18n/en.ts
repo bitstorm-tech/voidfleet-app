@@ -44,7 +44,7 @@ export const en = {
       },
       {
         heading: "The board",
-        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked.",
+        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. Commands that move a ship to the other lane let you pick any free slot there.",
       },
       {
         heading: "Resolution",
@@ -71,6 +71,8 @@ export const en = {
     placeShip: (ship: string) => `${ship}: tap a glowing slot. Click the card again to take it back.`,
     noCommandTarget: (command: string) => `no own ship to target with ${command}.`,
     chooseCommandTarget: (command: string) => `${command}: tap one of your ships. Click the card again to take it back.`,
+    chooseDestination: (command: string, ship: string) =>
+      `${command}: tap a glowing slot for ${ship}. Click the card again to take it back.`,
     planned: (cards: string) => `${cards} ready. Click “End turn”, or tap a card to take it back.`,
     idle: "Tap a ship or command card, or click “End turn” without a card to pass.",
     resolving: "Both turns are revealed — resolving the round …",
@@ -131,6 +133,9 @@ export const en = {
     target_not_allowed: "This command takes no target.",
     target_not_own_ship: "The command target isn't one of your ships.",
     target_wrong_lane: "This command can't target a ship in that lane.",
+    destination_required: "This command needs a slot to move the ship to.",
+    destination_not_allowed: "This command doesn't move a ship.",
+    destination_unavailable: "The ship can't move to this slot.",
   } satisfies Record<ErrorCode, string>,
   lanes: { strike: "Strike", command: "Command" } satisfies Record<LaneType, string>,
   stats: { hp: "HP", atk: "ATK", shield: "Shield" },
@@ -163,12 +168,12 @@ export const en = {
   commands: {
     emergency_shields: { name: "Emergency Shields", effect: "Chosen allied ship gains Shield 3 this round." },
     emp_blast: { name: "EMP Blast", effect: "The enemy ship with the highest ATK cannot attack this round." },
-    flanking_maneuver: { name: "Flanking Maneuver", effect: "Chosen allied ship switches lanes (Strike ↔ Command)." },
-    intercept: { name: "Intercept", effect: "Pull a chosen Command Line ship into the Strike Line. +2 ATK this round." },
+    flanking_maneuver: { name: "Flanking Maneuver", effect: "Chosen allied ship switches lanes (Strike ↔ Command) to a free slot of your choice." },
+    intercept: { name: "Intercept", effect: "Pull a chosen Command Line ship into a free Strike Line slot of your choice. +2 ATK this round." },
     orbital_strike: { name: "Orbital Strike", effect: "Deal 4 damage to the enemy ship with the highest HP." },
     overcharge: { name: "Overcharge", effect: "Chosen ship gets +3 ATK this round. Takes 2 self-damage after combat." },
     power_surge: { name: "Power Surge", effect: "All allied ships in the Strike Line gain +1 ATK this round." },
-    recall: { name: "Recall", effect: "A chosen Strike Line ship retreats to the Command Line. Heal 2 HP." },
+    recall: { name: "Recall", effect: "A chosen Strike Line ship retreats to a free Command Line slot of your choice. Heal 2 HP." },
     scavenge: { name: "Scavenge", effect: "Draw 1 extra ship and 1 extra command." },
     sensor_sweep: { name: "Sensor Sweep", effect: "Reveal all cards in the enemy hand for the next round." },
     targeting_jammer: { name: "Targeting Jammer", effect: "All enemy ships in the Strike Line get -1 ATK this round (min 0)." },

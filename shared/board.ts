@@ -4,6 +4,7 @@
 // Seite des Betrachters; der Server spiegelt das Brett für den zweiten Spieler.
 
 import { shipById, type ShipCard, type ShipId } from "./cards.ts";
+import type { SlotTarget } from "./protocol.ts";
 
 export type Side = "player" | "enemy";
 export type LaneType = "strike" | "command";
@@ -19,6 +20,10 @@ export type BoardSnapshot = Record<Side, Record<LaneType, (SlotState | null)[]>>
 
 export function opposite(side: Side): Side {
   return side === "player" ? "enemy" : "player";
+}
+
+export function otherLane(type: LaneType): LaneType {
+  return type === "strike" ? "command" : "strike";
 }
 
 export const SLOT_COUNT = 6;
@@ -201,6 +206,24 @@ export class Board {
     const slot = lane.slots[slotIndex];
     if (slot === undefined || slot.isOccupied || lane.isFull) return false;
     return this.shipCount(lane.side) < MAX_SHIPS_PER_SIDE;
+  }
+
+  /**
+   * Ob das Schiff in `from` in den Slot `index` der anderen Lane wechseln kann. `deploy` ist das
+   * Schiff, das dieselbe Seite in dieser Runde legt: Es landet vor den Befehlen und belegt seinen Slot.
+   */
+  canMove(from: Slot, index: number, deploy: SlotTarget | null = null): boolean {
+    const lane = this.lane(from.lane.side, otherLane(from.lane.type));
+    const slot = lane.slots[index];
+    if (slot === undefined || slot.isOccupied) return false;
+    const deploysHere = deploy?.lane === lane.type;
+    if (deploysHere && deploy.slotIndex === index) return false;
+    return lane.occupiedSlots.length + (deploysHere ? 1 : 0) < MAX_SHIPS_PER_LANE;
+  }
+
+  /** Slot-Indizes der anderen Lane, in die das Schiff in `from` wechseln kann (siehe `canMove`). */
+  moveDestinations(from: Slot, deploy: SlotTarget | null = null): number[] {
+    return from.lane.slots.map((slot) => slot.index).filter((index) => this.canMove(from, index, deploy));
   }
 
   /** Platziert ein Schiff; gibt den Slot zurück oder null bei Regelverstoß. */

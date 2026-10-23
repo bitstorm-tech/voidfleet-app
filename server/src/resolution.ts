@@ -2,7 +2,7 @@
 // Portiert aus game_mechanics.gd. Jede Phase arbeitet auf dem Brett aus Sicht
 // von Seat 0 und hängt ihre Ereignisse an `events` an.
 
-import { nearest, opposite, type Board, type Lane, type Side, type Slot } from "../../shared/board.ts";
+import { nearest, opposite, type Board, type Side, type Slot } from "../../shared/board.ts";
 import type { CommandCard, CommandType } from "../../shared/cards.ts";
 import type { CommandEffect, RoundEvent, ShipRef, ShipStats } from "../../shared/protocol.ts";
 
@@ -25,6 +25,8 @@ export interface PlayedCommand {
   commander: Commander;
   card: CommandCard;
   target: Slot | null;
+  /** Bei Befehlen, die ihr Ziel verlegen: der freie Slot in der anderen Lane, geprüft beim Submit. */
+  destination: Slot | null;
 }
 
 export function shipRef(slot: Slot): ShipRef {
@@ -44,13 +46,6 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
   return best;
 }
 
-/** Wechselt in den nächstgelegenen freien Slot der Ziel-Lane; null, wenn sie voll ist. */
-function move(slot: Slot, to: Lane): Slot | null {
-  const destination = to.freeSlotNear(slot.index);
-  destination?.takeFrom(slot);
-  return destination;
-}
-
 // --- Effects ---
 
 export function resolveEffects(board: Board, commands: readonly PlayedCommand[], events: RoundEvent[]): void {
@@ -66,7 +61,7 @@ export function resolveEffects(board: Board, commands: readonly PlayedCommand[],
 }
 
 /** Wendet den Befehl an; false, wenn er nichts bewirkt hat. */
-function applyCommand(board: Board, { commander, card, target }: PlayedCommand, events: RoundEvent[]): boolean {
+function applyCommand(board: Board, { commander, card, target, destination }: PlayedCommand, events: RoundEvent[]): boolean {
   const side = commander.side;
   const enemyShips = board.ships(opposite(side));
   /** `ship` ist die Stelle vor dem Effekt, `after` gibt die Werte danach an. */
@@ -81,11 +76,12 @@ function applyCommand(board: Board, { commander, card, target }: PlayedCommand, 
     return ships.length > 0;
   };
   const affectOne = (ship: Slot | null, apply: (slot: Slot) => CommandEffect) => affectAll(ship ? [ship] : [], apply);
-  const moveTo = (slot: Slot, to: Lane): Slot | null => {
-    const from = shipRef(slot);
-    const destination = move(slot, to);
-    if (destination) affect(from, { type: "move", to: { lane: to.type, slotIndex: destination.index } }, destination);
-    return destination;
+  /** Verlegt das Ziel in den gewählten Slot. Positionen ändern sich nur durch eigene Befehle, er ist also noch frei. */
+  const moveTarget = (): Slot => {
+    const from = shipRef(target!);
+    destination!.takeFrom(target!);
+    affect(from, { type: "move", to: { lane: destination!.lane.type, slotIndex: destination!.index } }, destination!);
+    return destination!;
   };
 
   switch (card.id) {
@@ -126,17 +122,16 @@ function applyCommand(board: Board, { commander, card, target }: PlayedCommand, 
         return { type: "attack", delta: 3 };
       });
     case "flanking_maneuver":
-      return moveTo(target!, board.lane(side, target!.lane.type === "strike" ? "command" : "strike")) !== null;
+      moveTarget();
+      return true;
     case "intercept": {
-      const ship = moveTo(target!, board.lane(side, "strike"));
-      if (ship === null) return false;
+      const ship = moveTarget();
       ship.attackBonus += 2;
       affect(shipRef(ship), { type: "attack", delta: 2 }, ship);
       return true;
     }
     case "recall": {
-      const ship = moveTo(target!, board.lane(side, "command"));
-      if (ship === null) return false;
+      const ship = moveTarget();
       ship.heal(2);
       affect(shipRef(ship), { type: "heal", amount: 2 }, ship);
       return true;

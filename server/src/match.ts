@@ -7,7 +7,7 @@
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
 import { canTargetLane, needsTarget, type CommandCard, type ShipCard } from "../../shared/cards.ts";
-import { Board, opposite, type BoardSnapshot, type Side } from "../../shared/board.ts";
+import { Board, opposite, otherLane, type BoardSnapshot, type Side } from "../../shared/board.ts";
 import type { ErrorCode, MatchResult, PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
 import { planBotTurn } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
@@ -155,6 +155,13 @@ export class Match {
         return "target_not_own_ship";
       }
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
+      const { destination } = plan.command;
+      if (card.moves && destination === null) return "destination_required";
+      if (!card.moves && destination !== null) return "destination_not_allowed";
+      if (target && destination !== null) {
+        const from = this.board.lane(player.side, target.lane).slots[target.slotIndex]!;
+        if (!this.board.canMove(from, destination, plan.ship?.target ?? null)) return "destination_unavailable";
+      }
     }
     return null;
   }
@@ -187,11 +194,12 @@ export class Match {
       const command = player.plan!.command;
       if (!command) continue;
       const [card] = player.commandHand.splice(command.handIndex, 1);
-      const { target } = command;
+      const { target, destination } = command;
       commands.push({
         commander: player,
         card: card!,
         target: target && this.board.lane(player.side, target.lane).slots[target.slotIndex]!,
+        destination: target && destination !== null ? this.board.lane(player.side, otherLane(target.lane)).slots[destination]! : null,
       });
       events.push({ kind: "command", side: player.side, cardId: card!.id, target });
     }

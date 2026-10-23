@@ -14,8 +14,8 @@ function commander(side: Side): Commander {
   return { side, drawExtra: () => ({ ships: 1, commands: 1 }) };
 }
 
-function play(side: Side, id: CommandId, target: Slot | null = null): PlayedCommand {
-  return { commander: commander(side), card: commandById(id), target };
+function play(side: Side, id: CommandId, target: Slot | null = null, destination: Slot | null = null): PlayedCommand {
+  return { commander: commander(side), card: commandById(id), target, destination };
 }
 
 function round(board: Board, commands: PlayedCommand[] = []): RoundEvent[] {
@@ -200,13 +200,14 @@ describe("Befehle", () => {
     expect(cruiser.attack).toBe(2);
   });
 
-  test("Intercept zieht ein Schiff nach vorn und gibt +2 ATK", () => {
+  test("Intercept zieht ein Schiff in den gewählten Strike-Slot und gibt +2 ATK", () => {
     const board = new Board();
     const back = place(board, "player", "command", 2, "horizon_cruiser");
     const enemy = place(board, "enemy", "strike", 2, "titan_carrier");
-    round(board, [play("player", "intercept", back)]);
+    const events = round(board, [play("player", "intercept", back, board.lane("player", "strike").slots[5]!)]);
     expect(back.isOccupied).toBe(false);
-    expect(board.lane("player", "strike").slots[2]!.card?.id).toBe("horizon_cruiser");
+    expect(board.lane("player", "strike").slots[5]!.card?.id).toBe("horizon_cruiser");
+    expect(events).toContainEqual(expect.objectContaining({ effect: { type: "move", to: { lane: "strike", slotIndex: 5 } } }));
     expect(enemy.hp).toBe(hp("titan_carrier") - 4);
   });
 
@@ -214,21 +215,11 @@ describe("Befehle", () => {
     const board = new Board();
     const front = place(board, "player", "strike", 1, "horizon_cruiser");
     front.hp = 2;
-    round(board, [play("player", "recall", front)]);
-    const moved = board.lane("player", "command").slots[1]!;
+    const moved = board.lane("player", "command").slots[4]!;
+    round(board, [play("player", "recall", front, moved)]);
     expect(moved.hp).toBe(4);
 
     round(board, [play("player", "overcharge", moved)]);
     expect(moved.hp).toBe(2);
-  });
-
-  test("Intercept ohne Platz in der Strike-Lane bleibt wirkungslos", () => {
-    const board = new Board();
-    for (const index of [0, 1, 2, 3]) place(board, "player", "strike", index, "repair_drone");
-    const back = place(board, "player", "command", 0, "horizon_cruiser");
-    const events: RoundEvent[] = [];
-    resolveEffects(board, [play("player", "intercept", back)], events);
-    expect(back.isOccupied).toBe(true);
-    expect(events).toEqual([{ kind: "noEffect", side: "player", cardId: "intercept" }]);
   });
 });

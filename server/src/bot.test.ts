@@ -51,14 +51,14 @@ test("Ist die bevorzugte Lane voll, weicht das Schiff aus; sind beide voll, legt
 
 test("Ohne Gegner auf dem Brett zieht der Bot nach, statt ins Leere zu schießen", () => {
   const plan = planBotTurn(new Board(), hands(["void_interceptor"], ["orbital_strike", "scavenge"]));
-  expect(plan.command).toEqual({ handIndex: 1, target: null });
+  expect(plan.command).toEqual({ handIndex: 1, target: null, destination: null });
 });
 
 test("Ein Angriff, der einen Gegner zerstört, geht vor", () => {
   const board = new Board();
   place(board, "player", "strike", 2, "iron_dreadnought");
   place(board, "enemy", "strike", 2, "horizon_cruiser").hp = 4;
-  expect(planBotTurn(board, hands([], ["scavenge", "orbital_strike"])).command).toEqual({ handIndex: 1, target: null });
+  expect(planBotTurn(board, hands([], ["scavenge", "orbital_strike"])).command).toEqual({ handIndex: 1, target: null, destination: null });
 });
 
 test("Der Schild geht an das schwächste ungedeckte Schiff", () => {
@@ -71,12 +71,14 @@ test("Der Schild geht an das schwächste ungedeckte Schiff", () => {
   expect(planBotTurn(board, hands([], ["emergency_shields"])).command).toEqual({
     handIndex: 0,
     target: { lane: "strike", slotIndex: 3 },
+    destination: null,
   });
   // Ungedeckt ist er das schwächste Ziel.
   board.lane("player", "command").slots[2]!.takeFrom(fighter);
   expect(planBotTurn(board, hands([], ["emergency_shields"])).command).toEqual({
     handIndex: 0,
     target: { lane: "command", slotIndex: 2 },
+    destination: null,
   });
 });
 
@@ -89,13 +91,14 @@ test("Intercept holt nur aus der Command-Lane, Recall nur aus der Strike-Lane un
   expect(planBotTurn(board, hands([], ["intercept"])).command).toEqual({
     handIndex: 0,
     target: { lane: "command", slotIndex: 4 },
+    destination: 4,
   });
   // Allein vorne: Recall würde die Command-Lane freilegen.
   expect(planBotTurn(board, hands([], ["recall"])).command).toBeNull();
   // Mit einem neuen Schiff vorne darf das angeschlagene zurück.
   const plan = planBotTurn(board, hands(["horizon_cruiser"], ["recall"]));
   expect(plan.ship?.target.lane).toBe("strike");
-  expect(plan.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 1 } });
+  expect(plan.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 1 }, destination: 1 });
 });
 
 test("Ein Schiff rückt vor, wenn es damit ein ungedecktes Schiff deckt", () => {
@@ -108,6 +111,7 @@ test("Ein Schiff rückt vor, wenn es damit ein ungedecktes Schiff deckt", () => 
   expect(planBotTurn(board, hands([], ["flanking_maneuver"])).command).toEqual({
     handIndex: 0,
     target: { lane: "command", slotIndex: 3 },
+    destination: 2,
   });
 });
 

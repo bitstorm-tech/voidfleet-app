@@ -28,6 +28,8 @@ interface CommandStats {
   targetMode: TargetMode;
   /** Bei Zielwahl: nur Schiffe dieser Lane sind gültige Ziele. */
   targetLane?: LaneType;
+  /** Verlegt das Zielschiff in einen frei gewählten Slot der anderen Lane. */
+  moves?: true;
 }
 
 const SHIP_STATS = {
@@ -44,12 +46,12 @@ const SHIP_STATS = {
 const COMMAND_STATS = {
   emergency_shields: { commandType: "buff", targetMode: "choose_friendly" },
   emp_blast: { commandType: "debuff", targetMode: "auto_highest_atk" },
-  flanking_maneuver: { commandType: "tactic", targetMode: "choose_friendly" },
-  intercept: { commandType: "reposition", targetMode: "choose_friendly", targetLane: "command" },
+  flanking_maneuver: { commandType: "tactic", targetMode: "choose_friendly", moves: true },
+  intercept: { commandType: "reposition", targetMode: "choose_friendly", targetLane: "command", moves: true },
   orbital_strike: { commandType: "attack", targetMode: "auto_highest_hp" },
   overcharge: { commandType: "special", targetMode: "choose_friendly" },
   power_surge: { commandType: "buff", targetMode: "all_friendly_strike" },
-  recall: { commandType: "reposition", targetMode: "choose_friendly", targetLane: "strike" },
+  recall: { commandType: "reposition", targetMode: "choose_friendly", targetLane: "strike", moves: true },
   scavenge: { commandType: "tactic", targetMode: "none" },
   sensor_sweep: { commandType: "special", targetMode: "none" },
   targeting_jammer: { commandType: "debuff", targetMode: "all_enemy_strike" },

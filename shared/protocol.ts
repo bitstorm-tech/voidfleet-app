@@ -11,10 +11,13 @@ export interface SlotTarget {
   slotIndex: number;
 }
 
-/** Der Zug einer Runde: bis zu 1 Schiff und 1 Befehl, jeweils per Hand-Index. */
+/**
+ * Der Zug einer Runde: bis zu 1 Schiff und 1 Befehl, jeweils per Hand-Index.
+ * Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane, sonst null.
+ */
 export interface TurnPlan {
   ship: { handIndex: number; target: SlotTarget } | null;
-  command: { handIndex: number; target: SlotTarget | null } | null;
+  command: { handIndex: number; target: SlotTarget | null; destination: number | null } | null;
 }
 
 /** Ein Schiff an einer Stelle des Bretts; die Karte steht dabei, weil der Slot danach leer sein kann. */
@@ -90,7 +93,10 @@ export type ErrorCode =
   | "target_required"
   | "target_not_allowed"
   | "target_not_own_ship"
-  | "target_wrong_lane";
+  | "target_wrong_lane"
+  | "destination_required"
+  | "destination_not_allowed"
+  | "destination_unavailable";
 
 export type ServerMessage =
   | { type: "state"; view: PlayerView }

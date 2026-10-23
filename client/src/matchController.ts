@@ -1,14 +1,16 @@
 // Verbindet Server, Spielzustand, 3D-Szene und DOM-UI zur Zugplanung:
 // Der Spieler stellt seinen Zug zusammen (1 Schiff + 1 Befehl), das gewählte
 // Schiff steht als Geist auf dem Slot, der gewählte Befehl bleibt markiert.
-// Beim Platzieren folgt der Geist dem Zeiger über die freien Slots.
+// Beim Platzieren folgt der Geist dem Zeiger über die freien Slots. Befehle, die
+// ein Schiff in die andere Lane verlegen, brauchen zwei Klicks: Schiff, dann Ziel-Slot;
+// dort steht das verlegte Schiff ebenfalls als Geist.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { canTargetLane, needsTarget, type ShipCard } from "../../shared/cards.ts";
-import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, type Lane } from "../../shared/board.ts";
-import type { ServerMessage } from "../../shared/protocol.ts";
+import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, type Lane, type Slot } from "../../shared/board.ts";
+import type { ServerMessage, SlotTarget } from "../../shared/protocol.ts";
 import { Match } from "./game/match.ts";
 import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
@@ -38,8 +40,10 @@ export class MatchController {
 
   private selectedShipIndex: number | null = null;
   private selectedCommandIndex: number | null = null;
+  /** Bei einem verlegenden Befehl: das gewählte Schiff, solange der Ziel-Slot noch fehlt. */
+  private moveSource: Slot | null = null;
   private hoveredPad: SlotPad | null = null;
-  private ghostPad: SlotPad | null = null;
+  private ghostPads: SlotPad[] = [];
   private validTargetCount = 0;
 
   constructor(canvas: HTMLCanvasElement, ui: HTMLElement) {
@@ -134,7 +138,7 @@ export class MatchController {
     } else if (needsTarget(card)) {
       this.selectCommand(index);
     } else {
-      this.match.plan.command = { handIndex: index, target: null };
+      this.match.plan.command = { handIndex: index, target: null, destination: null };
       this.selectCommand(null);
     }
   }
@@ -148,6 +152,7 @@ export class MatchController {
 
   private selectCommand(index: number | null): void {
     this.selectedCommandIndex = index;
+    this.moveSource = null;
     if (index !== null) this.selectedShipIndex = null;
     this.refreshSelectionVisuals();
   }
@@ -184,19 +189,36 @@ export class MatchController {
 
   /**
    * Einzige Gültigkeitsregel für Highlight und Klick: gewähltes Schiff -> freie
-   * eigene Slots, gewählter Befehl -> eigene Schiffe in einer erlaubten Lane. Ohne Auswahl leuchtet
-   * nur das bereits gewählte Befehlsziel weiter, bis die Runde aufgelöst wird.
-   * Die Gegnerseite ist nie Ziel.
+   * eigene Slots, die einem eingeplanten Lane-Wechsel nicht im Weg stehen; gewählter Befehl ->
+   * eigene Schiffe in einer erlaubten Lane, bei verlegenden Befehlen nur mit freiem Ziel-Slot,
+   * danach die freien Slots der anderen Lane. Ohne Auswahl leuchten nur das bereits gewählte
+   * Befehlsziel und sein Ziel-Slot weiter, bis die Runde aufgelöst wird. Die Gegnerseite ist nie Ziel.
    */
   private isValidTarget(pad: SlotPad): boolean {
-    const lane: Lane = pad.slot.lane;
+    const { slot } = pad;
+    const lane: Lane = slot.lane;
+    const board = this.match.board;
     if (lane.side === "enemy" || this.isResolving) return false;
-    if (this.selectedShipIndex !== null) return this.match.board.canPlace(lane, pad.slot.index);
+    if (this.selectedShipIndex !== null) {
+      const move = this.match.plannedMove;
+      const deploy = { lane: lane.type, slotIndex: slot.index };
+      return board.canPlace(lane, slot.index) && (move === null || board.canMove(move.from, move.to.index, deploy));
+    }
     if (this.selectedCommandIndex !== null) {
-      return pad.slot.isOccupied && canTargetLane(this.match.commandHand[this.selectedCommandIndex]!, lane.type);
+      if (this.moveSource !== null) {
+        return lane !== this.moveSource.lane && board.canMove(this.moveSource, slot.index, this.plannedDeploy);
+      }
+      const card = this.match.commandHand[this.selectedCommandIndex]!;
+      if (!slot.isOccupied || !canTargetLane(card, lane.type)) return false;
+      return !card.moves || board.moveDestinations(slot, this.plannedDeploy).length > 0;
     }
     const target = this.match.plan.command?.target;
-    return target !== undefined && target !== null && target.lane === lane.type && target.slotIndex === pad.slot.index;
+    const isTarget = target?.lane === lane.type && target.slotIndex === slot.index;
+    return isTarget || this.match.plannedMove?.to === slot;
+  }
+
+  private get plannedDeploy(): SlotTarget | null {
+    return this.match.plan.ship?.target ?? null;
   }
 
   /** Plant das Schiff auf den Slot; bis zur Auflösung steht es dort nur als Geist. */
@@ -208,40 +230,62 @@ export class MatchController {
     this.selectShip(null);
   }
 
+  /** Verlegende Befehle merken sich erst das Schiff und werden mit dem Ziel-Slot eingeplant. */
   private stageCommandTargetOn(pad: SlotPad): void {
+    const card = this.match.commandHand[this.selectedCommandIndex!]!;
+    if (card.moves && this.moveSource === null) {
+      this.moveSource = pad.slot;
+      this.refreshSelectionVisuals();
+      return;
+    }
+    const target = this.moveSource ?? pad.slot;
     this.match.plan.command = {
       handIndex: this.selectedCommandIndex!,
-      target: { lane: pad.slot.lane.type, slotIndex: pad.slot.index },
+      target: { lane: target.lane.type, slotIndex: target.index },
+      destination: this.moveSource && pad.slot.index,
     };
     this.selectCommand(null);
   }
 
-  /** Stellt den Geist dorthin, wo er laut `ghostTarget` stehen soll; steht er schon richtig, bleibt er. */
-  private refreshGhost(): void {
-    const target = this.ghostTarget();
-    if (target !== null && target.pad === this.ghostPad && target.card === this.ghostPad.ship?.card) return;
-    this.clearGhost();
-    if (target === null) return;
-    this.ghostPad = target.pad;
-    this.ghostPad.attachShip(new ShipView(this.view.scene, target.card, true));
+  /** Stellt die Geister dorthin, wo sie laut `ghostTargets` stehen sollen; stehen sie schon richtig, bleiben sie. */
+  private refreshGhosts(): void {
+    const targets = this.ghostTargets();
+    const unchanged =
+      targets.length === this.ghostPads.length &&
+      targets.every((target, index) => target.pad === this.ghostPads[index] && target.card === target.pad.ship?.card);
+    if (unchanged) return;
+    this.clearGhosts();
+    for (const { pad, card } of targets) pad.attachShip(new ShipView(this.view.scene, card, true));
+    this.ghostPads = targets.map((target) => target.pad);
   }
 
-  /** Beim Platzieren zeigt der Geist den Slot unter dem Zeiger, sonst das eingeplante Schiff. */
-  private ghostTarget(): { pad: SlotPad; card: ShipCard } | null {
-    if (this.isResolving) return null;
-    const hovered = this.hoveredPad;
-    if (this.selectedShipIndex !== null && hovered !== null && this.isValidTarget(hovered)) {
-      return { pad: hovered, card: this.match.shipHand[this.selectedShipIndex]! };
-    }
+  /**
+   * Beim Platzieren zeigt der Geist den Slot unter dem Zeiger, sonst das eingeplante Schiff.
+   * Ebenso steht das verlegte Schiff beim Wählen des Ziel-Slots unter dem Zeiger, sonst auf dem
+   * eingeplanten Ziel-Slot, solange nicht gerade ein anderer Befehl gewählt wird.
+   */
+  private ghostTargets(): { pad: SlotPad; card: ShipCard }[] {
+    if (this.isResolving) return [];
+    const ghosts: { pad: SlotPad; card: ShipCard }[] = [];
+    const hovered = this.hoveredPad !== null && this.isValidTarget(this.hoveredPad) ? this.hoveredPad : null;
     const ship = this.match.plan.ship;
-    if (ship === null) return null;
-    const lane = this.match.board.lane("player", ship.target.lane);
-    return { pad: this.view.padsByLane.get(lane)![ship.target.slotIndex]!, card: this.match.shipHand[ship.handIndex]! };
+    if (this.selectedShipIndex !== null && hovered !== null) {
+      ghosts.push({ pad: hovered, card: this.match.shipHand[this.selectedShipIndex]! });
+    } else if (ship !== null) {
+      ghosts.push({ pad: this.view.pad("player", ship.target.lane, ship.target.slotIndex), card: this.match.shipHand[ship.handIndex]! });
+    }
+    const move = this.match.plannedMove;
+    if (this.moveSource !== null && hovered !== null) {
+      ghosts.push({ pad: hovered, card: this.moveSource.card! });
+    } else if (this.selectedCommandIndex === null && move !== null) {
+      ghosts.push({ pad: this.view.pad("player", move.to.lane.type, move.to.index), card: move.from.card! });
+    }
+    return ghosts;
   }
 
-  private clearGhost(): void {
-    this.ghostPad?.clearShip();
-    this.ghostPad = null;
+  private clearGhosts(): void {
+    for (const pad of this.ghostPads) pad.clearShip();
+    this.ghostPads = [];
   }
 
   // --- Runde ---
@@ -253,7 +297,7 @@ export class MatchController {
 
   /** Szene an den neuen Zustand angleichen (auch Schiffe, die die Lane gewechselt haben); der Geist kommt zuletzt. */
   private syncBoard(): void {
-    this.clearGhost();
+    this.clearGhosts();
     for (const pad of this.view.pads) {
       const slot = pad.slot;
       if (slot.isOccupied && pad.ship?.card !== slot.card) {
@@ -263,7 +307,7 @@ export class MatchController {
       }
       pad.ship?.setStats(slot.hp, slot.shield);
     }
-    this.refreshGhost();
+    this.refreshGhosts();
   }
 
   // --- Darstellung ---
@@ -288,8 +332,8 @@ export class MatchController {
       pad.setValidTarget(valid);
       if (valid) this.validTargetCount += 1;
     }
-    this.view.setGridVisible(this.selectedShipIndex !== null);
-    this.refreshGhost();
+    this.view.setGridVisible(this.selectedShipIndex !== null || this.moveSource !== null);
+    this.refreshGhosts();
     this.updateHud();
   }
 
@@ -330,6 +374,7 @@ export class MatchController {
     }
     if (this.selectedCommandIndex !== null) {
       const name = cardText(this.match.commandHand[this.selectedCommandIndex]!).name;
+      if (this.moveSource !== null) return t.status.chooseDestination(name, cardText(this.moveSource.card!).name);
       if (this.validTargetCount === 0) return t.status.noCommandTarget(name);
       return t.status.chooseCommandTarget(name);
     }
@@ -343,6 +388,6 @@ export class MatchController {
     this.hoveredPad?.setHovered(false);
     this.hoveredPad = pad;
     this.hoveredPad?.setHovered(true);
-    this.refreshGhost();
+    this.refreshGhosts();
   }
 }
