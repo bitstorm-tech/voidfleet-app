@@ -3,7 +3,7 @@
 // Schiff steht als Geist auf dem Slot, der gewählte Befehl bleibt markiert.
 // Beim Platzieren folgt der Geist dem Zeiger über die freien Slots. Befehle, die
 // ein Schiff in die andere Lane verlegen, brauchen zwei Klicks: Schiff, dann Ziel-Slot;
-// dort steht das verlegte Schiff ebenfalls als Geist.
+// dort steht das verlegte Schiff ebenfalls als Geist, ein Bogenpfeil zeigt den Weg.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 
@@ -247,8 +247,15 @@ export class MatchController {
     this.selectCommand(null);
   }
 
-  /** Stellt die Geister dorthin, wo sie laut `ghostTargets` stehen sollen; stehen sie schon richtig, bleiben sie. */
+  /**
+   * Stellt die Geister dorthin, wo sie laut `ghostTargets` stehen sollen; stehen sie schon richtig, bleiben sie.
+   * Der Pfeil des Lane-Wechsels folgt dem Geist des verlegten Schiffs.
+   */
   private refreshGhosts(): void {
+    const move = this.moveArrowTarget();
+    if (move === null) this.view.moveArrow.hide();
+    else this.view.moveArrow.show(move.from, move.to);
+
     const targets = this.ghostTargets();
     const unchanged =
       targets.length === this.ghostPads.length &&
@@ -274,13 +281,22 @@ export class MatchController {
     } else if (ship !== null) {
       ghosts.push({ pad: this.view.pad("player", ship.target.lane, ship.target.slotIndex), card: this.match.shipHand[ship.handIndex]! });
     }
-    const move = this.match.plannedMove;
-    if (this.moveSource !== null && hovered !== null) {
-      ghosts.push({ pad: hovered, card: this.moveSource.card! });
-    } else if (this.selectedCommandIndex === null && move !== null) {
-      ghosts.push({ pad: this.view.pad("player", move.to.lane.type, move.to.index), card: move.from.card! });
-    }
+    const move = this.moveArrowTarget();
+    if (move !== null) ghosts.push({ pad: move.to, card: move.from.slot.card! });
     return ghosts;
+  }
+
+  /** Der Lane-Wechsel, den Geist und Pfeil zeigen: beim Wählen zum Slot unter dem Zeiger, sonst der eingeplante. */
+  private moveArrowTarget(): { from: SlotPad; to: SlotPad } | null {
+    if (this.isResolving) return null;
+    const padOf = (slot: Slot) => this.view.pad("player", slot.lane.type, slot.index);
+    const hovered = this.hoveredPad;
+    if (this.moveSource !== null) {
+      return hovered !== null && this.isValidTarget(hovered) ? { from: padOf(this.moveSource), to: hovered } : null;
+    }
+    const move = this.match.plannedMove;
+    if (this.selectedCommandIndex !== null || move === null) return null;
+    return { from: padOf(move.from), to: padOf(move.to) };
   }
 
   private clearGhosts(): void {

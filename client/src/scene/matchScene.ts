@@ -27,6 +27,7 @@ import { t, upper } from "../i18n/index.ts";
 import { Background } from "./background.ts";
 import { BoardEffects } from "./effects.ts";
 import { LaneLabel } from "./laneLabel.ts";
+import { MoveArrow } from "./moveArrow.ts";
 import type { ShipView } from "./ship.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";
 
@@ -83,6 +84,7 @@ export class MatchScene {
   readonly pads: SlotPad[] = [];
   readonly padsByLane = new Map<Lane, SlotPad[]>();
   readonly effects: BoardEffects;
+  readonly moveArrow: MoveArrow;
   private readonly camera: TargetCamera;
   private readonly cameraRig: TransformNode;
   private readonly glow: GlowLayer;
@@ -126,6 +128,7 @@ export class MatchScene {
     this.glow = new GlowLayer("glow", this.scene, { blurKernelSize: 48 });
     this.glow.intensity = 0.7;
     this.effects = new BoardEffects(this.scene, this.glow);
+    this.moveArrow = new MoveArrow(this.scene, this.glow);
 
     this.createBoard(board);
 
