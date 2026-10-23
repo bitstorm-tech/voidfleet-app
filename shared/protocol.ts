@@ -68,8 +68,7 @@ export type RoundEvent =
   | { kind: "effect"; side: Side; cardId: CommandId; ship: ShipRef; effect: CommandEffect; after: ShipStats }
   | { kind: "draw"; side: Side; cardId: CommandId; ships: number; commands: number }
   | { kind: "noEffect"; side: Side; cardId: CommandId }
-  | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number }
-  | { kind: "hit"; ship: ShipRef; amount: number; after: ShipStats }
+  | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number; after: ShipStats }
   | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "destroyed"; ship: ShipRef };
 

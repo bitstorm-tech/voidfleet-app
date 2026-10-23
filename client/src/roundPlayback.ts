@@ -1,6 +1,7 @@
 // Spielt die aufgedeckten Ereignisse einer Runde auf dem Brett ab: Deploy,
 // Befehle, Kampf und Cleanup nacheinander, gleichartige Ereignisse jeweils
-// gleichzeitig. Die Szene läuft dabei dem Spielzustand voraus; den Endzustand
+// gleichzeitig. Nur die Schüsse im Kampf laufen einzeln ab, damit man bei
+// vollem Brett nachvollziehen kann, wer wen trifft. Die Szene läuft dabei dem Spielzustand voraus; den Endzustand
 // übernimmt danach der Server-Snapshot (`MatchController.syncBoard`).
 
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -33,15 +34,13 @@ const TONE_COLORS: Record<FloatTone, Color3> = {
 const STEP_PAUSE = 280;
 /** So lange steht das Befehls-Banner, bevor die Wirkung einsetzt. */
 const BANNER_LEAD = 650;
-/** Versatz zwischen den Schüssen einer Breitseite. */
-const SHOT_STAGGER = 160;
 const SHIP_CENTER = new Vector3(0, 0.15, 0);
 const ABOVE_SHIP = new Vector3(0, 0.9, 0);
 /** Orbitale Angriffe kommen von oben aus Richtung des Angreifers. */
 const ORBIT_OFFSET = new Vector3(0, 9, 0);
 
-/** Ereignisse mit gleichem Schlüssel stehen hintereinander und laufen gemeinsam ab. */
-function stepKey(event: RoundEvent): string {
+/** Ereignisse mit gleichem Schlüssel stehen hintereinander und laufen gemeinsam ab; `null` steht für sich allein. */
+function stepKey(event: RoundEvent): string | null {
   switch (event.kind) {
     case "deploy":
     case "pass":
@@ -50,6 +49,8 @@ function stepKey(event: RoundEvent): string {
     case "draw":
     case "noEffect":
       return `command-${event.side}-${event.cardId}`;
+    case "attack":
+      return null;
     default:
       return event.kind;
   }
@@ -59,7 +60,8 @@ function groupSteps(events: readonly RoundEvent[]): RoundEvent[][] {
   const steps: RoundEvent[][] = [];
   for (const event of events) {
     const last = steps.at(-1);
-    if (last && stepKey(last[0]!) === stepKey(event)) last.push(event);
+    const key = stepKey(event);
+    if (last && key !== null && stepKey(last[0]!) === key) last.push(event);
     else steps.push([event]);
   }
   return steps;
@@ -87,7 +89,7 @@ export class RoundPlayback {
       this.announceCommand(first);
       await wait(this.view.scene, BANNER_LEAD);
     }
-    await Promise.all(step.map((event, index) => this.playEvent(event, index)));
+    await Promise.all(step.map((event) => this.playEvent(event)));
   }
 
   private announceCommand(event: Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" }>): void {
@@ -97,16 +99,15 @@ export class RoundPlayback {
     this.hud.showBanner(title, subtitle, event.side);
   }
 
-  private async playEvent(event: RoundEvent, index: number): Promise<void> {
+  private async playEvent(event: RoundEvent): Promise<void> {
     switch (event.kind) {
       case "deploy":
         return this.deploy(event.side, event.cardId, event.target);
       case "effect":
         return this.effect(event);
       case "attack":
-        await wait(this.view.scene, index * SHOT_STAGGER);
-        return this.shoot(this.padOf(event.attacker), this.padOf(event.target), SIDE_COLORS[event.attacker.side]);
-      case "hit":
+        await this.shoot(this.padOf(event.attacker), this.padOf(event.target), SIDE_COLORS[event.attacker.side]);
+        return this.damage(event.target, event.amount, event.after);
       case "selfDamage":
         return this.damage(event.ship, event.amount, event.after);
       case "destroyed":

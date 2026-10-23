@@ -45,7 +45,6 @@ export const de: Messages = {
     draw: (command, who, ships, commands) => `Wirkung: ${command} — ${who} +${ships} Schiff, +${commands} Befehl`,
     noEffect: (command, who) => `Wirkung: ${command} (${who}) bleibt ohne Wirkung`,
     attack: (attacker, target, amount) => `Kampf: ${attacker} feuert auf ${target} (${amount})`,
-    hit: (ship, amount) => `Kampf: ${ship} nimmt ${amount} Schaden`,
     selfDamage: (ship, amount) => `Cleanup: ${ship} nimmt ${amount} Eigenschaden`,
     destroyed: (ship) => `Zerstört: ${ship}`,
   },

@@ -66,18 +66,18 @@ describe("Combat", () => {
     expect(tough.hp).toBe(7 - 2);
   });
 
-  test("Schaden wird pro Ziel summiert und mit den Werten danach gemeldet", () => {
+  test("Jeder Schuss wird mit den Werten des Ziels danach gemeldet", () => {
     const board = new Board();
     place(board, "player", "strike", 0, "horizon_cruiser");
     place(board, "player", "strike", 1, "horizon_cruiser");
     place(board, "enemy", "strike", 0, "iron_dreadnought");
-    const hits = round(board).filter((event) => event.kind === "hit");
-    expect(hits).toContainEqual({
-      kind: "hit",
-      ship: { side: "enemy", lane: "strike", slotIndex: 0, cardId: "iron_dreadnought" },
-      amount: 4,
-      after: { hp: 6, shield: 0 },
-    });
+    const shots = round(board)
+      .filter((event) => event.kind === "attack")
+      .filter((event) => event.attacker.side === "player");
+    expect(shots.map((event) => [event.amount, event.after])).toEqual([
+      [2, { hp: 8, shield: 0 }],
+      [2, { hp: 6, shield: 0 }],
+    ]);
   });
 
   test("Schild fängt Schaden zuerst ab und regeneriert nicht", () => {

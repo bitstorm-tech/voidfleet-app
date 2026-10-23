@@ -177,22 +177,28 @@ function chooseTarget(attacker: Slot, lane: Lane): Slot {
   }
 }
 
-/** Alle Schiffe feuern gleichzeitig: erst Ziele und Schaden sammeln, dann anwenden. */
+/**
+ * Alle Schiffe feuern gleichzeitig: erst alle Ziele wählen, dann den Schaden
+ * Schuss für Schuss anwenden und jeden Schuss mit den Werten des Ziels danach melden.
+ */
 export function resolveCombat(board: Board, events: RoundEvent[]): void {
-  const hits = new Map<Slot, number>();
+  const shots: [attacker: Slot, target: Slot][] = [];
   for (const side of SIDES) {
     const lane = targetLane(board, opposite(side));
     if (lane === null) continue;
     for (const attacker of board.ships(side)) {
-      if (!attacker.canAttack) continue;
-      const target = chooseTarget(attacker, lane);
-      hits.set(target, (hits.get(target) ?? 0) + attacker.attack);
-      events.push({ kind: "attack", attacker: shipRef(attacker), target: shipRef(target), amount: attacker.attack });
+      if (attacker.canAttack) shots.push([attacker, chooseTarget(attacker, lane)]);
     }
   }
-  for (const [slot, amount] of hits) {
-    slot.damage(amount);
-    events.push({ kind: "hit", ship: shipRef(slot), amount, after: stats(slot) });
+  for (const [attacker, target] of shots) {
+    target.damage(attacker.attack);
+    events.push({
+      kind: "attack",
+      attacker: shipRef(attacker),
+      target: shipRef(target),
+      amount: attacker.attack,
+      after: stats(target),
+    });
   }
 }
 

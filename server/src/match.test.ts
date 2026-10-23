@@ -11,7 +11,7 @@ function startedMatch(): Match {
 test("Ereignisse für Seat 1 sind gespiegelt, auch in verschachtelten Schiffen", () => {
   const match = startedMatch();
   const events = [
-    { kind: "attack" as const, amount: 2,
+    { kind: "attack" as const, amount: 2, after: { hp: 1, shield: 0 },
       attacker: { side: "player" as const, lane: "strike" as const, slotIndex: 0, cardId: "horizon_cruiser" as const },
       target: { side: "enemy" as const, lane: "strike" as const, slotIndex: 1, cardId: "repair_drone" as const } },
   ];

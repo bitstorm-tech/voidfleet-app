@@ -58,7 +58,6 @@ export const en = {
       `Effect: ${command} — ${who} +${ships} ship, +${commands} command`,
     noEffect: (command: string, who: string) => `Effect: ${command} (${who}) has no effect`,
     attack: (attacker: string, target: string, amount: number) => `Combat: ${attacker} fires at ${target} (${amount})`,
-    hit: (ship: string, amount: number) => `Combat: ${ship} takes ${amount} damage`,
     selfDamage: (ship: string, amount: number) => `Cleanup: ${ship} takes ${amount} self-damage`,
     destroyed: (ship: string) => `Destroyed: ${ship}`,
   },

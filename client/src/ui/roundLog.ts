@@ -48,8 +48,6 @@ export function describeEvent(event: RoundEvent): string {
       return t.log.noEffect(t.commands[event.cardId].name, t.log.who[event.side]);
     case "attack":
       return t.log.attack(shipLabel(event.attacker), shipLabel(event.target), event.amount);
-    case "hit":
-      return t.log.hit(shipLabel(event.ship), event.amount);
     case "selfDamage":
       return t.log.selfDamage(shipLabel(event.ship), event.amount);
     case "destroyed":
