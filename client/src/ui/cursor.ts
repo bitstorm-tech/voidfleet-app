@@ -1,7 +1,10 @@
 import cursorUrl from "../../assets/cursors/cursor_default.svg";
 
-/** Höhe des Cursors in CSS-Pixeln. Chrome verwirft Cursor über 32 px am Fensterrand. */
-const CURSOR_HEIGHT = 32;
+/**
+ * Kantenlänge des Quadrats, in das der Cursor eingepasst wird (CSS-Pixel). Chrome verwirft Cursor,
+ * die in einer Richtung größer als 32 px sind, sobald sie über den Fensterrand ragen.
+ */
+const CURSOR_SIZE = 32;
 
 /**
  * Setzt den Voidfleet-Cursor (wie in Godot für alles, Hotspot an der Spitze).
@@ -15,9 +18,10 @@ export async function installCursor(): Promise<void> {
 
   const apply = () => {
     const dpr = window.devicePixelRatio;
+    const scale = (CURSOR_SIZE * dpr) / Math.max(image.naturalWidth, image.naturalHeight);
     const canvas = document.createElement("canvas");
-    canvas.height = Math.round(CURSOR_HEIGHT * dpr);
-    canvas.width = Math.round((CURSOR_HEIGHT * dpr * image.naturalWidth) / image.naturalHeight);
+    canvas.width = Math.floor(image.naturalWidth * scale);
+    canvas.height = Math.floor(image.naturalHeight * scale);
     canvas.getContext("2d")!.drawImage(image, 0, 0, canvas.width, canvas.height);
     document.documentElement.style.setProperty(
       "--cursor",
