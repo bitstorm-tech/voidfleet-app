@@ -30,6 +30,33 @@ export const en = {
     animationSpeed: "Other animations",
     language: "Language",
     speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
+  },
+  rules: {
+    title: "Rules",
+    sections: [
+      {
+        heading: "Goal",
+        text: "Destroy the enemy fleet. Whoever has no combat ship left on the board after a round loses — support ships don't count. If it hits both sides, the match is a draw.",
+      },
+      {
+        heading: "Your turn",
+        text: "Each round, pick up to one ship and one command from your hand, then end your turn. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit.",
+      },
+      {
+        heading: "The board",
+        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. Ships in the Command lane can only be attacked once their Strike lane is empty.",
+      },
+      {
+        heading: "Resolution",
+        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Effects (commands take effect), Combat (all ships fire at once), Cleanup (round effects expire). Then everyone draws a ship and a command (up to 6 cards per hand).",
+      },
+      {
+        heading: "Ships",
+        text: "Ships have hull (HP), attack (ATK) and shield; damage hits the shield first. Fighters attack the ship with the least HP, battleships the one with the highest ATK, cruisers the ship opposite them. Support ships never attack.",
+      },
+    ],
+  },
+  dialog: {
     close: "Close",
   },
   status: {

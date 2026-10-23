@@ -5,42 +5,21 @@
 
 import { locale, LOCALE_NAMES, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
+import { iconDialog } from "./iconDialog.ts";
 
 type SpeedSetting = "attackSpeed" | "animationSpeed";
 
+const ICON = `<circle cx="12" cy="12" r="3" />
+  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />`;
+
 export class SettingsDialog {
   constructor(container: HTMLElement) {
-    container.insertAdjacentHTML(
-      "beforeend",
-      `<button type="button" class="icon-button settings-toggle">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      </button>
-      <dialog class="settings-dialog">
-        <h2></h2>
-        <button type="button" class="settings-close"></button>
-      </dialog>`,
-    );
-    const toggle = container.querySelector<HTMLButtonElement>(".settings-toggle")!;
-    const dialog = container.querySelector<HTMLDialogElement>(".settings-dialog")!;
-    const close = dialog.querySelector<HTMLButtonElement>(".settings-close")!;
-    toggle.title = t.settings.title;
-    dialog.querySelector("h2")!.textContent = t.settings.title;
-    close.textContent = t.settings.close;
-    close.before(
+    const dialog = iconDialog(container, "settings", t.settings.title, ICON);
+    dialog.querySelector(".dialog-close")!.before(
       speedChoice("attackSpeed"),
       speedChoice("animationSpeed"),
       choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
     );
-
-    toggle.addEventListener("click", () => dialog.showModal());
-    close.addEventListener("click", () => dialog.close());
-    // Klick auf den abgedunkelten Hintergrund schließt; der trifft das Dialog-Element selbst.
-    dialog.addEventListener("click", (event) => {
-      if (event.target === dialog) dialog.close();
-    });
   }
 }
 

@@ -18,6 +18,33 @@ export const de: Messages = {
     animationSpeed: "Übrige Animationen",
     language: "Sprache",
     speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
+  },
+  rules: {
+    title: "Spielregeln",
+    sections: [
+      {
+        heading: "Ziel",
+        text: "Vernichte die gegnerische Flotte. Wer nach einer Runde kein Kampfschiff mehr auf dem Brett hat, verliert — Support-Schiffe zählen nicht. Trifft es beide, endet das Spiel unentschieden.",
+      },
+      {
+        heading: "Dein Zug",
+        text: "Jede Runde wählst du bis zu ein Schiff und einen Befehl aus deiner Hand und beendest den Zug. Dein Gegner tut gleichzeitig dasselbe, ohne deine Wahl zu sehen. Es gibt keine Kosten und kein Zeitlimit.",
+      },
+      {
+        heading: "Das Brett",
+        text: "Jede Seite hat zwei Lanes: Strike vorne, Command dahinter. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 8. Schiffe in der Command-Lane werden erst angegriffen, wenn ihre Strike-Lane leer ist.",
+      },
+      {
+        heading: "Auflösung",
+        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Effects (Befehle wirken), Combat (alle Schiffe feuern gleichzeitig), Cleanup (Rundeneffekte enden). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand).",
+      },
+      {
+        heading: "Schiffe",
+        text: "Schiffe haben Rumpf (HP), Angriff (ATK) und Schild; Schaden trifft zuerst den Schild. Jäger greifen das Schiff mit den wenigsten HP an, Schlachtschiffe das mit dem höchsten ATK, Kreuzer das gegenüberliegende. Support-Schiffe greifen nie an.",
+      },
+    ],
+  },
+  dialog: {
     close: "Schließen",
   },
   status: {

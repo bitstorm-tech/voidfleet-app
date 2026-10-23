@@ -98,7 +98,7 @@ body {
   gap: 4px;
 }
 
-/* Unauffällige Icon-Knöpfe oben rechts: Log und Einstellungen. */
+/* Unauffällige Icon-Knöpfe oben rechts: Log, Einstellungen und Regeln. */
 .icon-button {
   width: 32px;
   height: 32px;
@@ -124,6 +124,12 @@ body {
   right: 44px;
 }
 
+.rules-toggle {
+  position: absolute;
+  top: 8px;
+  right: 80px;
+}
+
 .log-text {
   display: none;
   width: 420px;
@@ -143,9 +149,9 @@ body {
   display: block;
 }
 
-/* --- Einstellungen --- */
+/* --- Dialoge (Einstellungen, Regeln) --- */
 
-.settings-dialog {
+.dialog {
   min-width: 360px;
   padding: 24px 28px;
   color: var(--text);
@@ -156,11 +162,11 @@ body {
   pointer-events: auto;
 }
 
-.settings-dialog::backdrop {
+.dialog::backdrop {
   background: rgb(var(--background) / 0.6);
 }
 
-.settings-dialog h2 {
+.dialog h2 {
   margin: 0 0 20px;
   font-size: 22px;
   font-weight: 600;
@@ -226,11 +232,38 @@ body {
   outline: 2px solid rgb(var(--select));
 }
 
-#ui .settings-close {
+#ui .dialog-close {
   display: block;
   margin: 6px 0 0 auto;
   padding: 8px 24px;
   font-size: 15px;
+}
+
+.rules-dialog {
+  width: 520px;
+}
+
+.rules-body {
+  max-height: 60vh;
+  margin-bottom: 18px;
+  overflow-y: auto;
+}
+
+.rules-body h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rules-body p {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.rules-body p:last-child {
+  margin-bottom: 0;
 }
 
 .hand-bar {
