@@ -122,24 +122,28 @@ export class SlotPad {
     this.clearShip();
     this.ship = ship;
     ship.root.parent = this.shipAnchor;
+    this.updateVisuals();
   }
 
   /** Nimmt das Schiff vom Pad, ohne es zu entsorgen (Lane-Wechsel, Zerstörung). */
   detachShip(): ShipView {
     const ship = this.ship!;
     this.ship = null;
+    this.updateVisuals();
     return ship;
   }
 
   clearShip(): void {
     this.ship?.dispose();
     this.ship = null;
+    this.updateVisuals();
   }
 
   private updateVisuals(): void {
     this.baseMesh.isVisible = this.isGridVisible;
     this.validGlow.isVisible = this.isValidTarget;
-    this.hoverGlow.isVisible = this.isValidTarget && this.isHovered;
+    // Steht hier der Geist des Schiffs, das gerade platziert wird, zeigt er den Slot schon an.
+    this.hoverGlow.isVisible = this.isValidTarget && this.isHovered && !this.ship?.isGhost;
   }
 }
 
