@@ -4,6 +4,7 @@
 import type { LaneType, Side } from "../../../shared/board.ts";
 import type { CommandId, ShipClass, ShipId, TargetMode } from "../../../shared/cards.ts";
 import type { ErrorCode, MatchResult } from "../../../shared/protocol.ts";
+import type { AnimationSpeed } from "../settings.ts";
 
 export interface CardText {
   name: string;
@@ -20,6 +21,12 @@ export const en = {
     playComputer: "Play against computer",
     showLog: "Show log",
     hideLog: "Hide log",
+  },
+  settings: {
+    title: "Settings",
+    animationSpeed: "Animation speed",
+    speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
+    close: "Close",
   },
   status: {
     disconnected: "Lost connection to the server — reload the page.",

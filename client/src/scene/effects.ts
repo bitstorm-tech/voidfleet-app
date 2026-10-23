@@ -16,7 +16,8 @@ import type { Scene } from "@babylonjs/core/scene";
 // Die Partikel-Shader kommen mit ins Bundle, sonst lädt Babylon sie beim ersten Einschlag nach.
 import "@babylonjs/core/Shaders/particles.fragment";
 import "@babylonjs/core/Shaders/particles.vertex";
-import { ANIMATION_TIME_SCALE, easeInCubic, easeOutCubic, tween, wait } from "./tween.ts";
+import { animationTimeScale } from "../settings.ts";
+import { easeInCubic, easeOutCubic, tween, wait } from "./tween.ts";
 
 /** Welteinheiten pro Sekunde. */
 const BOLT_SPEED = 15;
@@ -32,11 +33,6 @@ const RING_SIZE = 2.6;
 const RING_DURATION = 300;
 /** Kantenlänge der berechneten Sprite-Texturen (weiche Scheibe, Ring). */
 const SPRITE_SIZE = 64;
-/**
- * Partikel altern in Sekunden und sind wie die Tweens um `ANIMATION_TIME_SCALE`
- * gestreckt: Babylon zählt `updateSpeed` pro 60-Hz-Frame hoch.
- */
-const PARTICLE_UPDATE_SPEED = 1 / 60 / ANIMATION_TIME_SCALE;
 
 /** Ein Schwarm Partikel, der auf einmal aus dem Einschlagpunkt spritzt. */
 interface Burst {
@@ -240,7 +236,8 @@ export class BoardEffects {
     system.particleTexture = this.dot;
     system.blendMode = burst.opaque ? ParticleSystem.BLENDMODE_STANDARD : ParticleSystem.BLENDMODE_ADD;
     system.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED;
-    system.updateSpeed = PARTICLE_UPDATE_SPEED;
+    // Partikel altern in Sekunden und sind wie die Tweens gestreckt: Babylon zählt `updateSpeed` pro 60-Hz-Frame hoch.
+    system.updateSpeed = 1 / 60 / animationTimeScale();
     system.emitter = position.clone();
     system.minEmitBox = new Vector3(-0.06, -0.06, -0.06);
     system.maxEmitBox = new Vector3(0.06, 0.06, 0.06);

@@ -98,7 +98,8 @@ body {
   gap: 4px;
 }
 
-.log-panel button {
+/* Unauffällige Icon-Knöpfe oben rechts: Log und Einstellungen. */
+.icon-button {
   width: 32px;
   height: 32px;
   padding: 0;
@@ -107,14 +108,20 @@ body {
   opacity: 0.5;
 }
 
-.log-panel button:hover,
-.log-panel.expanded button {
+.icon-button:hover,
+.log-panel.expanded .icon-button {
   opacity: 1;
 }
 
-.log-panel button svg {
+.icon-button svg {
   width: 18px;
   height: 18px;
+}
+
+.settings-toggle {
+  position: absolute;
+  top: 8px;
+  right: 44px;
 }
 
 .log-text {
@@ -134,6 +141,96 @@ body {
 
 .log-panel.expanded .log-text {
   display: block;
+}
+
+/* --- Einstellungen --- */
+
+.settings-dialog {
+  min-width: 360px;
+  padding: 24px 28px;
+  color: var(--text);
+  background: var(--panel);
+  border: none;
+  border-top: 3px solid var(--accent);
+  border-radius: 3px;
+  pointer-events: auto;
+}
+
+.settings-dialog::backdrop {
+  background: rgb(4 5 10 / 0.6);
+}
+
+.settings-dialog h2 {
+  margin: 0 0 20px;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.settings-speed {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.settings-speed legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.settings-speed label {
+  flex: 1;
+}
+
+.settings-speed input {
+  position: absolute;
+  opacity: 0;
+}
+
+.settings-speed span {
+  display: block;
+  padding: 8px 12px;
+  font-size: 14px;
+  text-align: center;
+  white-space: nowrap;
+  background: rgb(255 255 255 / 0.04);
+  border: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.settings-speed label:first-of-type span {
+  border-radius: 3px 0 0 3px;
+}
+
+.settings-speed label:last-of-type span {
+  border-radius: 0 3px 3px 0;
+}
+
+.settings-speed label + label span {
+  border-left: none;
+}
+
+.settings-speed span:hover {
+  background: var(--panel-hover);
+}
+
+.settings-speed input:checked + span {
+  color: #04050a;
+  font-weight: 600;
+  background: var(--accent);
+}
+
+.settings-speed input:focus-visible + span {
+  outline: 2px solid var(--select);
+}
+
+#ui .settings-close {
+  display: block;
+  margin: 24px 0 0 auto;
+  padding: 8px 24px;
+  font-size: 15px;
 }
 
 .hand-bar {

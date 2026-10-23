@@ -27,7 +27,7 @@ export class Hud {
         <span class="status-label"></span>
       </div>
       <div class="log-panel">
-        <button type="button" class="log-toggle">
+        <button type="button" class="icon-button log-toggle">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
             <path d="M4 6h16M4 12h16M4 18h10" />
           </svg>

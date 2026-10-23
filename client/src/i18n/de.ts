@@ -11,6 +11,12 @@ export const de: Messages = {
     showLog: "Log einblenden",
     hideLog: "Log ausblenden",
   },
+  settings: {
+    title: "Einstellungen",
+    animationSpeed: "Animationsgeschwindigkeit",
+    speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
+    close: "Schließen",
+  },
   status: {
     disconnected: "Verbindung zum Server verloren — Seite neu laden.",
     connecting: "Verbinde mit dem Server …",

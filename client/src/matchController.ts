@@ -20,6 +20,7 @@ import { FloatingTexts } from "./ui/floatingText.ts";
 import { HandView } from "./ui/hand.ts";
 import { Hud } from "./ui/hud.ts";
 import { ResultScreen } from "./ui/resultScreen.ts";
+import { SettingsDialog } from "./ui/settingsDialog.ts";
 
 export class MatchController {
   private readonly match = new Match();
@@ -46,6 +47,7 @@ export class MatchController {
     this.hud = new Hud(ui);
     this.playback = new RoundPlayback(this.view, this.hud, floats);
     this.resultScreen = new ResultScreen(ui);
+    new SettingsDialog(ui);
     this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton, this.hud.botButton], {
       onShipCardClick: (index) => this.onShipCardClick(index),
       onCommandCardClick: (index) => this.onCommandCardClick(index),
