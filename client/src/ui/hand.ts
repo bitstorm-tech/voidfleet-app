@@ -2,6 +2,7 @@
 // Karten werden nur neu aufgebaut, wenn sich die Hand ändert (sonst würde die Karte
 // unter der Maus ihr Hover verlieren und neu aufzoomen); jede trägt ihre
 // Illustration (`cardArt`) als Hintergrund, das CSS legt Verläufe für den Text darüber.
+// Neu gezogene Karten fliegen nacheinander ein und leuchten kurz auf.
 
 import type { CommandCard, ShipCard } from "../../../shared/cards.ts";
 import { cardArt } from "../data/cardArt.ts";
@@ -40,11 +41,13 @@ export class HandView {
 
   renderShips(hand: readonly ShipCard[], markedIndices: ReadonlySet<number>): void {
     if (!sameCards(hand, this.shipHand)) {
+      const drawn = drawnIndices(this.shipHand, hand);
       this.shipHand = hand;
       this.shipRow.replaceChildren(
         ...hand.map((card, index) => {
           const element = this.createShipCard(card);
           element.addEventListener("click", () => this.callbacks.onShipCardClick(index));
+          markDrawn(element, drawn.indexOf(index));
           return element;
         }),
       );
@@ -54,11 +57,13 @@ export class HandView {
 
   renderCommands(hand: readonly CommandCard[], markedIndices: ReadonlySet<number>): void {
     if (!sameCards(hand, this.commandHand)) {
+      const drawn = drawnIndices(this.commandHand, hand);
       this.commandHand = hand;
       this.commandRow.replaceChildren(
         ...hand.map((card, index) => {
           const element = this.createCommandCard(card);
           element.addEventListener("click", () => this.callbacks.onCommandCardClick(index));
+          markDrawn(element, drawn.indexOf(index));
           return element;
         }),
       );
@@ -118,6 +123,27 @@ export class HandView {
 
 function markSelected(row: HTMLElement, markedIndices: ReadonlySet<number>): void {
   [...row.children].forEach((element, index) => element.classList.toggle("selected", markedIndices.has(index)));
+}
+
+/** Indizes der Karten in `next`, die in `previous` noch nicht lagen (gleiche Karten zählen mehrfach). */
+function drawnIndices(previous: readonly object[], next: readonly object[]): number[] {
+  const remaining = [...previous];
+  return next.flatMap((card, index) => {
+    const kept = remaining.indexOf(card);
+    if (kept === -1) return [index];
+    remaining.splice(kept, 1);
+    return [];
+  });
+}
+
+/** Die `order`-te neue Karte fliegt versetzt ein; -1 heißt: lag schon auf der Hand. */
+function markDrawn(element: HTMLElement, order: number): void {
+  if (order === -1) return;
+  element.classList.add("drawn");
+  element.style.setProperty("--draw-delay", `${order * 0.18}s`);
+  element.addEventListener("animationend", (event) => {
+    if (event.pseudoElement === "::before") element.classList.remove("drawn");
+  });
 }
 
 function sameCards(a: readonly object[], b: readonly object[]): boolean {

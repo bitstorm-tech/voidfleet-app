@@ -320,6 +320,41 @@ body {
   transform-origin: bottom right;
 }
 
+/* Neu gezogene Karten fliegen von unten ein und leuchten danach kurz nach. */
+.card.drawn {
+  animation: card-draw 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.15) var(--draw-delay) backwards;
+}
+
+.card.drawn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  animation: card-drawn-glow 2.4s ease-out var(--draw-delay) backwards;
+}
+
+@keyframes card-draw {
+  from {
+    opacity: 0;
+    translate: 0 120%;
+  }
+}
+
+@keyframes card-drawn-glow {
+  from,
+  30% {
+    box-shadow:
+      0 0 0 2px rgb(var(--select)),
+      0 0 24px 4px rgb(var(--select) / 0.8);
+  }
+  to {
+    box-shadow:
+      0 0 0 2px rgb(var(--select) / 0),
+      0 0 24px 4px rgb(var(--select) / 0);
+  }
+}
+
 .card.selected::after {
   content: "";
   position: absolute;
