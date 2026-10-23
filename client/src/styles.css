@@ -87,26 +87,39 @@ body {
   padding-top: 3px;
 }
 
+/* Nur fürs Debugging: unauffälliger Icon-Knopf ganz oben rechts, das Log klappt darunter auf. */
 .log-panel {
   position: absolute;
-  top: 72px;
-  right: 32px;
-  width: 428px;
+  top: 8px;
+  right: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 4px;
-  background: var(--panel);
-  border-radius: 3px;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .log-panel button {
+  width: 32px;
   height: 32px;
-  font-size: 15px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0.5;
+}
+
+.log-panel button:hover,
+.log-panel.expanded button {
+  opacity: 1;
+}
+
+.log-panel button svg {
+  width: 18px;
+  height: 18px;
 }
 
 .log-text {
   display: none;
+  width: 420px;
   height: 420px;
   overflow-y: auto;
   padding: 6px;
@@ -114,6 +127,9 @@ body {
   line-height: 1.45;
   color: var(--text-dim);
   white-space: pre-wrap;
+  background: var(--panel);
+  border-radius: 3px;
+  pointer-events: auto;
 }
 
 .log-panel.expanded .log-text {

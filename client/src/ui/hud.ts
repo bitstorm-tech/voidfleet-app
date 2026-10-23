@@ -27,7 +27,11 @@ export class Hud {
         <span class="status-label"></span>
       </div>
       <div class="log-panel">
-        <button type="button" class="log-toggle"></button>
+        <button type="button" class="log-toggle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M4 6h16M4 12h16M4 18h10" />
+          </svg>
+        </button>
         <div class="log-text"></div>
       </div>
       <div class="reveal-banner"></div>
@@ -40,7 +44,7 @@ export class Hud {
     this.logText = container.querySelector(".log-text")!;
     this.banner = container.querySelector(".reveal-banner")!;
     this.roundBanner = container.querySelector(".round-banner")!;
-    this.logToggle.textContent = t.hud.showLog;
+    this.logToggle.title = t.hud.showLog;
     this.logToggle.addEventListener("click", () => this.toggleLog());
 
     this.submitButton = createButton("submit-button", t.hud.endTurn);
@@ -93,7 +97,7 @@ export class Hud {
 
   private toggleLog(): void {
     const expanded = this.logPanel.classList.toggle("expanded");
-    this.logToggle.textContent = expanded ? t.hud.hideLog : t.hud.showLog;
+    this.logToggle.title = expanded ? t.hud.hideLog : t.hud.showLog;
   }
 }
 
