@@ -66,16 +66,20 @@ export class HandView {
       <div class="stats">
         <span class="atk-label"></span><b class="atk"></b>
         <span class="hp-label"></span><b class="hp"></b>
-        <span class="shield-label"></span><b class="shield"></b>
       </div>`;
     element.querySelector(".name")!.textContent = cardText(card).name;
     element.querySelector(".class")!.textContent = upper(t.shipClasses[card.shipClass]);
     element.querySelector(".hp-label")!.textContent = upper(t.stats.hp);
     element.querySelector(".atk-label")!.textContent = upper(t.stats.atk);
-    element.querySelector(".shield-label")!.textContent = upper(t.stats.shield);
     element.querySelector(".hp")!.textContent = String(card.hp);
     element.querySelector(".atk")!.textContent = String(card.atk);
-    element.querySelector(".shield")!.textContent = String(card.shield);
+    if (card.shield > 0) {
+      const label = document.createElement("span");
+      label.textContent = upper(t.stats.shield);
+      const value = document.createElement("b");
+      value.textContent = String(card.shield);
+      element.querySelector(".stats")!.append(label, value);
+    }
     return element;
   }
 
