@@ -1,10 +1,10 @@
 // Der Computergegner: plant aus Brett und eigener Hand einen Zug. Er sieht nur,
 // was auch ein Spieler sieht, insbesondere nicht den Plan des Gegners.
 // Faustregeln: immer ein Schiff legen (Kampfschiffe zuerst, robuste nach vorne,
-// Jäger und Support in die geschützte Command-Lane) und den Befehl spielen, der
+// Jäger und Support in einen gedeckten Command-Slot) und den Befehl spielen, der
 // nach grober Schätzung am meisten Schaden anrichtet oder verhindert.
 
-import { MAX_SHIPS_PER_LANE, opposite, SLOT_COUNT, type Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
+import { MAX_SHIPS_PER_LANE, nearest, opposite, SLOT_COUNT, type Board, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import type { CommandCard, ShipCard } from "../../shared/cards.ts";
 import type { SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { highest } from "./resolution.ts";
@@ -37,14 +37,14 @@ function planShip(board: Board, bot: BotHands): TurnPlan["ship"] {
   if (card === null) return null;
   const strike = board.lane(bot.side, "strike");
   const command = board.lane(bot.side, "command");
-  // Die Strike-Lane schirmt die Command-Lane ab: Steht vorne nichts, muss das Schiff nach vorne.
-  // Sonst kommen Jäger und Support nach hinten in Sicherheit, robuste Schiffe nach vorne.
+  // Ein Strike-Schiff deckt den Command-Slot dahinter: Jäger und Support kommen in einen
+  // gedeckten Command-Slot, robuste Schiffe vor ein ungedecktes Command-Schiff, sonst nach vorne.
   const fragile = card.shipClass === "fighter" || card.shipClass === "support";
-  const preferred = fragile && strike.occupiedSlots.length > 0 ? command : strike;
-  for (const lane of [preferred, preferred === strike ? command : strike]) {
-    const slot = lane.freeSlotNear(LANE_CENTER);
-    if (slot && board.canPlace(lane, slot.index)) {
-      return { handIndex: bot.shipHand.indexOf(card), target: { lane: lane.type, slotIndex: slot.index } };
+  const free = (lane: Lane, behind: Lane) => lane.slots.filter((slot) => !slot.isOccupied && behind.slots[slot.index]!.isOccupied);
+  const preferred = fragile ? free(command, strike) : free(strike, command);
+  for (const slot of [nearest(preferred, LANE_CENTER), strike.freeSlotNear(LANE_CENTER), command.freeSlotNear(LANE_CENTER)]) {
+    if (slot && board.canPlace(slot.lane, slot.index)) {
+      return { handIndex: bot.shipHand.indexOf(card), target: { lane: slot.lane.type, slotIndex: slot.index } };
     }
   }
   return null;
@@ -92,8 +92,6 @@ class Situation {
   private readonly enemies: readonly Slot[];
   /** Eigene Schiffe je Lane nach dem Deploy. */
   private readonly count: Record<LaneType, number>;
-  /** Die eigene Lane, die der Gegner diese Runde beschießt. */
-  private readonly exposed: LaneType;
   private readonly enemyAttack: number;
   private readonly enemyMaxAttack: number;
   /** Ob das geplante Schiff vorne mitschießt. */
@@ -111,7 +109,6 @@ class Situation {
       strike: this.lane("strike").occupiedSlots.length + (ship?.target.lane === "strike" ? 1 : 0),
       command: this.lane("command").occupiedSlots.length + (ship?.target.lane === "command" ? 1 : 0),
     };
-    this.exposed = this.count.strike > 0 ? "strike" : "command";
     this.enemyAttack = this.enemies.reduce((total, slot) => total + slot.attack, 0);
     this.enemyMaxAttack = Math.max(0, ...this.enemies.map((slot) => slot.attack));
     this.deploysStrikeAttacker = ship?.target.lane === "strike" && bot.shipHand[ship.handIndex]!.atk > 0;
@@ -123,12 +120,24 @@ class Situation {
 
   /** Steht unter Beschuss und ein einzelner Treffer kann es zerstören. */
   private endangered(slot: Slot): boolean {
-    return slot.lane.type === this.exposed && slot.hp + slot.shield <= this.enemyMaxAttack;
+    return this.board.isExposed(slot) && slot.hp + slot.shield <= this.enemyMaxAttack;
   }
 
-  /** Vorne leer, hinten mehrere: Ein Schiff nach vorne schirmt die anderen ab. */
-  private get coverNeeded(): boolean {
-    return this.count.strike === 0 && this.count.command >= 2;
+  /** Der Slot, in dem das Schiff nach dem Wechsel in die andere Lane landet. */
+  private destination(slot: Slot): Slot | null {
+    return this.lane(slot.lane.type === "strike" ? "command" : "strike").freeSlotNear(slot.index);
+  }
+
+  /** Vorrücken lohnt als Deckung nur, wenn das Schiff vor einem anderen, bisher ungedeckten landet. */
+  private coversAfterAdvance(slot: Slot): boolean {
+    const destination = this.destination(slot);
+    return destination !== null && destination.index !== slot.index && this.lane("command").slots[destination.index]!.isOccupied;
+  }
+
+  /** Zurückziehen bringt nur Sicherheit, wenn das Schiff hinter einem anderen Strike-Schiff landet. */
+  private coveredAfterRetreat(slot: Slot): boolean {
+    const destination = this.destination(slot);
+    return destination !== null && destination.index !== slot.index && this.lane("strike").slots[destination.index]!.isOccupied;
   }
 
   /** Bewertet den Befehl; null oder Score 0, wenn er nichts bringt. */
@@ -150,23 +159,25 @@ class Situation {
       case "power_surge":
         return untargeted(this.lane("strike").occupiedSlots.filter(attacks).length + (this.deploysStrikeAttacker ? 1 : 0));
       case "emergency_shields": {
-        // Jäger schießen auf das schwächste Schiff: Das bekommt den Schild.
-        const target = lowest(this.lane(this.exposed).occupiedSlots, hp);
+        // Jäger schießen auf das schwächste ungedeckte Schiff: Das bekommt den Schild.
+        const target = lowest(this.board.exposedShips(this.side), hp);
         return target && on(target, Math.min(3, this.enemyAttack) + (this.endangered(target) ? 1 : 0));
       }
       case "overcharge": {
         // +3 ATK gegen 2 Eigenschaden: nur für ein Kampfschiff, das das und einen Treffer übersteht.
         const sturdy = this.own.filter(
-          (slot) => attacks(slot) && slot.hp > 2 + (slot.lane.type === this.exposed ? this.enemyMaxAttack : 0),
+          (slot) => attacks(slot) && slot.hp > 2 + (this.board.isExposed(slot) ? this.enemyMaxAttack : 0),
         );
         const target = highest(sturdy, hp);
         return target && on(target, 2);
       }
       case "flanking_maneuver": {
-        if (this.coverNeeded) return on(highest(this.lane("command").occupiedSlots, hp)!, 2);
-        // Ein angeschlagenes Schiff vorne in Sicherheit bringen, solange vorne jemand bleibt.
+        // Das robusteste Schiff nach vorne, wenn es damit ein anderes deckt; sonst ein angeschlagenes
+        // Schiff vorne in einen gedeckten Slot bringen, solange vorne jemand bleibt.
+        const advance = highest(this.lane("command").occupiedSlots.filter((slot) => this.coversAfterAdvance(slot)), hp);
+        if (advance) return on(advance, 2);
         const retreat = lowest(this.lane("strike").occupiedSlots, hp);
-        if (retreat && this.endangered(retreat) && count.strike >= 2 && count.command < MAX_SHIPS_PER_LANE) {
+        if (retreat && this.endangered(retreat) && this.coveredAfterRetreat(retreat) && count.strike >= 2) {
           return on(retreat, 1.5);
         }
         return null;
@@ -175,14 +186,14 @@ class Situation {
         // Holt ein Schiff nach vorne: +2 ATK für ein Kampfschiff, dazu Deckung für die anderen.
         if (count.strike >= MAX_SHIPS_PER_LANE) return null;
         const target = highest(this.lane("command").occupiedSlots, (slot) => (attacks(slot) ? 100 : 0) + slot.hp);
-        return target && on(target, (attacks(target) ? 1.5 : 0) + (this.coverNeeded ? 2 : 0));
+        return target && on(target, (attacks(target) ? 1.5 : 0) + (this.coversAfterAdvance(target) ? 2 : 0));
       }
       case "recall": {
         // Zieht ein angeschlagenes Schiff nach hinten und heilt es; vorne muss aber jemand bleiben.
         if (count.strike < 2 || count.command >= MAX_SHIPS_PER_LANE) return null;
         const target = lowest(this.lane("strike").occupiedSlots, hp)!;
         const healing = Math.min(2, target.card!.hp - target.hp);
-        return on(target, healing + (this.endangered(target) ? 1.5 : 0));
+        return on(target, healing + (this.endangered(target) && this.coveredAfterRetreat(target) ? 1.5 : 0));
       }
       case "scavenge":
         // Nachziehen lohnt sich, solange die Schiffshand dünn ist; eine volle Hand verschluckt die Karte.

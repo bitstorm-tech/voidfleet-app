@@ -39,6 +39,51 @@ describe("Combat", () => {
     expect(events.filter((event) => event.kind === "destroyed")).toHaveLength(2);
   });
 
+  test("eigene Schüsse überspringen ein Ziel, das ein eigener Schuss schon zerstört hat", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "void_interceptor");
+    place(board, "player", "strike", 1, "void_interceptor");
+    place(board, "player", "strike", 2, "void_interceptor");
+    const weak = place(board, "enemy", "strike", 0, "horizon_cruiser");
+    const other = place(board, "enemy", "strike", 3, "horizon_cruiser");
+    weak.hp = 3;
+    const targets = round(board)
+      .filter((event) => event.kind === "attack")
+      .filter((event) => event.attacker.side === "player")
+      .map((event) => event.target.slotIndex);
+    expect(targets).toEqual([0, 3, 3]);
+    expect(weak.isOccupied).toBe(false);
+    expect(other.hp).toBe(hp("horizon_cruiser") - 6);
+  });
+
+  test("übrige Schüsse verfallen, wenn kein Ziel mehr steht; die Deckung hält die Runde über", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "void_interceptor");
+    place(board, "player", "strike", 1, "void_interceptor");
+    const front = place(board, "enemy", "strike", 0, "horizon_cruiser");
+    const back = place(board, "enemy", "command", 0, "repair_drone");
+    front.hp = 3;
+    const shots = round(board)
+      .filter((event) => event.kind === "attack")
+      .filter((event) => event.attacker.side === "player");
+    expect(shots).toHaveLength(1);
+    expect(front.isOccupied).toBe(false);
+    expect(back.hp).toBe(hp("repair_drone"));
+  });
+
+  test("ein im selben Kampf zerstörtes Schiff feuert noch, weil die Seiten gleichzeitig schießen", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "void_interceptor");
+    place(board, "player", "strike", 1, "void_interceptor");
+    const enemy = place(board, "enemy", "strike", 0, "void_interceptor");
+    const victim = place(board, "player", "strike", 2, "horizon_cruiser");
+    victim.hp = 3;
+    enemy.hp = 3;
+    round(board);
+    expect(enemy.isOccupied).toBe(false);
+    expect(victim.isOccupied).toBe(false);
+  });
+
   test("Schüsse wechseln sich zwischen den Seiten ab", () => {
     const board = new Board();
     place(board, "player", "strike", 0, "horizon_cruiser");
@@ -50,14 +95,16 @@ describe("Combat", () => {
     expect(sides).toEqual(["player", "enemy", "player", "enemy", "player"]);
   });
 
-  test("Command-Lane ist geschützt, solange in der Strike-Lane ein Schiff steht", () => {
+  test("ein Command-Schiff ist nur gedeckt, wenn im Strike-Slot davor ein Schiff steht", () => {
     const board = new Board();
     place(board, "player", "strike", 0, "horizon_cruiser");
     const front = place(board, "enemy", "strike", 3, "titan_carrier");
-    const back = place(board, "enemy", "command", 0, "repair_drone");
+    const covered = place(board, "enemy", "command", 3, "repair_drone");
+    const exposed = place(board, "enemy", "command", 0, "repair_drone");
     round(board);
-    expect(front.hp).toBe(hp("titan_carrier") - 2);
-    expect(back.hp).toBe(hp("repair_drone"));
+    expect(exposed.hp).toBe(hp("repair_drone") - 2);
+    expect(covered.hp).toBe(hp("repair_drone"));
+    expect(front.hp).toBe(hp("titan_carrier"));
   });
 
   test("Jäger nimmt das niedrigste HP, Schlachtschiff das höchste ATK, Kreuzer das nächstgelegene", () => {

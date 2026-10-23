@@ -61,15 +61,22 @@ test("Ein Angriff, der einen Gegner zerstört, geht vor", () => {
   expect(planBotTurn(board, hands([], ["scavenge", "orbital_strike"])).command).toEqual({ handIndex: 1, target: null });
 });
 
-test("Der Schild geht an das schwächste Schiff in der beschossenen Lane", () => {
+test("Der Schild geht an das schwächste ungedeckte Schiff", () => {
   const board = new Board();
   place(board, "player", "strike", 1, "iron_dreadnought");
   place(board, "player", "strike", 3, "horizon_cruiser");
-  place(board, "player", "command", 2, "void_interceptor");
+  const fighter = place(board, "player", "command", 1, "void_interceptor");
   place(board, "enemy", "strike", 2, "plasma_frigate");
+  // Der Jäger steht gedeckt hinter dem Dreadnought.
   expect(planBotTurn(board, hands([], ["emergency_shields"])).command).toEqual({
     handIndex: 0,
     target: { lane: "strike", slotIndex: 3 },
+  });
+  // Ungedeckt ist er das schwächste Ziel.
+  board.lane("player", "command").slots[2]!.takeFrom(fighter);
+  expect(planBotTurn(board, hands([], ["emergency_shields"])).command).toEqual({
+    handIndex: 0,
+    target: { lane: "command", slotIndex: 2 },
   });
 });
 
@@ -91,15 +98,24 @@ test("Intercept holt nur aus der Command-Lane, Recall nur aus der Strike-Lane un
   expect(plan.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 1 } });
 });
 
-test("Steht vorne nichts, schickt der Bot das robusteste Schiff nach vorne, um die anderen zu decken", () => {
+test("Ein Schiff rückt vor, wenn es damit ein ungedecktes Schiff deckt", () => {
   const board = new Board();
+  place(board, "player", "strike", 3, "iron_dreadnought");
   place(board, "player", "command", 2, "repair_drone");
   place(board, "player", "command", 3, "horizon_cruiser");
   place(board, "enemy", "strike", 2, "void_interceptor");
+  // Der Kreuzer landet in Strike-Slot 2 und deckt damit die Drohne; die Drohne selbst würde nur vor ihren leeren Slot rücken.
   expect(planBotTurn(board, hands([], ["flanking_maneuver"])).command).toEqual({
     handIndex: 0,
     target: { lane: "command", slotIndex: 3 },
   });
+});
+
+test("Robuste Schiffe stellen sich vor ein ungedecktes Command-Schiff", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  place(board, "player", "command", 4, "repair_drone");
+  expect(planBotTurn(board, hands(["horizon_cruiser"], [])).ship?.target).toEqual({ lane: "strike", slotIndex: 4 });
 });
 
 test("Befehle ohne Nutzen bleiben auf der Hand", () => {

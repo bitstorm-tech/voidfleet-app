@@ -152,55 +152,53 @@ function applyCommand(board: Board, { commander, card, target }: PlayedCommand, 
 
 // --- Combat ---
 
-/** Schutzregel: die Command-Lane ist erst Ziel, wenn die Strike-Lane leer ist. */
-function targetLane(board: Board, side: Side): Lane | null {
-  const strike = board.lane(side, "strike");
-  if (strike.occupiedSlots.length > 0) return strike;
-  const command = board.lane(side, "command");
-  return command.occupiedSlots.length > 0 ? command : null;
-}
-
 /**
  * Zielwahl nach Schiffsklasse (Gleichstand: niedrigerer Slot-Index): Jäger das
  * niedrigste HP, Schlachtschiff das höchste ATK, Kreuzer das gegenüberliegende
  * Schiff, sonst das nächstgelegene. Support greift nie an.
  */
-function chooseTarget(attacker: Slot, lane: Lane): Slot {
-  const ships = lane.occupiedSlots;
+function chooseTarget(attacker: Slot, ships: readonly Slot[]): Slot | null {
   switch (attacker.card!.shipClass) {
     case "fighter":
-      return highest(ships, (slot) => -slot.hp)!;
+      return highest(ships, (slot) => -slot.hp);
     case "battleship":
-      return highest(ships, (slot) => slot.attack)!;
+      return highest(ships, (slot) => slot.attack);
     default:
-      return nearest(ships, attacker.index)!;
+      return nearest(ships, attacker.index);
   }
 }
 
 /**
- * Alle Schiffe feuern gleichzeitig: erst alle Ziele wählen, dann den Schaden
- * Schuss für Schuss anwenden und jeden Schuss mit den Werten des Ziels danach melden.
- * Die Schüsse wechseln sich zwischen den Seiten ab, damit die Animation hin und her geht.
+ * Beide Seiten feuern gleichzeitig: Wer zu Kampfbeginn schießen kann, schießt,
+ * auch wenn er im selben Kampf zerstört wird. Ziel sind nur ungedeckte Schiffe
+ * (`Board.exposedShips`); die Deckung gilt für die ganze Runde, auch wenn das
+ * deckende Schiff im selben Kampf zerstört wird. Innerhalb einer Seite zielen
+ * die Schiffe nacheinander in Slot-Reihenfolge und überspringen Ziele, die ein
+ * eigener Schuss schon zerstört hat; so verpufft kein Schuss. Bleibt kein Ziel,
+ * verfallen die übrigen Schüsse dieser Seite. Die Seiten beeinflussen sich dabei
+ * nicht, weil jede nur die Schiffe der anderen trifft. Gemeldet werden die
+ * Schüsse abwechselnd, damit die Animation hin und her geht.
  */
 export function resolveCombat(board: Board, events: RoundEvent[]): void {
-  const shotsBySide = SIDES.map((side) => {
-    const lane = targetLane(board, opposite(side));
-    if (lane === null) return [];
-    return board
-      .ships(side)
-      .filter((attacker) => attacker.canAttack)
-      .map((attacker): [attacker: Slot, target: Slot] => [attacker, chooseTarget(attacker, lane)]);
+  const attackersBySide = SIDES.map((side) => board.ships(side).filter((attacker) => attacker.canAttack));
+  const shotsBySide = attackersBySide.map((attackers, index) => {
+    const targets = board.exposedShips(opposite(SIDES[index]!));
+    const shots: RoundEvent[] = [];
+    for (const attacker of attackers) {
+      const target = chooseTarget(attacker, targets.filter((slot) => !slot.isDestroyed));
+      if (target === null) break;
+      target.damage(attacker.attack);
+      shots.push({
+        kind: "attack",
+        attacker: shipRef(attacker),
+        target: shipRef(target),
+        amount: attacker.attack,
+        after: stats(target),
+      });
+    }
+    return shots;
   });
-  for (const [attacker, target] of interleave(shotsBySide)) {
-    target.damage(attacker.attack);
-    events.push({
-      kind: "attack",
-      attacker: shipRef(attacker),
-      target: shipRef(target),
-      amount: attacker.attack,
-      after: stats(target),
-    });
-  }
+  events.push(...interleave(shotsBySide));
 }
 
 /** Reißverschluss: abwechselnd ein Element aus jeder Liste, bis alle leer sind. */

@@ -183,6 +183,16 @@ export class Board {
     return [this.lane(side, "strike"), this.lane(side, "command")].flatMap((lane) => lane.occupiedSlots);
   }
 
+  /** Schutzregel: ein Command-Schiff ist gedeckt, solange im Strike-Slot davor ein Schiff steht. */
+  isExposed(slot: Slot): boolean {
+    return slot.lane.type === "strike" || !this.lane(slot.lane.side, "strike").slots[slot.index]!.isOccupied;
+  }
+
+  /** Schiffe einer Seite, die beschossen werden können, in `ships`-Reihenfolge. */
+  exposedShips(side: Side): Slot[] {
+    return this.ships(side).filter((slot) => this.isExposed(slot));
+  }
+
   shipCount(side: Side): number {
     return this.ships(side).length;
   }
