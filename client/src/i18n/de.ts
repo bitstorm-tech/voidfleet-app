@@ -23,11 +23,15 @@ export const de: Messages = {
     planned: (cards) => `${cards} steht bereit. „Zug beenden“ oder Karte antippen zum Zurücknehmen.`,
     idle: "Schiffs- oder Befehlskarte antippen, oder ohne Karte „Zug beenden“ (Pass).",
     resolving: "Beide Züge sind aufgedeckt — die Runde wird aufgelöst …",
-    result: {
-      won: "Sieg — die gegnerische Flotte ist vernichtet.",
-      lost: "Niederlage — deine Flotte ist vernichtet.",
-      draw: "Unentschieden — beide Flotten sind vernichtet.",
-    },
+    matchOver: "Das Match ist beendet.",
+  },
+  result: {
+    won: { title: "Sieg", subtitle: "Die gegnerische Flotte ist vernichtet." },
+    lost: { title: "Niederlage", subtitle: "Deine Flotte ist vernichtet." },
+    draw: { title: "Unentschieden", subtitle: "Beide Flotten sind vernichtet." },
+    rounds: (round) => `Entschieden in Runde ${round}`,
+    viewBoard: "Brett ansehen",
+    newMatch: "Neues Match",
   },
   log: {
     roundHeader: (round) => `— Runde ${round} —`,

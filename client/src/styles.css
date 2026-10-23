@@ -325,3 +325,116 @@ body {
   30% { transform: translateY(-6px) scale(1); }
   100% { opacity: 0; transform: translateY(-56px); }
 }
+
+/* --- Matchende --- */
+
+#ui.match-over .hand-bar {
+  display: none;
+}
+
+.result-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: radial-gradient(ellipse at center, rgb(var(--result-rgb) / 0.18), rgb(4 5 10 / 0.82) 70%);
+  animation: result-fade 0.6s ease-out;
+}
+
+.result-overlay[hidden],
+.result-badge[hidden] {
+  display: none;
+}
+
+.result-overlay,
+.result-badge {
+  --result-rgb: 120 194 255;
+}
+
+[data-result="won"] {
+  --result-rgb: 255 214 102;
+}
+
+[data-result="lost"] {
+  --result-rgb: 255 96 80;
+}
+
+[data-result="draw"] {
+  --result-rgb: 176 188 206;
+}
+
+.result-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 480px;
+  padding: 36px 56px 32px;
+  background: var(--panel);
+  border-top: 4px solid rgb(var(--result-rgb));
+  border-radius: 3px;
+  box-shadow: 0 0 80px rgb(var(--result-rgb) / 0.25);
+  animation: result-pop 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.result-title {
+  font-size: 72px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(var(--result-rgb));
+  text-shadow: 0 0 24px rgb(var(--result-rgb) / 0.6);
+}
+
+.result-subtitle {
+  font-size: 20px;
+  color: var(--text);
+}
+
+.result-rounds {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.result-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.result-actions button {
+  width: 200px;
+  height: 52px;
+  font-size: 18px;
+}
+
+#ui .result-new {
+  border-color: rgb(var(--result-rgb) / 0.7);
+}
+
+.result-badge {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  translate: -50% 0;
+  padding: 8px 28px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+#ui .result-badge {
+  color: rgb(var(--result-rgb));
+  border-color: rgb(var(--result-rgb) / 0.7);
+}
+
+@keyframes result-fade {
+  from { opacity: 0; }
+}
+
+@keyframes result-pop {
+  from { opacity: 0; transform: scale(0.85); }
+}

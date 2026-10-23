@@ -18,6 +18,7 @@ import type { SlotPad } from "./scene/slotPad.ts";
 import { FloatingTexts } from "./ui/floatingText.ts";
 import { HandView } from "./ui/hand.ts";
 import { Hud } from "./ui/hud.ts";
+import { ResultScreen } from "./ui/resultScreen.ts";
 
 export class MatchController {
   private readonly match = new Match();
@@ -25,6 +26,7 @@ export class MatchController {
   private readonly hud: Hud;
   private readonly hand: HandView;
   private readonly playback: RoundPlayback;
+  private readonly resultScreen: ResultScreen;
   private readonly connection: ServerConnection;
   private isConnected = true;
   /** Server-Nachrichten werden der Reihe nach verarbeitet; eine Runde wartet, bis ihre Animation fertig ist. */
@@ -42,6 +44,7 @@ export class MatchController {
     const floats = new FloatingTexts(ui);
     this.hud = new Hud(ui);
     this.playback = new RoundPlayback(this.view, this.hud, floats);
+    this.resultScreen = new ResultScreen(ui);
     this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton], {
       onShipCardClick: (index) => this.onShipCardClick(index),
       onCommandCardClick: (index) => this.onCommandCardClick(index),
@@ -78,6 +81,7 @@ export class MatchController {
         this.selectedCommandIndex = null;
         this.syncBoard();
         this.refreshSelectionVisuals();
+        this.resultScreen.show(this.match.result, this.match.round);
         break;
       case "round":
         // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
@@ -276,7 +280,7 @@ export class MatchController {
     if (!this.isConnected) return t.status.disconnected;
     if (this.match.round === 0) return t.status.connecting;
     if (this.isResolving) return t.status.resolving;
-    if (this.match.result !== null) return t.status.result[this.match.result];
+    if (this.match.result !== null) return t.status.matchOver;
     if (this.match.submitted) return t.status.submitted;
     if (!this.match.opponent.joined) return t.status.waitingForOpponent(this.shareLink());
     const fleet = t.status.fleet(this.match.board.shipCount("player"), MAX_SHIPS_PER_SIDE);

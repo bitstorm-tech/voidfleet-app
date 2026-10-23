@@ -34,11 +34,15 @@ export const en = {
     planned: (cards: string) => `${cards} ready. Click “End turn”, or tap a card to take it back.`,
     idle: "Tap a ship or command card, or click “End turn” without a card to pass.",
     resolving: "Both turns are revealed — resolving the round …",
-    result: {
-      won: "Victory — the enemy fleet is destroyed.",
-      lost: "Defeat — your fleet is destroyed.",
-      draw: "Draw — both fleets are destroyed.",
-    } satisfies Record<MatchResult, string>,
+    matchOver: "The match is over.",
+  },
+  result: {
+    won: { title: "Victory", subtitle: "The enemy fleet is destroyed." },
+    lost: { title: "Defeat", subtitle: "Your fleet is destroyed." },
+    draw: { title: "Draw", subtitle: "Both fleets are destroyed." },
+    rounds: (round: number) => `Decided in round ${round}`,
+    viewBoard: "View board",
+    newMatch: "New match",
   },
   log: {
     roundHeader: (round: number) => `— Round ${round} —`,

@@ -1,0 +1,78 @@
+// Ergebnis-Overlay nach Matchende: Sieg, Niederlage oder Unentschieden groß
+// in der Bildmitte. „Brett ansehen“ blendet es aus und lässt ein Abzeichen in der
+// Kopfzeile stehen, über das es wieder aufgeht; „Neues Match“ legt ein neues an.
+// Solange das Match entschieden ist, trägt der UI-Container die Klasse `match-over`.
+
+import type { MatchResult } from "../../../shared/protocol.ts";
+import { t } from "../i18n/index.ts";
+
+export class ResultScreen {
+  private readonly overlay: HTMLElement;
+  private readonly title: HTMLElement;
+  private readonly subtitle: HTMLElement;
+  private readonly rounds: HTMLElement;
+  private readonly badge: HTMLButtonElement;
+  private result: MatchResult | null = null;
+
+  constructor(private readonly container: HTMLElement) {
+    container.insertAdjacentHTML(
+      "beforeend",
+      `<div class="result-overlay" hidden>
+        <div class="result-panel">
+          <strong class="result-title"></strong>
+          <span class="result-subtitle"></span>
+          <span class="result-rounds"></span>
+          <div class="result-actions">
+            <button type="button" class="result-board"></button>
+            <button type="button" class="result-new"></button>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="result-badge" hidden></button>`,
+    );
+    this.overlay = container.querySelector(".result-overlay")!;
+    this.title = container.querySelector(".result-title")!;
+    this.subtitle = container.querySelector(".result-subtitle")!;
+    this.rounds = container.querySelector(".result-rounds")!;
+    this.badge = container.querySelector(".result-badge")!;
+    const boardButton = container.querySelector<HTMLButtonElement>(".result-board")!;
+    const newButton = container.querySelector<HTMLButtonElement>(".result-new")!;
+    boardButton.textContent = t.result.viewBoard;
+    newButton.textContent = t.result.newMatch;
+    boardButton.addEventListener("click", () => this.setOpen(false));
+    this.badge.addEventListener("click", () => this.setOpen(true));
+    newButton.addEventListener("click", () => startNewMatch());
+  }
+
+  /** Öffnet das Overlay, sobald ein Ergebnis feststeht; bleibt danach in der Hand des Spielers. */
+  show(result: MatchResult | null, round: number): void {
+    if (result === this.result) return;
+    this.result = result;
+    this.container.classList.toggle("match-over", result !== null);
+    if (result === null) {
+      this.overlay.hidden = true;
+      this.badge.hidden = true;
+      return;
+    }
+    const text = t.result[result];
+    this.overlay.dataset.result = result;
+    this.badge.dataset.result = result;
+    this.title.textContent = text.title;
+    this.subtitle.textContent = text.subtitle;
+    this.rounds.textContent = t.result.rounds(round);
+    this.badge.textContent = text.title;
+    this.setOpen(true);
+  }
+
+  private setOpen(open: boolean): void {
+    this.overlay.hidden = !open;
+    this.badge.hidden = open;
+  }
+}
+
+/** Ohne `?match=` legt die Verbindung beim Laden ein neues Match an; die Sprache bleibt erhalten. */
+function startNewMatch(): void {
+  const url = new URL(location.href);
+  url.searchParams.delete("match");
+  location.href = url.href;
+}
