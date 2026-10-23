@@ -39,6 +39,8 @@ const SHIP_CENTER = new Vector3(0, 0.15, 0);
 const ABOVE_SHIP = new Vector3(0, 0.9, 0);
 /** Orbitale Angriffe kommen von oben aus Richtung des Angreifers. */
 const ORBIT_OFFSET = new Vector3(0, 9, 0);
+/** Schüsse enden nicht im Mittelpunkt, sondern so weit davor auf der Hülle. */
+const HULL_RADIUS = 0.45;
 
 /** Ereignisse mit gleichem Schlüssel stehen hintereinander und laufen gemeinsam ab; `null` steht für sich allein. */
 function stepKey(event: RoundEvent): string | null {
@@ -119,11 +121,14 @@ export class RoundPlayback {
         return this.deploy(event.side, event.cardId, event.target);
       case "effect":
         return this.effect(event);
-      case "attack":
-        await this.shoot(this.padOf(event.attacker), this.padOf(event.target), SIDE_COLORS[event.attacker.side]);
-        return this.damage(event.target, event.amount, event.after);
+      case "attack": {
+        const color = SIDE_COLORS[event.attacker.side];
+        const origin = this.centerOf(this.padOf(event.attacker));
+        await this.shoot(origin, this.padOf(event.target), color);
+        return this.damage(event.target, event.amount, event.after, origin, color);
+      }
       case "selfDamage":
-        return this.damage(event.ship, event.amount, event.after);
+        return this.damage(event.ship, event.amount, event.after, this.centerOf(this.padOf(event.ship)).add(ORBIT_OFFSET), TONE_COLORS.damage);
       case "destroyed":
         return this.destroy(event.ship);
       case "pass":
@@ -149,9 +154,10 @@ export class RoundPlayback {
     const { effect, after } = event;
     switch (effect.type) {
       case "damage": {
-        const target = this.centerOf(pad);
-        await this.view.effects.bolt(target.add(ORBIT_OFFSET), target, SIDE_COLORS[event.side]);
-        return this.damage(event.ship, effect.amount, after);
+        const color = SIDE_COLORS[event.side];
+        const origin = this.centerOf(pad).add(ORBIT_OFFSET);
+        await this.view.effects.bolt(origin, this.impactFrom(pad, origin), color);
+        return this.damage(event.ship, effect.amount, after, origin, color);
       }
       case "attack":
         return this.mark(pad, t.float.attack(effect.delta), effect.delta > 0 ? "buff" : "debuff");
@@ -168,18 +174,19 @@ export class RoundPlayback {
     }
   }
 
-  private async shoot(from: SlotPad, to: SlotPad, color: Color3): Promise<void> {
-    const start = this.centerOf(from);
-    void this.view.effects.pulse(start, color, 0.7, 180);
-    await this.view.effects.bolt(start, this.centerOf(to), color);
+  /** Mündungsblitz bei `origin`, dann fliegt der Bolzen bis auf die Hülle des Ziels. */
+  private async shoot(origin: Vector3, to: SlotPad, color: Color3): Promise<void> {
+    void this.view.effects.pulse(origin, color, 0.7, 180);
+    await this.view.effects.bolt(origin, this.impactFrom(to, origin), color);
   }
 
-  private async damage(ref: ShipRef, amount: number, after: ShipStats): Promise<void> {
+  /** Treffer eines Schusses aus Richtung `origin`: Einschlag auf der Hülle, Hüllenblitz und Schadenszahl. */
+  private async damage(ref: ShipRef, amount: number, after: ShipStats, origin: Vector3, color: Color3): Promise<void> {
     const pad = this.padOf(ref);
     const ship = pad.ship!;
     ship.setStats(after.hp, after.shield);
     this.float(pad, t.float.damage(amount), "damage");
-    await Promise.all([ship.shake(), this.view.effects.pulse(this.centerOf(pad), TONE_COLORS.damage, 1.3, 380)]);
+    await Promise.all([ship.flash(), this.view.effects.hit(this.impactFrom(pad, origin), origin, color)]);
   }
 
   private async destroy(ref: ShipRef): Promise<void> {
@@ -214,6 +221,12 @@ export class RoundPlayback {
 
   private centerOf(pad: SlotPad): Vector3 {
     return pad.shipAnchor.getAbsolutePosition().add(SHIP_CENTER);
+  }
+
+  /** Wo ein Schuss aus Richtung `origin` die Hülle des Schiffs auf `pad` trifft. */
+  private impactFrom(pad: SlotPad, origin: Vector3): Vector3 {
+    const center = this.centerOf(pad);
+    return center.subtract(center.subtract(origin).normalize().scale(HULL_RADIUS));
   }
 
   private float(pad: SlotPad, text: string, tone: FloatTone): void {

@@ -14,6 +14,8 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Tools } from "@babylonjs/core/Misc/tools";
 import type { Scene } from "@babylonjs/core/scene";
+// Registriert `renderOverlay` auf Mesh: zeichnet das Modell in einer Farbe darüber (Treffer-Blitz).
+import "@babylonjs/core/Rendering/outlineRenderer";
 import type { ShipCard } from "../../../shared/cards.ts";
 import { shipModel } from "../data/shipModels.ts";
 import { easeInCubic, easeOutCubic, tween } from "./tween.ts";
@@ -28,6 +30,10 @@ const BAR_MARGIN = 0.3;
 const LANDING_HEIGHT = 7;
 const LANDING_DURATION = 950;
 const LANDING_PITCH = Tools.ToRadians(-16);
+/** Treffer: Die Hülle leuchtet kurz auf und klingt wieder ab. */
+const HIT_FLASH_COLOR = new Color3(1, 0.93, 0.8);
+const HIT_FLASH_ALPHA = 0.75;
+const HIT_FLASH_DURATION = 220;
 /** Geist-Schiffe zeigen einen geplanten, noch nicht ausgeführten Zug. */
 const GHOST_VISIBILITY = 0.3;
 
@@ -109,12 +115,17 @@ export class ShipView {
     this.statusBars.setEnabled(true);
   }
 
-  /** Treffer: das Modell zittert kurz, die Balken bleiben ruhig. */
-  async shake(): Promise<void> {
-    await tween(this.scene, 320, (progress) => {
-      const amplitude = 0.18 * (1 - progress);
-      this.modelRoot.position.set(Math.sin(progress * 55) * amplitude, 0, Math.cos(progress * 41) * amplitude);
+  /** Treffer: die Hülle blitzt hell auf; der Einschlag selbst kommt aus `BoardEffects.hit`. */
+  async flash(): Promise<void> {
+    const meshes = this.modelRoot.getChildMeshes().filter((mesh) => mesh instanceof Mesh);
+    for (const mesh of meshes) {
+      mesh.renderOverlay = true;
+      mesh.overlayColor = HIT_FLASH_COLOR;
+    }
+    await tween(this.scene, HIT_FLASH_DURATION, (progress) => {
+      for (const mesh of meshes) mesh.overlayAlpha = HIT_FLASH_ALPHA * (1 - progress) ** 2;
     });
+    for (const mesh of meshes) mesh.renderOverlay = false;
   }
 
   /** Zerstörung: schrumpft weg und wird danach entsorgt. */
