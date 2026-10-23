@@ -1,4 +1,4 @@
-// Kopfzeile (Runde + Status), Log-Panel, Befehls-Banner sowie der Aktionsknopf
+// Kopfzeile (Runde + Status), Log-Panel, Befehls-Banner, Ankündigung einer neuen Runde sowie der Aktionsknopf
 // (Submit, Überspringen oder Computergegner, je nach Lage) als DOM-Overlay.
 
 import type { Side } from "../../../shared/board.ts";
@@ -11,6 +11,7 @@ export class Hud {
   private readonly logToggle: HTMLButtonElement;
   private readonly logText: HTMLElement;
   private readonly banner: HTMLElement;
+  private readonly roundBanner: HTMLElement;
   readonly submitButton: HTMLButtonElement;
   /** Steht während der Rundenauflösung an der Stelle des Submit-Buttons. */
   readonly skipButton: HTMLButtonElement;
@@ -29,7 +30,8 @@ export class Hud {
         <button type="button" class="log-toggle"></button>
         <div class="log-text"></div>
       </div>
-      <div class="reveal-banner"></div>`,
+      <div class="reveal-banner"></div>
+      <div class="round-banner"></div>`,
     );
     this.roundLabel = container.querySelector(".round-label")!;
     this.statusLabel = container.querySelector(".status-label")!;
@@ -37,6 +39,7 @@ export class Hud {
     this.logToggle = container.querySelector(".log-toggle")!;
     this.logText = container.querySelector(".log-text")!;
     this.banner = container.querySelector(".reveal-banner")!;
+    this.roundBanner = container.querySelector(".round-banner")!;
     this.logToggle.textContent = t.hud.showLog;
     this.logToggle.addEventListener("click", () => this.toggleLog());
 
@@ -72,10 +75,16 @@ export class Hud {
     this.banner.replaceChildren(Object.assign(document.createElement("strong"), { textContent: title }));
     if (subtitle) this.banner.append(Object.assign(document.createElement("span"), { textContent: subtitle }));
     this.banner.dataset.side = side;
-    // Klasse neu setzen, damit die Animation auch beim direkt folgenden Banner neu startet.
-    this.banner.classList.remove("visible");
-    void this.banner.offsetWidth;
-    this.banner.classList.add("visible");
+    restartAnimation(this.banner);
+  }
+
+  /** Kündigt groß in der Bildmitte an, dass eine neue Runde begonnen hat; blendet sich selbst wieder aus. */
+  showRoundBanner(round: number): void {
+    this.roundBanner.replaceChildren(
+      Object.assign(document.createElement("span"), { textContent: t.hud.newRound }),
+      Object.assign(document.createElement("strong"), { textContent: t.hud.round(round) }),
+    );
+    restartAnimation(this.roundBanner);
   }
 
   hideBanner(): void {
@@ -86,6 +95,13 @@ export class Hud {
     const expanded = this.logPanel.classList.toggle("expanded");
     this.logToggle.textContent = expanded ? t.hud.hideLog : t.hud.showLog;
   }
+}
+
+/** Klasse neu setzen, damit die Animation auch beim direkt folgenden Aufruf neu startet. */
+function restartAnimation(element: HTMLElement): void {
+  element.classList.remove("visible");
+  void element.offsetWidth;
+  element.classList.add("visible");
 }
 
 function createButton(className: string, text: string): HTMLButtonElement {

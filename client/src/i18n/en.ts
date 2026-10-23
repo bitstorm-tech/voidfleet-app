@@ -13,6 +13,7 @@ export interface CardText {
 export const en = {
   hud: {
     round: (round: number) => `Round ${round}`,
+    newRound: "New round",
     endTurn: "End turn",
     waiting: "Waiting for opponent",
     skip: "Skip animation",

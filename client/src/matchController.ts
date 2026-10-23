@@ -77,14 +77,18 @@ export class MatchController {
 
   private async onServerMessage(message: ServerMessage): Promise<void> {
     switch (message.type) {
-      case "state":
+      case "state": {
+        // Runde 1 versteht sich von selbst, ebenso der erste Zustand nach dem Laden der Seite.
+        const isNewRound = this.match.round > 0 && message.view.round > this.match.round && message.view.result === null;
         this.match.apply(message.view);
         this.selectedShipIndex = null;
         this.selectedCommandIndex = null;
         this.syncBoard();
         this.refreshSelectionVisuals();
         this.resultScreen.show(this.match.result, this.match.round);
+        if (isNewRound) this.hud.showRoundBanner(this.match.round);
         break;
+      }
       case "round":
         // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
         this.isResolving = true;

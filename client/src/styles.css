@@ -320,6 +320,48 @@ body {
   100% { opacity: 0; }
 }
 
+.round-banner {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 72px;
+  background: linear-gradient(90deg, transparent, var(--panel) 25%, var(--panel) 75%, transparent);
+  border-block: 1px solid rgb(120 194 255 / 0.45);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.round-banner span {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.round-banner strong {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.round-banner.visible {
+  animation: round-banner calc(1.9s * var(--animation-time-scale)) ease-out forwards;
+}
+
+@keyframes round-banner {
+  0% { opacity: 0; scale: 1.15; }
+  15% { opacity: 1; scale: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .float-layer {
   position: absolute;
   inset: 0;

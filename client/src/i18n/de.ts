@@ -3,6 +3,7 @@ import type { Messages } from "./en.ts";
 export const de: Messages = {
   hud: {
     round: (round) => `Runde ${round}`,
+    newRound: "Neue Runde",
     endTurn: "Zug beenden",
     waiting: "Warte auf Gegner",
     skip: "Animation überspringen",
