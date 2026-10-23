@@ -30,6 +30,7 @@ import { LaneLabel } from "./laneLabel.ts";
 import { MoveArrow } from "./moveArrow.ts";
 import type { ShipView } from "./ship.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";
+import { animationTimeScale } from "./tween.ts";
 
 const CAMERA_RIG_POSITION = new Vector3(0, 14.7, -15.7);
 const CAMERA_PITCH = Tools.ToRadians(42);
@@ -50,6 +51,10 @@ const LABEL_COLORS: Record<Side, string> = {
   player: "rgba(140, 217, 255, 0.7)",
   enemy: "rgba(255, 140, 128, 0.7)",
 };
+
+/** Kamerawackeln bei Explosionen: Abklingrate pro Sekunde und die Frequenzen (rad/s) der überlagerten Schwingungen. */
+const SHAKE_DECAY = 4.5;
+const SHAKE_FREQUENCIES = { x: 83, y: 109, sway: 23 };
 
 /** Kamera-Parallaxe: Reichweite in Welteinheiten und Nachlauf. */
 const MAX_SCROLL_OFFSET = new Vector2(0.75, 0.4);
@@ -97,6 +102,10 @@ export class MatchScene {
   /** Gedrückte linke Maustaste: Startpunkt, letzte Position und ob schon verschoben wird. */
   private drag: { startX: number; startY: number; lastX: number; lastY: number; panning: boolean } | null = null;
   private panned = false;
+  /** Stärke des Kamerawackelns (Welteinheiten) und seine Uhr. */
+  private shakeStrength = 0;
+  private shakeTime = 0;
+  private readonly shakeOffset = new Vector2(0, 0);
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -168,6 +177,11 @@ export class MatchScene {
     const viewport = this.camera.viewport.toGlobal(width, height);
     const projected = Vector3.Project(world, Matrix.IdentityReadOnly, this.scene.getTransformMatrix(), viewport);
     return { x: projected.x, y: projected.y };
+  }
+
+  /** Stößt die Kamera an: Sie zittert mit `strength` Welteinheiten und beruhigt sich wieder. */
+  shake(strength: number): void {
+    this.shakeStrength = Math.max(this.shakeStrength, strength);
   }
 
   /** Das Lane-Gitter lenkt nur ab, solange nichts platziert wird. */
@@ -306,13 +320,32 @@ export class MatchScene {
   private updateCamera(): void {
     const seconds = this.engine.getDeltaTime() / 1000;
     this.updateCameraParallax(seconds);
+    this.updateShake(seconds);
     const t = Math.min(seconds * ZOOM_FOLLOW_SPEED, 1);
     this.zoomOffset.addInPlace(this.zoomTarget.subtract(this.zoomOffset).scaleInPlace(t));
     this.cameraRig.position.set(
-      CAMERA_RIG_POSITION.x + this.scrollOffset.x + this.zoomOffset.x,
-      CAMERA_RIG_POSITION.y + this.scrollOffset.y + this.zoomOffset.y,
+      CAMERA_RIG_POSITION.x + this.scrollOffset.x + this.zoomOffset.x + this.shakeOffset.x,
+      CAMERA_RIG_POSITION.y + this.scrollOffset.y + this.zoomOffset.y + this.shakeOffset.y,
       CAMERA_RIG_POSITION.z + this.zoomOffset.z,
     );
+  }
+
+  /** Zwei schnelle Schwingungen und ein langsames Schwanken, die mit der Stärke abklingen; läuft im Animationstakt. */
+  private updateShake(seconds: number): void {
+    if (this.shakeStrength < 0.001) {
+      this.shakeStrength = 0;
+      this.shakeOffset.set(0, 0);
+      return;
+    }
+    const scaled = seconds / animationTimeScale();
+    this.shakeTime += scaled;
+    const { x, y, sway } = SHAKE_FREQUENCIES;
+    const t = this.shakeTime;
+    this.shakeOffset.set(
+      this.shakeStrength * (0.7 * Math.sin(t * x) + 0.3 * Math.sin(t * sway)),
+      this.shakeStrength * (0.5 * Math.sin(t * y + 1.3) + 0.3 * Math.sin(t * sway * 1.4 + 0.7)),
+    );
+    this.shakeStrength *= Math.exp(-SHAKE_DECAY * scaled);
   }
 
   private updateCameraParallax(seconds: number): void {

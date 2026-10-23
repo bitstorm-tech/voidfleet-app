@@ -1,8 +1,10 @@
-// Kurzlebige Effekte auf dem Brett: Laserbolzen, Impulse, Einschläge und
-// Explosionen. Alle räumen sich nach dem Abspielen selbst weg.
+// Kurzlebige Effekte auf dem Brett: Laserbolzen, Impulse, Einschläge,
+// Sekundärexplosionen, Detonationen und brennende Trümmer. Alle räumen sich
+// nach dem Abspielen selbst weg.
 
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
+import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
@@ -10,6 +12,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Tools } from "@babylonjs/core/Misc/tools";
 import { ParticleSystem } from "@babylonjs/core/Particles/particleSystem";
 import type { Scene } from "@babylonjs/core/scene";
@@ -23,8 +26,6 @@ const BOLT_SPEED = 15;
 const BOLT_STRETCH = 5;
 /** Impulse werden additiv gemischt und wirken so wie Licht statt wie eine Kugel. */
 const PULSE_ALPHA = 0.55;
-const EXPLOSION_CORE = new Color3(1, 0.95, 0.8);
-const EXPLOSION_FIRE = new Color3(1, 0.45, 0.12);
 
 /** Einschlag: Blitz und Druckwelle, Dauer in ms (vor der Streckung). */
 const FLASH_DURATION = 140;
@@ -32,6 +33,8 @@ const RING_SIZE = 2.6;
 const RING_DURATION = 300;
 /** Kantenlänge der berechneten Sprite-Texturen (weiche Scheibe, Ring). */
 const SPRITE_SIZE = 64;
+/** Das Blitzlicht reicht über das halbe Brett; Nachbarn und Pads werden kurz angestrahlt. */
+const LIGHT_RANGE = 16;
 
 /** Ein Schwarm Partikel, der auf einmal aus dem Einschlagpunkt spritzt. */
 interface Burst {
@@ -81,6 +84,12 @@ const SMOKE = [
   [0, new Color4(0.95, 0.55, 0.3, 0.85)],
   [0.3, new Color4(0.55, 0.52, 0.58, 0.7)],
   [1, new Color4(0.4, 0.4, 0.45, 0)],
+] as const;
+/** Ruß einer Detonation: dunkler und träger als der Rauch eines Brandes. */
+const SOOT = [
+  [0, new Color4(0.95, 0.5, 0.25, 0.9)],
+  [0.25, new Color4(0.36, 0.34, 0.37, 0.8)],
+  [1, new Color4(0.18, 0.18, 0.2, 0)],
 ] as const;
 /** Energie in der Schussfarbe: weiß aufblitzend, dann in der Farbe verblassend. */
 const shotColors = (shot: Color3) =>
@@ -142,11 +151,50 @@ const HITS: Record<HitName, Hit> = {
 };
 export const HIT_NAMES = Object.keys(HITS) as HitName[];
 
+/** Sekundärexplosion: ein Riss in der Hülle, aus dem Feuer, Funken und ein Rauchpilz brechen. */
+const POP: readonly Burst[] = [
+  { count: 24, cone: Tools.ToRadians(75), speed: [1.5, 4], lifeTime: [0.4, 0.8], size: [0.22, 0.4], grow: 0.5, stretch: 1.2, gravity: 0.6, colors: FIRE },
+  { count: 36, cone: Tools.ToRadians(65), speed: [3, 8], lifeTime: [0.3, 0.7], size: [0.06, 0.12], stretch: 4, gravity: -5, colors: FIRE },
+  { count: 8, cone: Tools.ToRadians(60), speed: [0.5, 1.4], lifeTime: [1, 1.7], size: [0.3, 0.45], grow: 2.2, stretch: 1, gravity: 0.8, opaque: true, colors: SMOKE },
+];
+
+export type BlastStyle = "fire" | "energy";
+
+const SPHERE = Math.PI;
+/** Detonation: Feuerball, Funkenregen, Glut und Ruß nach allen Seiten (Größen und Geschwindigkeiten mal `size`). */
+const BLAST: Record<BlastStyle, readonly Burst[]> = {
+  /** Chemisch: ein wogender Feuerball, der in einer Rußwolke erstickt. */
+  fire: [
+    { count: 70, cone: SPHERE, speed: [1.5, 4.5], lifeTime: [0.6, 1.2], size: [0.5, 0.9], grow: 0.6, stretch: 1.2, gravity: 0.4, colors: FIRE },
+    { count: 180, cone: SPHERE, speed: [5, 13], lifeTime: [0.5, 1], size: [0.08, 0.16], stretch: 5, gravity: -4, colors: FIRE },
+    { count: 70, cone: SPHERE, speed: [1.5, 4.5], lifeTime: [1.4, 2.6], size: [0.05, 0.12], stretch: 1.5, gravity: -1.2, colors: EMBER },
+    { count: 36, cone: SPHERE, speed: [0.8, 2], lifeTime: [2.2, 3.4], size: [0.6, 1], grow: 2, stretch: 1, gravity: 0.35, opaque: true, colors: SOOT },
+  ],
+  /** Reaktorbruch: die freigesetzte Energie zuckt in Fäden heraus, das Feuer bleibt kleiner, kaum Ruß. */
+  energy: [
+    { count: 110, cone: SPHERE, speed: [9, 20], lifeTime: [0.15, 0.4], size: [0.06, 0.1], stretch: 12, gravity: 0, colors: shotColors },
+    { count: 36, cone: SPHERE, speed: [1, 3], lifeTime: [0.5, 0.9], size: [0.8, 1.3], grow: 0.5, stretch: 1, gravity: 0, colors: shotColors },
+    { count: 40, cone: SPHERE, speed: [1.5, 4], lifeTime: [0.6, 1.1], size: [0.45, 0.8], grow: 0.5, stretch: 1.2, gravity: 0.4, colors: FIRE },
+    { count: 140, cone: SPHERE, speed: [5, 13], lifeTime: [0.5, 1], size: [0.08, 0.16], stretch: 5, gravity: -4, colors: FIRE },
+    { count: 50, cone: SPHERE, speed: [1.5, 4.5], lifeTime: [1.4, 2.6], size: [0.05, 0.12], stretch: 1.5, gravity: -1.2, colors: EMBER },
+    { count: 16, cone: SPHERE, speed: [0.8, 2], lifeTime: [2, 3], size: [0.6, 1], grow: 2, stretch: 1, gravity: 0.35, opaque: true, colors: SOOT },
+  ],
+};
+
+/** Ein laufender Lichtblitz; das eine Blitzlicht zeigt immer den gerade stärksten. */
+interface Flash {
+  position: Vector3;
+  intensity: number;
+}
+
 export class BoardEffects {
   /** Weiche Scheibe: Partikel und Blitz. */
   private readonly dot: RawTexture;
   /** Ring mit weichen Kanten: Druckwelle. */
   private readonly ring: RawTexture;
+  /** Ein Punktlicht für alle Explosionen; es existiert von Anfang an, damit die Shader es schon kennen. */
+  private readonly light: PointLight;
+  private readonly flashes = new Set<Flash>();
   private lastHit: HitName | null = null;
 
   constructor(
@@ -155,6 +203,12 @@ export class BoardEffects {
   ) {
     this.dot = createSpriteTexture("dot", scene, (distance) => Math.max(0, 1 - distance) ** 2);
     this.ring = createSpriteTexture("ring", scene, (distance) => Math.max(0, 1 - Math.abs(distance - 0.72) / 0.22) ** 1.5);
+    this.light = new PointLight("blast", Vector3.Zero(), scene);
+    this.light.intensity = 0;
+    this.light.range = LIGHT_RANGE;
+    this.light.diffuse = new Color3(1, 0.75, 0.5);
+    this.light.specular = this.light.diffuse;
+    scene.onBeforeRenderObservable.add(() => this.updateLight());
   }
 
   /** Ein gestreckter Leuchtbolzen fliegt geradlinig von `from` nach `to`. */
@@ -190,16 +244,57 @@ export class BoardEffects {
     const normal = origin.subtract(position).normalize();
     for (const burst of bursts) this.burst(name, position, burst.through ? normal.negate() : normal, burst, color);
     await Promise.all([
-      this.flash(position, flash.color === "shot" ? Color3.Lerp(color, Color3.White(), 0.5) : flash.color, flash.size),
-      ring ? this.shockwave(position, color) : null,
+      this.flash(position, flash.color === "shot" ? Color3.Lerp(color, Color3.White(), 0.5) : flash.color, flash.size, FLASH_DURATION),
+      ring ? this.shockwave(position, color, RING_SIZE, RING_DURATION, false) : null,
     ]);
   }
 
-  async explosion(position: Vector3): Promise<void> {
-    await Promise.all([
-      this.pulse(position, EXPLOSION_CORE, 1.1, 300),
-      this.pulse(position, EXPLOSION_FIRE, 2.4, 700),
-    ]);
+  /** Sekundärexplosion auf der Hülle: bricht in Richtung `outward` auf; `size` 1 passt zu einem Jäger. */
+  pop(position: Vector3, outward: Vector3, size: number): void {
+    for (const burst of POP) this.burst("pop", position, outward, burst, FIRE_FLASH, size);
+    void this.flash(position, FIRE_FLASH, 1.1 * size, 160);
+    void this.flashLight(position, 6 * size, 220);
+  }
+
+  /**
+   * Die Detonation eines Schiffs: Kern und Blitz, eine flache Druckwelle über das Brett und eine aufrechte,
+   * dazu die Schwärme des Stils und das Blitzlicht. Endet, sobald der Kern verglüht ist; der Rest läuft weiter.
+   */
+  async detonate(position: Vector3, energy: Color3, size: number, style: BlastStyle): Promise<void> {
+    for (const burst of BLAST[style]) this.burst(`blast-${style}`, position, Vector3.Up(), burst, energy, size);
+    void this.flash(position, Color3.Lerp(energy, Color3.White(), 0.6), 2.2 * size, 180);
+    void this.shockwave(position, energy, 5 * size, 700, true);
+    void this.shockwave(position, Color3.Lerp(energy, Color3.White(), 0.4), 3 * size, 450, false);
+    void this.flashLight(position, 55 * size, 650);
+    void this.pulse(position, energy, 2 * size, 650);
+    await this.pulse(position, Color3.Lerp(energy, Color3.White(), 0.7), 1.2 * size, 380);
+  }
+
+  /**
+   * Feuer und Rauch schlagen `duration` ms lang aus einem Trümmerstück und erlöschen dann; `spread` ist
+   * die halbe Ausdehnung des Stücks in Welteinheiten, damit die Flammen aus seiner ganzen Oberfläche kommen.
+   * Die Systeme folgen dem Stück über einen Punkt statt am Mesh zu hängen: Babylon würde sie sonst beim
+   * Entsorgen des Meshes mitsamt der gemeinsamen Partikeltextur entsorgen.
+   */
+  burn(piece: TransformNode, size: number, spread: number, duration: number): void {
+    const anchor = piece.getAbsolutePosition().clone();
+    const fire = this.stream("burn-fire", anchor, size, spread, {
+      rate: 50, speed: [0.4, 1.2], lifeTime: [0.4, 0.8], size: [0.25, 0.45], grow: 0.3, stretch: 1.2, gravity: 1.5, colors: FIRE,
+    });
+    const smoke = this.stream("burn-smoke", anchor, size, spread, {
+      rate: 12, speed: [0.3, 0.8], lifeTime: [1, 1.8], size: [0.3, 0.5], grow: 2.5, stretch: 1, gravity: 0.8, opaque: true, colors: SMOKE,
+    });
+    const follow = this.scene.onBeforeRenderObservable.add(() => {
+      if (!piece.isDisposed()) anchor.copyFrom(piece.getAbsolutePosition());
+    });
+    void wait(this.scene, duration).then(async () => {
+      fire.stop();
+      smoke.stop();
+      await wait(this.scene, 2000);
+      this.scene.onBeforeRenderObservable.remove(follow);
+      fire.dispose(false);
+      smoke.dispose(false);
+    });
   }
 
   /** Zufällig eine Variante, aber nie zweimal dieselbe hintereinander. */
@@ -208,53 +303,92 @@ export class BoardEffects {
     return (this.lastHit = names[Math.floor(Math.random() * names.length)]!);
   }
 
-  private async flash(position: Vector3, color: Color3, size: number): Promise<void> {
-    const mesh = this.createSprite("flash", this.dot, color, position);
+  private async flash(position: Vector3, color: Color3, size: number, duration: number): Promise<void> {
+    const mesh = this.createSprite("flash", this.dot, color, position, false);
     const material = mesh.material as StandardMaterial;
-    await tween(this.scene, FLASH_DURATION, (progress) => {
+    await tween(this.scene, duration, (progress) => {
       mesh.scaling.setAll(size * (0.6 + 0.4 * easeOutCubic(progress)));
       material.alpha = (1 - progress) ** 2;
     });
     this.disposeMesh(mesh);
   }
 
-  /** Ein Ring, der sich schnell ausdehnt und dabei verblasst. */
-  private async shockwave(position: Vector3, color: Color3): Promise<void> {
-    const mesh = this.createSprite("shockwave", this.ring, color, position);
+  /** Ein Ring, der sich schnell ausdehnt und dabei verblasst; `flat` legt ihn in die Brettebene. */
+  private async shockwave(position: Vector3, color: Color3, size: number, duration: number, flat: boolean): Promise<void> {
+    const mesh = this.createSprite("shockwave", this.ring, color, position, flat);
     const material = mesh.material as StandardMaterial;
-    await tween(this.scene, RING_DURATION, (progress) => {
-      mesh.scaling.setAll(Math.max(RING_SIZE * easeOutCubic(progress), 0.01));
+    await tween(this.scene, duration, (progress) => {
+      mesh.scaling.setAll(Math.max(size * easeOutCubic(progress), 0.01));
       material.alpha = (1 - progress) ** 1.5;
     });
     this.disposeMesh(mesh);
   }
 
+  /** Das Blitzlicht springt auf `intensity` und klingt über `duration` ms ab. */
+  private async flashLight(position: Vector3, intensity: number, duration: number): Promise<void> {
+    const flash: Flash = { position: position.clone(), intensity };
+    this.flashes.add(flash);
+    await tween(this.scene, duration, (progress) => {
+      flash.intensity = intensity * (1 - progress) ** 2;
+    });
+    this.flashes.delete(flash);
+  }
+
+  private updateLight(): void {
+    let strongest: Flash | null = null;
+    for (const flash of this.flashes) if (!strongest || flash.intensity > strongest.intensity) strongest = flash;
+    this.light.intensity = strongest?.intensity ?? 0;
+    if (strongest) this.light.position.copyFrom(strongest.position);
+  }
+
   /** Schickt alle Partikel des Schwarms auf einmal los und entsorgt das System, sobald das letzte verglüht ist. */
-  private burst(name: string, position: Vector3, axis: Vector3, burst: Burst, shot: Color3): void {
+  private burst(name: string, position: Vector3, axis: Vector3, burst: Burst, shot: Color3, scale = 1): void {
+    const system = this.particles(name, burst, shot, scale);
+    system.emitter = position.clone();
+    system.manualEmitCount = burst.count;
+    // Große Explosionen werfen weiter, aber nicht proportional: sonst überquert der Funkenregen das halbe Brett.
+    const throwing = Math.sqrt(scale);
+    system.startDirectionFunction = (_world, direction) => {
+      randomInCone(axis, burst.cone).scaleToRef(randomBetween(burst.speed) * throwing, direction);
+    };
+    system.start();
+    void wait(this.scene, (burst.lifeTime[1] + 0.1) * 1000).then(() => system.dispose(false));
+  }
+
+  /** Ein Dauerstrom von Partikeln aus dem Kasten (halbe Kantenlänge `spread`, Welteinheiten) um `emitter`, nach oben und zu allen Seiten. */
+  private stream(name: string, emitter: Vector3, scale: number, spread: number, burst: Omit<Burst, "count" | "cone"> & { rate: number }): ParticleSystem {
+    const system = this.particles(name, { ...burst, count: Math.ceil(burst.rate * burst.lifeTime[1]) + 10, cone: SPHERE }, FIRE_FLASH, scale);
+    system.emitter = emitter;
+    system.emitRate = burst.rate;
+    system.minEmitBox.setAll(-spread);
+    system.maxEmitBox.setAll(spread);
+    system.startDirectionFunction = (_world, direction) => {
+      randomInCone(Vector3.Up(), Tools.ToRadians(120)).scaleToRef(randomBetween(burst.speed) * scale, direction);
+    };
+    system.start();
+    return system;
+  }
+
+  private particles(name: string, burst: Burst, shot: Color3, scale: number): ParticleSystem {
     const system = new ParticleSystem(name, burst.count, this.scene);
     system.particleTexture = this.dot;
     system.blendMode = burst.opaque ? ParticleSystem.BLENDMODE_STANDARD : ParticleSystem.BLENDMODE_ADD;
     system.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED;
     // Partikel altern in Sekunden und sind wie die Tweens gestreckt: Babylon zählt `updateSpeed` pro 60-Hz-Frame hoch.
     system.updateSpeed = 1 / 60 / animationTimeScale();
-    system.emitter = position.clone();
     system.minEmitBox = new Vector3(-0.06, -0.06, -0.06);
     system.maxEmitBox = new Vector3(0.06, 0.06, 0.06);
-    system.manualEmitCount = burst.count;
     [system.minLifeTime, system.maxLifeTime] = burst.lifeTime;
     system.minScaleY = system.maxScaleY = burst.stretch;
-    system.gravity = new Vector3(0, burst.gravity, 0);
-    system.startDirectionFunction = (_world, direction) => {
-      randomInCone(axis, burst.cone).scaleToRef(randomBetween(burst.speed), direction);
-    };
+    system.gravity = new Vector3(0, burst.gravity * scale, 0);
     const colors = typeof burst.colors === "function" ? burst.colors(shot) : burst.colors;
     for (const [gradient, color] of colors) system.addColorGradient(gradient, color);
     // Größen-Gradienten ersetzen die Größe (kein Faktor); mit zwei Werten würfelt Babylon je Partikel dazwischen.
     const grow = burst.grow ?? 0.3;
-    system.addSizeGradient(0, ...burst.size).addSizeGradient(1, burst.size[0] * grow, burst.size[1] * grow);
+    const [min, max] = [burst.size[0] * scale, burst.size[1] * scale];
+    system.addSizeGradient(0, min, max).addSizeGradient(1, min * grow, max * grow);
     system.addVelocityGradient(0, 1).addVelocityGradient(1, 0.15);
-    system.start();
-    void wait(this.scene, (burst.lifeTime[1] + 0.1) * 1000).then(() => system.dispose(false));
+    return system;
   }
 
   private createSphere(name: string, diameter: number, color: Color3, alpha: number): Mesh {
@@ -265,13 +399,14 @@ export class BoardEffects {
     return mesh;
   }
 
-  /** Ein Billboard mit Alpha-Sprite; liegt über allem, damit die Hülle es nicht anschneidet. */
-  private createSprite(name: string, texture: RawTexture, color: Color3, position: Vector3): Mesh {
+  /** Ein Billboard mit Alpha-Sprite (oder flach in der Brettebene); liegt über allem, damit die Hülle es nicht anschneidet. */
+  private createSprite(name: string, texture: RawTexture, color: Color3, position: Vector3, flat: boolean): Mesh {
     const material = this.createMaterial(name, color, 1);
     material.opacityTexture = texture;
-    const mesh = CreatePlane(name, { size: 1 }, this.scene);
+    const mesh = CreatePlane(name, { size: 1, sideOrientation: Mesh.DOUBLESIDE }, this.scene);
     mesh.material = material;
-    mesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    if (flat) mesh.rotation.x = Math.PI / 2;
+    else mesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
     mesh.renderingGroupId = 1;
     mesh.isPickable = false;
     mesh.position.copyFrom(position);
@@ -312,7 +447,7 @@ function createSpriteTexture(name: string, scene: Scene, alphaAt: (distance: num
 }
 
 /** Zufällige Richtung im Kegel um `axis`, gleichverteilt über den Raumwinkel. */
-function randomInCone(axis: Vector3, halfAngle: number): Vector3 {
+export function randomInCone(axis: Vector3, halfAngle: number): Vector3 {
   const helper = Math.abs(axis.y) < 0.9 ? Vector3.Up() : Vector3.Right();
   const side = Vector3.Cross(helper, axis).normalize();
   const up = Vector3.Cross(axis, side);
@@ -322,6 +457,6 @@ function randomInCone(axis: Vector3, halfAngle: number): Vector3 {
   return axis.scale(cos).addInPlace(side.scale(sin * Math.cos(around))).addInPlace(up.scale(sin * Math.sin(around)));
 }
 
-function randomBetween([min, max]: readonly [number, number]): number {
+export function randomBetween([min, max]: readonly [number, number]): number {
   return min + Math.random() * (max - min);
 }

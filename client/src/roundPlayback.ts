@@ -12,6 +12,7 @@ import { shipById, type ShipId } from "../../shared/cards.ts";
 import type { RoundEvent, ShipRef, ShipStats, SlotTarget } from "../../shared/protocol.ts";
 import { color3 } from "./data/palette.ts";
 import { t } from "./i18n/index.ts";
+import { destroyShip } from "./scene/destruction.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
@@ -188,10 +189,9 @@ export class RoundPlayback {
     await Promise.all([ship.flash(), this.view.effects.hit(this.impactFrom(pad, origin), origin, color)]);
   }
 
+  /** Das Schiff geht in seiner eigenen Zerstörungssequenz unter; das Wrack brennt danach für sich weiter. */
   private async destroy(ref: ShipRef): Promise<void> {
-    const pad = this.padOf(ref);
-    const ship = pad.detachShip();
-    await Promise.all([this.view.effects.explosion(this.centerOf(pad)), ship.vanish()]);
+    await destroyShip(this.padOf(ref).detachShip(), this.view);
   }
 
   /** Das Schiff gleitet in den neuen Slot; der Anker übernimmt es sofort, die Position folgt. */

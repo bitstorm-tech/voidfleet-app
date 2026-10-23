@@ -1,7 +1,8 @@
 // Ein Schiff auf dem Brett. Die Nase zeigt nach lokal +Z, die Ausrichtung
 // bestimmt allein der Elternknoten (der Anker des SlotPads).
 // Die Modelle kommen als glTF aus `tools/ships/` (Blender); jede Datei wird
-// einmal geladen und pro Schiff instanziiert.
+// einmal geladen und pro Schiff instanziiert. Zu jedem Modell gehört ein Wrack
+// aus Bruchstücken, das bei der Zerstörung an seine Stelle tritt (`destruction.ts`).
 
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
@@ -10,6 +11,7 @@ import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Ray } from "@babylonjs/core/Culling/ray";
 import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -20,8 +22,9 @@ import type { Scene } from "@babylonjs/core/scene";
 import "@babylonjs/core/Rendering/outlineRenderer";
 import type { ShipCard } from "../../../shared/cards.ts";
 import { color3 } from "../data/palette.ts";
-import { shipModel } from "../data/shipModels.ts";
-import { easeInCubic, easeInOutSine, easeOutCubic, tween } from "./tween.ts";
+import { shipModel, wreckModel } from "../data/shipModels.ts";
+import { randomInCone } from "./effects.ts";
+import { easeInOutSine, easeOutCubic, tween } from "./tween.ts";
 
 /** Schiffe sind für den Hangar modelliert und auf dem Brett zu groß. */
 const BOARD_SCALE = 0.6;
@@ -39,6 +42,16 @@ const DESCENT_PITCH = Tools.ToRadians(12);
 const HIT_FLASH_COLOR = new Color3(1, 0.93, 0.8);
 const HIT_FLASH_ALPHA = 0.75;
 const HIT_FLASH_DURATION = 220;
+/** Todeskampf: Zittern (Welteinheiten im Schiffsraum), Absacken und Krängen, jeweils bei voller Stärke. */
+const DISTRESS_JITTER = 0.07;
+const DISTRESS_SINK = 0.3;
+const DISTRESS_PITCH = Tools.ToRadians(7);
+const DISTRESS_ROLL = Tools.ToRadians(22);
+/** Hüllenpunkte: Strahlen aus diesem Kegel um „oben“ (die Kamera schaut von schräg oben), Abstand zur Hülle in Welteinheiten. */
+const SURFACE_CONE = Tools.ToRadians(75);
+const SURFACE_CLEARANCE = 0.05;
+/** Das Blitzlicht der Explosionen ist das fünfte Licht der Szene; Babylon rechnet sonst nur mit vier. */
+const MAX_LIGHTS = 6;
 /** Geist-Schiffe zeigen einen geplanten, noch nicht ausgeführten Zug: halb durchsichtig. */
 const GHOST_ALPHA = 0.35;
 /** Hologramm-Schimmer in der Farbe der leuchtenden Slots, damit der Geist nicht wie ein echtes Schiff wirkt. */
@@ -56,10 +69,24 @@ const containerCache = new Map<string, Promise<AssetContainer>>();
 function loadModel(url: string, scene: Scene): Promise<AssetContainer> {
   let promise = containerCache.get(url);
   if (!promise) {
-    promise = LoadAssetContainerAsync(url, scene);
+    promise = LoadAssetContainerAsync(url, scene).then((container) => {
+      for (const material of container.materials) if (material instanceof PBRMaterial) material.maxSimultaneousLights = MAX_LIGHTS;
+      return container;
+    });
     containerCache.set(url, promise);
   }
   return promise;
+}
+
+/**
+ * Die Bruchstücke eines zerstörten Schiffs, an der Stelle des Modells: je Stück ein Knoten mit dem
+ * Ursprung im Schwerpunkt. Der glTF-Loader macht aus einem Stück mit mehreren Materialien einen
+ * TransformNode mit einem Mesh je Material, aus einem mit einem Material direkt ein Mesh.
+ */
+export interface Wreck {
+  pieces: TransformNode[];
+  /** Eigene Kopien der Materialien, damit Glühen und Ausblenden nur dieses Wrack betreffen. */
+  materials: PBRMaterial[];
 }
 
 export class ShipView {
@@ -69,10 +96,12 @@ export class ShipView {
   private readonly hpFill: Mesh;
   private readonly shieldRow: TransformNode;
   private readonly shieldFill: Mesh;
-  /** Eigene Materialien (Balken, Geist-Kopien); glTF-Materialien gehören dem geteilten Container. */
+  /** Eigene Materialien (Balken, Geist-Kopien, Wrack); glTF-Materialien gehören dem geteilten Container. */
   private readonly ownedMaterials: Material[] = [];
   /** Geist-Kopie je glTF-Material, damit Meshes mit gleichem Material auch die Kopie teilen. */
   private readonly ghostMaterials = new Map<Material, Material>();
+  /** Zu welcher Seite das Schiff im Todeskampf krängt. */
+  private readonly listSide = Math.random() < 0.5 ? 1 : -1;
   private disposed = false;
 
   constructor(
@@ -101,6 +130,8 @@ export class ShipView {
     this.shieldFill = this.createBar("shield-fill", BAR_WIDTH, 0.12, color3("shield"), 0.999, this.shieldRow, 2);
 
     void this.addModel(shipModel(card));
+    // Das Wrack wird schon jetzt geholt, damit es bei der Zerstörung ohne Wartezeit bereitliegt.
+    if (!isGhost) void this.loadWreck();
     this.setStats(card.hp, card.shield);
   }
 
@@ -113,6 +144,18 @@ export class ShipView {
     const shieldMax = Math.max(this.card.shield, shield);
     this.shieldRow.setEnabled(shieldMax > 0);
     if (shieldMax > 0) this.setFill(this.shieldFill, ratio(shield, shieldMax));
+  }
+
+  /** Mittelpunkt des Modells in Weltkoordinaten. */
+  get center(): Vector3 {
+    const { min, max } = this.modelRoot.getHierarchyBoundingVectors();
+    return min.add(max).scale(0.5);
+  }
+
+  /** Halbe größte Ausdehnung des Modells in Welteinheiten. */
+  get radius(): number {
+    const { min, max } = this.modelRoot.getHierarchyBoundingVectors();
+    return max.subtract(min).length() / 2;
   }
 
   /**
@@ -135,25 +178,73 @@ export class ShipView {
   }
 
   /** Treffer: die Hülle blitzt hell auf; der Einschlag selbst kommt aus `BoardEffects.hit`. */
-  async flash(): Promise<void> {
+  async flash(strength = HIT_FLASH_ALPHA): Promise<void> {
     const meshes = this.modelRoot.getChildMeshes().filter((mesh) => mesh instanceof Mesh);
     for (const mesh of meshes) {
       mesh.renderOverlay = true;
       mesh.overlayColor = HIT_FLASH_COLOR;
     }
     await tween(this.scene, HIT_FLASH_DURATION, (progress) => {
-      for (const mesh of meshes) mesh.overlayAlpha = HIT_FLASH_ALPHA * (1 - progress) ** 2;
+      for (const mesh of meshes) mesh.overlayAlpha = strength * (1 - progress) ** 2;
     });
     for (const mesh of meshes) mesh.renderOverlay = false;
   }
 
-  /** Zerstörung: schrumpft weg und wird danach entsorgt. */
-  async vanish(): Promise<void> {
-    await tween(this.scene, 420, (progress) => {
-      this.root.scaling.setAll(BOARD_SCALE * (1 - easeInCubic(progress)));
-      this.root.rotation.z = progress * 0.9;
-    });
-    this.dispose();
+  // --- Zerstörung ---
+
+  hideStatus(): void {
+    this.statusBars.setEnabled(false);
+  }
+
+  /**
+   * Zufällige Punkte außen auf der Hülle (Welt), an denen sie aufbricht: Strahlen von oben und
+   * von den Seiten auf den Mittelpunkt zu, genommen wird der erste Treffer. Die Modelle bestehen
+   * aus überlappenden Teilen, Eckpunkte lägen oft im Inneren.
+   */
+  surfacePoints(count: number): Vector3[] {
+    const hull = new Set(this.modelRoot.getChildMeshes());
+    const center = this.center;
+    const reach = this.radius + 1;
+    const points: Vector3[] = [];
+    for (let attempt = 0; attempt < count * 8 && points.length < count; attempt++) {
+      const direction = randomInCone(Vector3.Up(), SURFACE_CONE);
+      const ray = new Ray(center.add(direction.scale(reach)), direction.negate(), reach);
+      const hit = this.scene.pickWithRay(ray, (mesh) => hull.has(mesh));
+      if (hit?.pickedPoint) points.push(hit.pickedPoint.add(direction.scale(SURFACE_CLEARANCE)));
+    }
+    return points;
+  }
+
+  /** Todeskampf: das Schiff zittert immer stärker, sackt ab und krängt zur Seite (`amount` 0..1). */
+  distress(amount: number): void {
+    const jitter = DISTRESS_JITTER * (0.2 + 0.8 * amount ** 2);
+    this.modelRoot.position.set(
+      (Math.random() - 0.5) * jitter,
+      -DISTRESS_SINK * amount ** 2 + (Math.random() - 0.5) * jitter,
+      (Math.random() - 0.5) * jitter,
+    );
+    this.modelRoot.rotation.set(DISTRESS_PITCH * amount ** 2, 0, this.listSide * DISTRESS_ROLL * amount ** 3);
+  }
+
+  loadWreck(): Promise<AssetContainer> {
+    return loadModel(wreckModel(this.card), this.scene);
+  }
+
+  /** Tauscht das Modell gegen die Bruchstücke, die exakt an seiner Stelle liegen (auch in der Krängung). */
+  async breakApart(): Promise<Wreck> {
+    const container = await this.loadWreck();
+    for (const node of this.modelRoot.getChildren()) node.dispose();
+    const entries = container.instantiateModelsToScene((name) => `${this.card.id}-wreck-${name}`, true);
+    const root = entries.rootNodes[0] as TransformNode;
+    root.parent = this.modelRoot;
+    root.scaling.scaleInPlace(MODEL_SCALE);
+    const materials = new Set<PBRMaterial>();
+    for (const mesh of root.getChildMeshes()) {
+      mesh.isPickable = false;
+      if (mesh.material instanceof PBRMaterial) materials.add(mesh.material);
+    }
+    this.ownedMaterials.push(...materials);
+    return { pieces: root.getChildren().filter((node) => node instanceof TransformNode), materials: [...materials] };
   }
 
   dispose(): void {
