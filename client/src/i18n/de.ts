@@ -6,6 +6,7 @@ export const de: Messages = {
     endTurn: "Zug beenden",
     waiting: "Warte auf Gegner",
     skip: "Animation überspringen",
+    playComputer: "Gegen Computer spielen",
     showLog: "Log einblenden",
     hideLog: "Log ausblenden",
   },

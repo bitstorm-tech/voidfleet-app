@@ -16,6 +16,7 @@ export const en = {
     endTurn: "End turn",
     waiting: "Waiting for opponent",
     skip: "Skip animation",
+    playComputer: "Play against computer",
     showLog: "Show log",
     hideLog: "Hide log",
   },

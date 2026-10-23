@@ -35,11 +35,11 @@ function stats(slot: Slot): ShipStats {
   return { hp: slot.hp, shield: slot.shield };
 }
 
-/** Schiff mit dem höchsten Wert; bei Gleichstand das erste in `board.ships`-Reihenfolge. */
-function highest(ships: readonly Slot[], value: (slot: Slot) => number): Slot | null {
-  let best: Slot | null = null;
-  for (const ship of ships) {
-    if (best === null || value(ship) > value(best)) best = ship;
+/** Element mit dem höchsten Wert; bei Gleichstand das erste (bei Schiffen: in `board.ships`-Reihenfolge). */
+export function highest<T>(items: readonly T[], value: (item: T) => number): T | null {
+  let best: T | null = null;
+  for (const item of items) {
+    if (best === null || value(item) > value(best)) best = item;
   }
   return best;
 }

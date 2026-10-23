@@ -1,5 +1,5 @@
-// Kopfzeile (Runde + Status), Log-Panel, Befehls-Banner sowie Submit- und
-// Überspringen-Button als DOM-Overlay.
+// Kopfzeile (Runde + Status), Log-Panel, Befehls-Banner sowie der Aktionsknopf
+// (Submit, Überspringen oder Computergegner, je nach Lage) als DOM-Overlay.
 
 import type { Side } from "../../../shared/board.ts";
 import { t } from "../i18n/index.ts";
@@ -14,6 +14,8 @@ export class Hud {
   readonly submitButton: HTMLButtonElement;
   /** Steht während der Rundenauflösung an der Stelle des Submit-Buttons. */
   readonly skipButton: HTMLButtonElement;
+  /** Steht an der Stelle des Submit-Buttons, solange kein Gegner da ist. */
+  readonly botButton: HTMLButtonElement;
   private readonly logLines: string[] = [];
 
   constructor(container: HTMLElement) {
@@ -40,12 +42,15 @@ export class Hud {
 
     this.submitButton = createButton("submit-button", t.hud.endTurn);
     this.skipButton = createButton("submit-button", t.hud.skip);
-    this.setResolving(false);
+    this.botButton = createButton("submit-button", t.hud.playComputer);
+    this.showAction("submit");
   }
 
-  setResolving(resolving: boolean): void {
-    this.submitButton.hidden = resolving;
-    this.skipButton.hidden = !resolving;
+  /** Welcher Knopf an der Stelle des Submit-Buttons steht. */
+  showAction(action: "submit" | "skip" | "bot"): void {
+    this.submitButton.hidden = action !== "submit";
+    this.skipButton.hidden = action !== "skip";
+    this.botButton.hidden = action !== "bot";
   }
 
   setRound(round: number): void {

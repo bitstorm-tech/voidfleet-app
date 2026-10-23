@@ -1,13 +1,15 @@
 // Ein Match auf dem Server: zwei Sitzplätze, ein Brett, Decks und Hände.
 // Der Server ist autoritativ: Er prüft die Züge, hält sie bis zum Aufdecken
 // geheim und löst die Runde auf, sobald beide abgegeben haben. Die Phasen nach
-// dem Deploy stehen in `resolution.ts`.
+// dem Deploy stehen in `resolution.ts`. Statt eines zweiten Menschen kann der
+// Computergegner (`bot.ts`) einen Platz einnehmen; er zieht, sobald der Mensch abgibt.
 // Intern sitzt Seat 0 auf der "player"-Seite des Bretts und Seat 1 auf der
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
 import { canTargetLane, needsTarget, type CommandCard, type ShipCard } from "../../shared/cards.ts";
 import { Board, opposite, type BoardSnapshot, type Side } from "../../shared/board.ts";
 import type { ErrorCode, MatchResult, PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
+import { planBotTurn } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
 import { resolveCleanup, resolveCombat, resolveEffects, type Commander, type PlayedCommand } from "./resolution.ts";
 
@@ -40,8 +42,9 @@ class Player implements Commander {
   readonly commandHand: CommandCard[];
   plan: TurnPlan | null = null;
 
+  /** Der Computergegner hat kein Token; er wird nie über einen Socket angesprochen. */
   constructor(
-    readonly token: string,
+    readonly token: string | null,
     readonly seat: Seat,
   ) {
     this.shipHand = [
@@ -53,6 +56,10 @@ class Player implements Commander {
 
   get side(): Side {
     return SEAT_SIDE[this.seat];
+  }
+
+  get isBot(): boolean {
+    return this.token === null;
   }
 
   /** 1 Schiff + 1 Befehl nachziehen. Ist die Handhälfte voll, verfällt die Karte. */
@@ -100,7 +107,15 @@ export class Match {
   /** Sitzplatz für ein Token: bekannter Spieler, sonst ein freier Platz; null, wenn das Match voll ist. */
   join(token: string): Seat | null {
     const known = this.players.find((player) => player.token === token);
-    if (known) return known.seat;
+    return known ? known.seat : this.seatPlayer(token);
+  }
+
+  /** Setzt den Computergegner auf den freien Platz; null, wenn das Match voll ist. */
+  addBot(): Seat | null {
+    return this.seatPlayer(null);
+  }
+
+  private seatPlayer(token: string | null): Seat | null {
     if (this.players.length >= 2) return null;
     const seat = this.players.length as Seat;
     this.players.push(new Player(token, seat));
@@ -113,7 +128,18 @@ export class Match {
     if (this.players.length < 2) return "opponent_missing";
     if (this.winner !== null) return "match_over";
     if (player.plan !== null) return "already_submitted";
+    const error = this.validate(player, plan);
+    if (error) return error;
 
+    player.plan = plan;
+    // Der Computergegner zieht, sobald der Mensch abgegeben hat; den fremden Plan kennt er nicht.
+    for (const bot of this.players) {
+      if (bot.isBot && bot.plan === null) bot.plan = planBotTurn(this.board, bot);
+    }
+    return null;
+  }
+
+  private validate(player: Player, plan: TurnPlan): ErrorCode | null {
     if (plan.ship) {
       const { handIndex, target } = plan.ship;
       if (player.shipHand[handIndex] === undefined) return "ship_not_in_hand";
@@ -130,8 +156,6 @@ export class Match {
       }
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
     }
-
-    player.plan = plan;
     return null;
   }
 

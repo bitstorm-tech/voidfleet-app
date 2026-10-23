@@ -103,3 +103,21 @@ test("Sind beide Flotten in derselben Runde vernichtet, endet das Match unentsch
   expect(match.view(0).result).toBe("draw");
   expect(match.view(1).result).toBe("draw");
 });
+
+test("Der Computergegner nimmt den freien Platz und zieht, sobald der Spieler abgibt", () => {
+  const match = new Match("test");
+  match.join("a");
+  expect(match.addBot()).toBe(1);
+  expect(match.addBot()).toBeNull();
+  expect(match.join("c")).toBeNull();
+  expect(match.view(0).opponent).toEqual({ joined: true, submitted: false });
+
+  // Hand-Index 1 ist ein Kampfschiff; mit Index 0 (Support) wäre die Flotte sofort geschlagen.
+  const deployCombat: TurnPlan = { ship: { handIndex: 1, target: { lane: "strike", slotIndex: 0 } }, command: null };
+  expect(match.submit(0, deployCombat)).toBeNull();
+  expect(match.isRoundComplete).toBe(true);
+  match.resolveRound();
+  expect(match.board.shipCount("enemy")).toBe(1);
+  expect(match.winner).toBeNull();
+  expect(match.round).toBe(2);
+});

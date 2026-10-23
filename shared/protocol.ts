@@ -72,8 +72,11 @@ export type RoundEvent =
   | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "destroyed"; ship: ShipRef };
 
-/** Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`. */
-export type ClientMessage = { type: "submit"; plan: TurnPlan };
+/**
+ * Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`.
+ * `addBot` setzt den Computergegner auf den freien Platz, statt auf einen Menschen zu warten.
+ */
+export type ClientMessage = { type: "submit"; plan: TurnPlan } | { type: "addBot" };
 
 /** Fehler werden als Code übertragen, der Client formuliert sie in seiner Sprache. */
 export type ErrorCode =

@@ -1,0 +1,195 @@
+// Der Computergegner: plant aus Brett und eigener Hand einen Zug. Er sieht nur,
+// was auch ein Spieler sieht, insbesondere nicht den Plan des Gegners.
+// Faustregeln: immer ein Schiff legen (Kampfschiffe zuerst, robuste nach vorne,
+// Jäger und Support in die geschützte Command-Lane) und den Befehl spielen, der
+// nach grober Schätzung am meisten Schaden anrichtet oder verhindert.
+
+import { MAX_SHIPS_PER_LANE, opposite, SLOT_COUNT, type Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
+import type { CommandCard, ShipCard } from "../../shared/cards.ts";
+import type { SlotTarget, TurnPlan } from "../../shared/protocol.ts";
+import { highest } from "./resolution.ts";
+
+export interface BotHands {
+  readonly side: Side;
+  readonly shipHand: readonly ShipCard[];
+  readonly commandHand: readonly CommandCard[];
+}
+
+/** Schiffe landen möglichst mittig in der Lane. */
+const LANE_CENTER = (SLOT_COUNT - 1) / 2;
+/** Ein Abschuss ist mehr wert als der reine Schaden. */
+const KILL_BONUS = 2;
+
+export function planBotTurn(board: Board, bot: BotHands): TurnPlan {
+  const ship = planShip(board, bot);
+  return { ship, command: planCommand(board, bot, ship) };
+}
+
+// --- Schiff ---
+
+/** Kampfschiffe vor Support, dann nach Werten. */
+function shipValue(card: ShipCard): number {
+  return (card.atk > 0 ? 100 : 0) + card.hp + card.shield + 2 * card.atk;
+}
+
+function planShip(board: Board, bot: BotHands): TurnPlan["ship"] {
+  const card = highest(bot.shipHand, shipValue);
+  if (card === null) return null;
+  const strike = board.lane(bot.side, "strike");
+  const command = board.lane(bot.side, "command");
+  // Die Strike-Lane schirmt die Command-Lane ab: Steht vorne nichts, muss das Schiff nach vorne.
+  // Sonst kommen Jäger und Support nach hinten in Sicherheit, robuste Schiffe nach vorne.
+  const fragile = card.shipClass === "fighter" || card.shipClass === "support";
+  const preferred = fragile && strike.occupiedSlots.length > 0 ? command : strike;
+  for (const lane of [preferred, preferred === strike ? command : strike]) {
+    const slot = lane.freeSlotNear(LANE_CENTER);
+    if (slot && board.canPlace(lane, slot.index)) {
+      return { handIndex: bot.shipHand.indexOf(card), target: { lane: lane.type, slotIndex: slot.index } };
+    }
+  }
+  return null;
+}
+
+// --- Befehl ---
+
+interface Option {
+  score: number;
+  target: SlotTarget | null;
+}
+
+function planCommand(board: Board, bot: BotHands, ship: TurnPlan["ship"]): TurnPlan["command"] {
+  const situation = new Situation(board, bot, ship);
+  let best: (Option & { handIndex: number }) | null = null;
+  for (const [handIndex, card] of bot.commandHand.entries()) {
+    const option = situation.evaluate(card);
+    if (option && option.score > (best?.score ?? 0)) best = { handIndex, ...option };
+  }
+  return best && { handIndex: best.handIndex, target: best.target };
+}
+
+const attacks = (slot: Slot) => slot.card!.atk > 0;
+const hp = (slot: Slot) => slot.hp;
+const lowest = (slots: readonly Slot[], value: (slot: Slot) => number) => highest(slots, (slot) => -value(slot));
+
+function untargeted(score: number): Option {
+  return { score, target: null };
+}
+
+function on(slot: Slot, score: number): Option {
+  return { score, target: { lane: slot.lane.type, slotIndex: slot.index } };
+}
+
+/** Schaden, der bei einem Schiff ankommt, plus Bonus, wenn es dabei zerstört wird. */
+function damageValue(slot: Slot, amount: number): number {
+  const remaining = slot.hp + slot.shield;
+  return Math.min(amount, remaining) + (remaining <= amount ? KILL_BONUS : 0);
+}
+
+/** Die Lage vor der Bewertung der Befehle; das geplante Schiff zählt schon mit, ist aber noch kein Ziel. */
+class Situation {
+  private readonly side: Side;
+  private readonly own: readonly Slot[];
+  private readonly enemies: readonly Slot[];
+  /** Eigene Schiffe je Lane nach dem Deploy. */
+  private readonly count: Record<LaneType, number>;
+  /** Die eigene Lane, die der Gegner diese Runde beschießt. */
+  private readonly exposed: LaneType;
+  private readonly enemyAttack: number;
+  private readonly enemyMaxAttack: number;
+  /** Ob das geplante Schiff vorne mitschießt. */
+  private readonly deploysStrikeAttacker: boolean;
+
+  constructor(
+    private readonly board: Board,
+    private readonly bot: BotHands,
+    ship: TurnPlan["ship"],
+  ) {
+    this.side = bot.side;
+    this.own = board.ships(bot.side);
+    this.enemies = board.ships(opposite(bot.side));
+    this.count = {
+      strike: this.lane("strike").occupiedSlots.length + (ship?.target.lane === "strike" ? 1 : 0),
+      command: this.lane("command").occupiedSlots.length + (ship?.target.lane === "command" ? 1 : 0),
+    };
+    this.exposed = this.count.strike > 0 ? "strike" : "command";
+    this.enemyAttack = this.enemies.reduce((total, slot) => total + slot.attack, 0);
+    this.enemyMaxAttack = Math.max(0, ...this.enemies.map((slot) => slot.attack));
+    this.deploysStrikeAttacker = ship?.target.lane === "strike" && bot.shipHand[ship.handIndex]!.atk > 0;
+  }
+
+  private lane(type: LaneType) {
+    return this.board.lane(this.side, type);
+  }
+
+  /** Steht unter Beschuss und ein einzelner Treffer kann es zerstören. */
+  private endangered(slot: Slot): boolean {
+    return slot.lane.type === this.exposed && slot.hp + slot.shield <= this.enemyMaxAttack;
+  }
+
+  /** Vorne leer, hinten mehrere: Ein Schiff nach vorne schirmt die anderen ab. */
+  private get coverNeeded(): boolean {
+    return this.count.strike === 0 && this.count.command >= 2;
+  }
+
+  /** Bewertet den Befehl; null oder Score 0, wenn er nichts bringt. */
+  evaluate(card: CommandCard): Option | null {
+    const { enemies, count } = this;
+    switch (card.id) {
+      case "orbital_strike": {
+        const target = highest(enemies, hp);
+        return target && untargeted(damageValue(target, 4));
+      }
+      case "volley_fire":
+        return untargeted(enemies.reduce((total, slot) => total + damageValue(slot, 1), 0));
+      case "emp_blast": {
+        const target = highest(enemies, (slot) => slot.attack);
+        return target && untargeted(target.attack);
+      }
+      case "targeting_jammer":
+        return untargeted(this.board.lane(opposite(this.side), "strike").occupiedSlots.filter((slot) => slot.attack > 0).length);
+      case "power_surge":
+        return untargeted(this.lane("strike").occupiedSlots.filter(attacks).length + (this.deploysStrikeAttacker ? 1 : 0));
+      case "emergency_shields": {
+        // Jäger schießen auf das schwächste Schiff: Das bekommt den Schild.
+        const target = lowest(this.lane(this.exposed).occupiedSlots, hp);
+        return target && on(target, Math.min(3, this.enemyAttack) + (this.endangered(target) ? 1 : 0));
+      }
+      case "overcharge": {
+        // +3 ATK gegen 2 Eigenschaden: nur für ein Kampfschiff, das das und einen Treffer übersteht.
+        const sturdy = this.own.filter(
+          (slot) => attacks(slot) && slot.hp > 2 + (slot.lane.type === this.exposed ? this.enemyMaxAttack : 0),
+        );
+        const target = highest(sturdy, hp);
+        return target && on(target, 2);
+      }
+      case "flanking_maneuver": {
+        if (this.coverNeeded) return on(highest(this.lane("command").occupiedSlots, hp)!, 2);
+        // Ein angeschlagenes Schiff vorne in Sicherheit bringen, solange vorne jemand bleibt.
+        const retreat = lowest(this.lane("strike").occupiedSlots, hp);
+        if (retreat && this.endangered(retreat) && count.strike >= 2 && count.command < MAX_SHIPS_PER_LANE) {
+          return on(retreat, 1.5);
+        }
+        return null;
+      }
+      case "intercept": {
+        // Holt ein Schiff nach vorne: +2 ATK für ein Kampfschiff, dazu Deckung für die anderen.
+        if (count.strike >= MAX_SHIPS_PER_LANE) return null;
+        const target = highest(this.lane("command").occupiedSlots, (slot) => (attacks(slot) ? 100 : 0) + slot.hp);
+        return target && on(target, (attacks(target) ? 1.5 : 0) + (this.coverNeeded ? 2 : 0));
+      }
+      case "recall": {
+        // Zieht ein angeschlagenes Schiff nach hinten und heilt es; vorne muss aber jemand bleiben.
+        if (count.strike < 2 || count.command >= MAX_SHIPS_PER_LANE) return null;
+        const target = lowest(this.lane("strike").occupiedSlots, hp)!;
+        const healing = Math.min(2, target.card!.hp - target.hp);
+        return on(target, healing + (this.endangered(target) ? 1.5 : 0));
+      }
+      case "scavenge":
+        // Nachziehen lohnt sich, solange die Schiffshand dünn ist; eine volle Hand verschluckt die Karte.
+        return untargeted(this.bot.shipHand.length <= 3 ? 1.5 : 0.5);
+      case "sensor_sweep":
+        // Noch ohne Wirkung; spielen räumt wenigstens die Hand auf.
+        return untargeted(0.1);
+    }
+  }
+}

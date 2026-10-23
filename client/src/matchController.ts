@@ -45,13 +45,14 @@ export class MatchController {
     this.hud = new Hud(ui);
     this.playback = new RoundPlayback(this.view, this.hud, floats);
     this.resultScreen = new ResultScreen(ui);
-    this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton], {
+    this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton, this.hud.botButton], {
       onShipCardClick: (index) => this.onShipCardClick(index),
       onCommandCardClick: (index) => this.onCommandCardClick(index),
     });
 
     this.hud.submitButton.addEventListener("click", () => this.submit());
     this.hud.skipButton.addEventListener("click", () => this.playback.skip());
+    this.hud.botButton.addEventListener("click", () => this.connection.send({ type: "addBot" }));
     this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
 
     this.connection = new ServerConnection({
@@ -86,12 +87,11 @@ export class MatchController {
       case "round":
         // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
         this.isResolving = true;
-        this.hud.setResolving(true);
         this.clearGhost();
         this.refreshSelectionVisuals();
         await this.playback.play(message.round, message.events);
         this.isResolving = false;
-        this.hud.setResolving(false);
+        this.updateHud();
         break;
       case "error":
         this.hud.appendLog([`Server: ${t.errors[message.code]}`]);
@@ -272,6 +272,9 @@ export class MatchController {
   private updateHud(): void {
     this.hud.setRound(this.match.round);
     this.hud.setStatus(this.buildStatusText());
+    // Solange kein Gegner da ist, bietet der Knopf den Computergegner an.
+    const waitingForOpponent = this.isConnected && this.match.round > 0 && !this.match.opponent.joined;
+    this.hud.showAction(this.isResolving ? "skip" : waitingForOpponent ? "bot" : "submit");
     this.hud.submitButton.disabled = !this.canPlan || !this.match.opponent.joined;
     this.hud.submitButton.textContent = this.match.submitted ? t.hud.waiting : t.hud.endTurn;
   }

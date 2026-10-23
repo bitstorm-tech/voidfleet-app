@@ -4,7 +4,7 @@
 
 import type { ServerWebSocket } from "bun";
 import index from "../../client/index.html";
-import type { ClientMessage, ServerMessage } from "../../shared/protocol.ts";
+import type { ClientMessage, ServerMessage, TurnPlan } from "../../shared/protocol.ts";
 import { Match, type Seat } from "./match.ts";
 
 interface SocketData {
@@ -41,8 +41,8 @@ function broadcastState(room: Room): void {
   }
 }
 
-function onSubmit(socket: Socket, room: Room, seat: Seat, message: ClientMessage): void {
-  const error = room.match.submit(seat, message.plan);
+function onSubmit(socket: Socket, room: Room, seat: Seat, plan: TurnPlan): void {
+  const error = room.match.submit(seat, plan);
   if (error) {
     send(socket, { type: "error", code: error });
     return;
@@ -53,6 +53,14 @@ function onSubmit(socket: Socket, room: Room, seat: Seat, message: ClientMessage
     for (const player of room.match.players) {
       send(room.sockets[player.seat], { type: "round", round, events: room.match.eventsFor(player.seat, events) });
     }
+  }
+  broadcastState(room);
+}
+
+function onAddBot(socket: Socket, room: Room): void {
+  if (room.match.addBot() === null) {
+    send(socket, { type: "error", code: "match_full" });
+    return;
   }
   broadcastState(room);
 }
@@ -91,7 +99,9 @@ const server = Bun.serve({
       const seat = socket.data.seat;
       if (seat === null) return;
       const message = JSON.parse(String(raw)) as ClientMessage;
-      if (message.type === "submit") onSubmit(socket, roomFor(socket.data.matchId), seat, message);
+      const room = roomFor(socket.data.matchId);
+      if (message.type === "submit") onSubmit(socket, room, seat, message.plan);
+      else onAddBot(socket, room);
     },
     close(socket) {
       const room = rooms.get(socket.data.matchId);
