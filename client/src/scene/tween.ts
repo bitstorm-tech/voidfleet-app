@@ -1,8 +1,31 @@
 // Zeit-Helfer für Animationen im Render-Takt der Szene. Läuft die Szene nicht
-// (Tab im Hintergrund), pausieren die Animationen mit ihr.
+// (Tab im Hintergrund), pausieren die Animationen mit ihr. Alle Animationen
+// (Tweens, Partikel und über `--animation-time-scale` auch CSS) sind um die
+// eingestellte Geschwindigkeit gestreckt; Angriffe haben einen eigenen Regler.
 
 import type { Scene } from "@babylonjs/core/scene";
-import { animationTimeScale } from "../settings.ts";
+import { ANIMATION_SPEEDS, onSettingsChange, settings } from "../settings.ts";
+
+export type AnimationScope = "attack" | "general";
+
+let scope: AnimationScope = "general";
+
+/** Welcher Regler gerade gilt; die Rundenwiedergabe schaltet für Angriffe um. */
+export function setAnimationScope(next: AnimationScope): void {
+  scope = next;
+  applyCssTimeScale();
+}
+
+export function animationTimeScale(of: AnimationScope = scope): number {
+  return ANIMATION_SPEEDS[of === "attack" ? settings.attackSpeed : settings.animationSpeed];
+}
+
+function applyCssTimeScale(): void {
+  document.documentElement.style.setProperty("--animation-time-scale", String(animationTimeScale()));
+}
+
+applyCssTimeScale();
+onSettingsChange(applyCssTimeScale);
 
 /** Laufende Tweens, die `skipAnimations` sofort auf ihren Endzustand setzen kann. */
 const running = new Set<() => void>();
@@ -19,9 +42,10 @@ export function skipAnimations(skip: boolean): void {
 
 /**
  * Ruft `update` jeden Frame mit dem Fortschritt 0..1 auf und endet nach `duration` ms vor der Streckung
- * durch die eingestellte Animationsgeschwindigkeit; eine Umstellung wirkt auch auf laufende Tweens.
+ * durch den beim Start geltenden Regler; eine Umstellung der Einstellung wirkt auch auf laufende Tweens.
  */
 export function tween(scene: Scene, duration: number, update: (progress: number) => void): Promise<void> {
+  const tweenScope = scope;
   return new Promise((resolve) => {
     const finish = () => {
       scene.onBeforeRenderObservable.remove(observer);
@@ -32,7 +56,7 @@ export function tween(scene: Scene, duration: number, update: (progress: number)
     let elapsed = 0;
     update(0);
     const observer = scene.onBeforeRenderObservable.add(() => {
-      elapsed += scene.getEngine().getDeltaTime() / animationTimeScale();
+      elapsed += scene.getEngine().getDeltaTime() / animationTimeScale(tweenScope);
       if (elapsed >= duration) return finish();
       update(elapsed / duration);
     });

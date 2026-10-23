@@ -1,8 +1,11 @@
-// Einstellungen: Zahnrad-Knopf oben rechts neben dem Log-Knopf öffnet einen modalen Dialog.
+// Einstellungen: Zahnrad-Knopf oben rechts neben dem Log-Knopf öffnet einen modalen Dialog
+// mit je einer Geschwindigkeitswahl für Angriffe und für die übrigen Animationen.
 // Jede Auswahl gilt sofort und wird gespeichert (`settings.ts`).
 
 import { t } from "../i18n/index.ts";
 import { ANIMATION_SPEEDS, settings, updateSettings, type AnimationSpeed } from "../settings.ts";
+
+type SpeedSetting = "attackSpeed" | "animationSpeed";
 
 export class SettingsDialog {
   constructor(container: HTMLElement) {
@@ -16,33 +19,16 @@ export class SettingsDialog {
       </button>
       <dialog class="settings-dialog">
         <h2></h2>
-        <fieldset class="settings-speed">
-          <legend></legend>
-        </fieldset>
         <button type="button" class="settings-close"></button>
       </dialog>`,
     );
     const toggle = container.querySelector<HTMLButtonElement>(".settings-toggle")!;
     const dialog = container.querySelector<HTMLDialogElement>(".settings-dialog")!;
-    const speed = dialog.querySelector(".settings-speed")!;
     const close = dialog.querySelector<HTMLButtonElement>(".settings-close")!;
     toggle.title = t.settings.title;
     dialog.querySelector("h2")!.textContent = t.settings.title;
-    speed.querySelector("legend")!.textContent = t.settings.animationSpeed;
     close.textContent = t.settings.close;
-
-    for (const option of Object.keys(ANIMATION_SPEEDS) as AnimationSpeed[]) {
-      const label = document.createElement("label");
-      const input = Object.assign(document.createElement("input"), {
-        type: "radio",
-        name: "animation-speed",
-        value: option,
-        checked: option === settings.animationSpeed,
-      });
-      input.addEventListener("change", () => updateSettings({ animationSpeed: option }));
-      label.append(input, Object.assign(document.createElement("span"), { textContent: t.settings.speeds[option] }));
-      speed.append(label);
-    }
+    close.before(speedChoice("attackSpeed"), speedChoice("animationSpeed"));
 
     toggle.addEventListener("click", () => dialog.showModal());
     close.addEventListener("click", () => dialog.close());
@@ -51,4 +37,23 @@ export class SettingsDialog {
       if (event.target === dialog) dialog.close();
     });
   }
+}
+
+/** Segmentierte Auswahl der Stufen für eine Geschwindigkeits-Einstellung. */
+function speedChoice(setting: SpeedSetting): HTMLFieldSetElement {
+  const fieldset = Object.assign(document.createElement("fieldset"), { className: "settings-speed" });
+  fieldset.append(Object.assign(document.createElement("legend"), { textContent: t.settings[setting] }));
+  for (const option of Object.keys(ANIMATION_SPEEDS) as AnimationSpeed[]) {
+    const label = document.createElement("label");
+    const input = Object.assign(document.createElement("input"), {
+      type: "radio",
+      name: setting,
+      value: option,
+      checked: option === settings[setting],
+    });
+    input.addEventListener("change", () => updateSettings({ [setting]: option }));
+    label.append(input, Object.assign(document.createElement("span"), { textContent: t.settings.speeds[option] }));
+    fieldset.append(label);
+  }
+  return fieldset;
 }

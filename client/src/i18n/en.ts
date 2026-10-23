@@ -24,7 +24,8 @@ export const en = {
   },
   settings: {
     title: "Settings",
-    animationSpeed: "Animation speed",
+    attackSpeed: "Attack speed",
+    animationSpeed: "Other animations",
     speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
     close: "Close",
   },

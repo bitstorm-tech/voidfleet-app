@@ -13,7 +13,8 @@ export const de: Messages = {
   },
   settings: {
     title: "Einstellungen",
-    animationSpeed: "Animationsgeschwindigkeit",
+    attackSpeed: "Geschwindigkeit der Angriffe",
+    animationSpeed: "Übrige Animationen",
     speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
     close: "Schließen",
   },

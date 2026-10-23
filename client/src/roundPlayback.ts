@@ -15,7 +15,7 @@ import { t } from "./i18n/index.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
-import { easeInOutSine, skipAnimations, tween, wait } from "./scene/tween.ts";
+import { easeInOutSine, setAnimationScope, skipAnimations, tween, wait } from "./scene/tween.ts";
 import type { FloatingTexts, FloatTone } from "./ui/floatingText.ts";
 import type { Hud } from "./ui/hud.ts";
 import { describeEvent } from "./ui/roundLog.ts";
@@ -86,9 +86,11 @@ export class RoundPlayback {
     for (const step of groupSteps(events)) {
       this.hud.appendLog(step.map(describeEvent));
       if (this.isSkipped) continue;
+      setAnimationScope(step[0]!.kind === "attack" ? "attack" : "general");
       await this.playStep(step);
       await wait(this.view.scene, STEP_PAUSE);
     }
+    setAnimationScope("general");
     skipAnimations(false);
   }
 

@@ -157,7 +157,7 @@ body {
 }
 
 .settings-dialog::backdrop {
-  background: rgb(4 5 10 / 0.6);
+  background: rgb(var(--background) / 0.6);
 }
 
 .settings-dialog h2 {
@@ -169,7 +169,7 @@ body {
 
 .settings-speed {
   display: flex;
-  margin: 0;
+  margin: 0 0 18px;
   padding: 0;
   border: none;
 }
@@ -217,18 +217,18 @@ body {
 }
 
 .settings-speed input:checked + span {
-  color: #04050a;
+  color: rgb(var(--background));
   font-weight: 600;
   background: var(--accent);
 }
 
 .settings-speed input:focus-visible + span {
-  outline: 2px solid var(--select);
+  outline: 2px solid rgb(var(--select));
 }
 
 #ui .settings-close {
   display: block;
-  margin: 24px 0 0 auto;
+  margin: 6px 0 0 auto;
   padding: 8px 24px;
   font-size: 15px;
 }

@@ -16,8 +16,7 @@ import type { Scene } from "@babylonjs/core/scene";
 // Die Partikel-Shader kommen mit ins Bundle, sonst lädt Babylon sie beim ersten Einschlag nach.
 import "@babylonjs/core/Shaders/particles.fragment";
 import "@babylonjs/core/Shaders/particles.vertex";
-import { animationTimeScale } from "../settings.ts";
-import { easeInCubic, easeOutCubic, tween, wait } from "./tween.ts";
+import { animationTimeScale, easeInCubic, easeOutCubic, tween, wait } from "./tween.ts";
 
 /** Welteinheiten pro Sekunde. */
 const BOLT_SPEED = 15;
