@@ -12,6 +12,13 @@
   box-sizing: border-box;
 }
 
+/* Der Spiel-Cursor gilt überall – auch über Buttons und dem Babylon-Canvas. */
+*,
+*::before,
+*::after {
+  cursor: var(--cursor, default) !important;
+}
+
 html,
 body {
   margin: 0;
