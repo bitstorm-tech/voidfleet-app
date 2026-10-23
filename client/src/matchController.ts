@@ -269,6 +269,7 @@ export class MatchController {
     this.hud.setRound(this.match.round);
     this.hud.setStatus(this.buildStatusText());
     this.hud.submitButton.disabled = !this.canPlan || !this.match.opponent.joined;
+    this.hud.submitButton.textContent = this.match.submitted ? t.hud.waiting : t.hud.endTurn;
   }
 
   private buildStatusText(): string {

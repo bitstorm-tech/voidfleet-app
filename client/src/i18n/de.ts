@@ -4,6 +4,7 @@ export const de: Messages = {
   hud: {
     round: (round) => `Runde ${round}`,
     endTurn: "Zug beenden",
+    waiting: "Warte auf Gegner",
     skip: "Animation überspringen",
     showLog: "Log einblenden",
     hideLog: "Log ausblenden",

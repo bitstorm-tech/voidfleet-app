@@ -14,6 +14,7 @@ export const en = {
   hud: {
     round: (round: number) => `Round ${round}`,
     endTurn: "End turn",
+    waiting: "Waiting for opponent",
     skip: "Skip animation",
     showLog: "Show log",
     hideLog: "Hide log",
