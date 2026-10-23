@@ -1,5 +1,6 @@
 // Die Hand: Schiffskarten links, Submit in der Mitte, Befehlskarten rechts.
-// Karten werden bei jedem Refresh aus der Hand neu aufgebaut; jede trägt ihre
+// Karten werden nur neu aufgebaut, wenn sich die Hand ändert (sonst würde die Karte
+// unter der Maus ihr Hover verlieren und neu aufzoomen); jede trägt ihre
 // Illustration (`cardArt`) als Hintergrund, das CSS legt Verläufe für den Text darüber.
 
 import type { CommandCard, ShipCard } from "../../../shared/cards.ts";
@@ -16,6 +17,8 @@ export interface HandCallbacks {
 export class HandView {
   private readonly shipRow: HTMLElement;
   private readonly commandRow: HTMLElement;
+  private shipHand: readonly ShipCard[] = [];
+  private commandHand: readonly CommandCard[] = [];
 
   constructor(
     container: HTMLElement,
@@ -36,25 +39,31 @@ export class HandView {
   }
 
   renderShips(hand: readonly ShipCard[], markedIndices: ReadonlySet<number>): void {
-    this.shipRow.replaceChildren(
-      ...hand.map((card, index) => {
-        const element = this.createShipCard(card);
-        element.classList.toggle("selected", markedIndices.has(index));
-        element.addEventListener("click", () => this.callbacks.onShipCardClick(index));
-        return element;
-      }),
-    );
+    if (!sameCards(hand, this.shipHand)) {
+      this.shipHand = hand;
+      this.shipRow.replaceChildren(
+        ...hand.map((card, index) => {
+          const element = this.createShipCard(card);
+          element.addEventListener("click", () => this.callbacks.onShipCardClick(index));
+          return element;
+        }),
+      );
+    }
+    markSelected(this.shipRow, markedIndices);
   }
 
   renderCommands(hand: readonly CommandCard[], markedIndices: ReadonlySet<number>): void {
-    this.commandRow.replaceChildren(
-      ...hand.map((card, index) => {
-        const element = this.createCommandCard(card);
-        element.classList.toggle("selected", markedIndices.has(index));
-        element.addEventListener("click", () => this.callbacks.onCommandCardClick(index));
-        return element;
-      }),
-    );
+    if (!sameCards(hand, this.commandHand)) {
+      this.commandHand = hand;
+      this.commandRow.replaceChildren(
+        ...hand.map((card, index) => {
+          const element = this.createCommandCard(card);
+          element.addEventListener("click", () => this.callbacks.onCommandCardClick(index));
+          return element;
+        }),
+      );
+    }
+    markSelected(this.commandRow, markedIndices);
   }
 
   private createShipCard(card: ShipCard): HTMLElement {
@@ -105,4 +114,12 @@ export class HandView {
     element.querySelector(".effect")!.textContent = text.effect;
     return element;
   }
+}
+
+function markSelected(row: HTMLElement, markedIndices: ReadonlySet<number>): void {
+  [...row.children].forEach((element, index) => element.classList.toggle("selected", markedIndices.has(index)));
+}
+
+function sameCards(a: readonly object[], b: readonly object[]): boolean {
+  return a.length === b.length && a.every((card, index) => card === b[index]);
 }
