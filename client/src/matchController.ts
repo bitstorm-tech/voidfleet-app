@@ -146,12 +146,15 @@ export class MatchController {
 
   // --- Brett ---
 
-  /** Das Brett reagiert nur, solange eine Karte gewählt ist; `pickInfo` wird erst beim Zugriff berechnet. */
+  /**
+   * Das Brett reagiert nur, solange eine Karte gewählt ist; `pickInfo` wird erst beim Zugriff berechnet.
+   * Geklickt wird beim Loslassen, damit Ziehen die Kamera verschiebt, ohne Karten zu platzieren.
+   */
   private onScenePointer(info: PointerInfo): void {
     const hasSelection = this.selectedShipIndex !== null || this.selectedCommandIndex !== null;
     if (info.type === PointerEventTypes.POINTERMOVE) {
       this.setHoveredPad(hasSelection ? pickedPad(info) : null);
-    } else if (info.type === PointerEventTypes.POINTERDOWN && info.event.button === 0 && hasSelection) {
+    } else if (info.type === PointerEventTypes.POINTERUP && info.event.button === 0 && hasSelection && !this.view.wasPanned) {
       this.onBoardClick(pickedPad(info));
     }
   }

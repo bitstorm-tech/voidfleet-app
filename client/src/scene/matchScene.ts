@@ -1,5 +1,5 @@
-// Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe und
-// Mausrad-Zoom, Lichter, Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen.
+// Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe,
+// Mausrad-Zoom und Verschieben per Ziehen, Lichter, Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen.
 //
 // Koordinaten: Babylon ist linkshändig, die Godot-Szene rechtshändig. Alle
 // Z-Werte aus der Godot-Szene sind hier negiert; x (Lanes) und y bleiben.
@@ -60,7 +60,9 @@ const ZOOM_MIN_HEIGHT = 2.6;
 /** Höhenfaktor pro Pixel Mausrad (exponentiell, damit Trackpads und Rasterräder gleich wirken). */
 const ZOOM_SPEED = 0.0018;
 const ZOOM_FOLLOW_SPEED = 8;
-/** Brettbereich, auf den gezoomt werden kann (Welt-x und -z). */
+/** Ab dieser Zeigerbewegung in CSS-Pixeln wird aus einem Klick ein Verschieben der Kamera. */
+const PAN_THRESHOLD = 5;
+/** Brettbereich, auf den gezoomt und die Kamera ausgerichtet werden kann (Welt-x und -z). */
 const ZOOM_FOCUS_X = 7;
 const ZOOM_FOCUS_Z: [number, number] = [BOARD_Z - 6, BOARD_Z + 6];
 
@@ -86,6 +88,9 @@ export class MatchScene {
   /** Versatz der Kamera aus der Ruhelage durch den Zoom: Ziel und geglätteter Ist-Wert. */
   private readonly zoomTarget = Vector3.Zero();
   private readonly zoomOffset = Vector3.Zero();
+  /** Gedrückte linke Maustaste: Startpunkt, letzte Position und ob schon verschoben wird. */
+  private drag: { startX: number; startY: number; lastX: number; lastY: number; panning: boolean } | null = null;
+  private panned = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -109,7 +114,7 @@ export class MatchScene {
     // Pointer-Events der Szene treffen nur die Hitboxen der Pads.
     this.scene.pointerMovePredicate = isPadHitbox;
     this.scene.pointerDownPredicate = isPadHitbox;
-    this.scene.skipPointerUpPicking = true;
+    this.scene.pointerUpPredicate = isPadHitbox;
 
     this.createLights();
     this.createEnvironment();
@@ -122,8 +127,17 @@ export class MatchScene {
 
     this.scene.onBeforeRenderObservable.add(() => this.updateCamera());
     canvas.addEventListener("wheel", (event) => this.onWheel(event), { passive: false });
+    canvas.addEventListener("pointerdown", (event) => this.onPointerDown(event));
+    canvas.addEventListener("pointermove", (event) => this.onPointerMove(event));
+    canvas.addEventListener("pointerup", () => (this.drag = null));
+    canvas.addEventListener("pointercancel", () => (this.drag = null));
     window.addEventListener("resize", () => this.engine.resize());
     this.engine.runRenderLoop(() => this.scene.render());
+  }
+
+  /** Ob die letzte Geste mit gedrückter Maustaste die Kamera verschoben hat statt zu klicken. */
+  get wasPanned(): boolean {
+    return this.panned;
   }
 
   pad(side: Side, lane: LaneType, slotIndex: number): SlotPad {
@@ -199,6 +213,7 @@ export class MatchScene {
       const camera = rest.add(this.zoomTarget);
       const next = Vector3.Lerp(focus, camera, (nextHeight - focus.y) / (camera.y - focus.y));
       this.zoomTarget.copyFrom(next.subtract(rest));
+      this.clampZoomTarget();
     } else {
       // Herauszoomen schrumpft den Versatz, bis die Kamera wieder in der Ruhelage steht.
       if (height >= rest.y) return;
@@ -207,14 +222,67 @@ export class MatchScene {
     }
   }
 
+  /** Zeigerposition im Canvas in CSS-Pixeln, wie Babylon sie für `scene.pointerX/Y` berechnet. */
+  private canvasPoint(event: PointerEvent): { x: number; y: number } {
+    const rect = this.canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  private onPointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+    const { x, y } = this.canvasPoint(event);
+    this.drag = { startX: x, startY: y, lastX: x, lastY: y, panning: false };
+    this.panned = false;
+    this.canvas.setPointerCapture(event.pointerId);
+  }
+
+  /** Verschieben gibt es nur herangezoomt; in der Ruhelage ist das ganze Brett zu sehen. */
+  private onPointerMove(event: PointerEvent): void {
+    const drag = this.drag;
+    if (!drag || this.zoomTarget.y >= 0) return;
+    const { x, y } = this.canvasPoint(event);
+    if (!drag.panning) {
+      if (Math.hypot(x - drag.startX, y - drag.startY) < PAN_THRESHOLD) return;
+      drag.panning = this.panned = true;
+    }
+    // Der Brettpunkt unter dem Zeiger wandert mit, als würde man das Brett greifen.
+    const from = this.boardPointAt(drag.lastX, drag.lastY);
+    const to = this.boardPointAt(x, y);
+    drag.lastX = x;
+    drag.lastY = y;
+    if (!from || !to) return;
+    const before = this.zoomTarget.clone();
+    this.zoomTarget.x += from.x - to.x;
+    this.zoomTarget.z += from.z - to.z;
+    this.clampZoomTarget();
+    // Ohne Nachlauf, damit das Brett direkt an der Maus hängt.
+    this.zoomOffset.addInPlace(this.zoomTarget.subtract(before));
+  }
+
+  /** Hält den Blickpunkt der Kamera (Bildmitte auf dem Brett) im Brettbereich. */
+  private clampZoomTarget(): void {
+    const rest = CAMERA_RIG_POSITION;
+    const height = rest.y + this.zoomTarget.y;
+    const lookAhead = height / Math.tan(CAMERA_PITCH);
+    this.zoomTarget.x = Math.min(Math.max(this.zoomTarget.x, -ZOOM_FOCUS_X - rest.x), ZOOM_FOCUS_X - rest.x);
+    const focusZ = Math.min(Math.max(rest.z + this.zoomTarget.z + lookAhead, ZOOM_FOCUS_Z[0]), ZOOM_FOCUS_Z[1]);
+    this.zoomTarget.z = focusZ - lookAhead - rest.z;
+  }
+
   /** Schnittpunkt des Zeigerstrahls mit der Brettebene, auf den Brettbereich begrenzt. */
   private boardPointUnderPointer(): Vector3 | null {
-    const ray = this.scene.createPickingRay(this.scene.pointerX, this.scene.pointerY, Matrix.Identity(), this.camera);
-    if (ray.direction.y >= 0) return null;
-    const point = ray.origin.add(ray.direction.scale(-ray.origin.y / ray.direction.y));
+    const point = this.boardPointAt(this.scene.pointerX, this.scene.pointerY);
+    if (!point) return null;
     point.x = Math.min(Math.max(point.x, -ZOOM_FOCUS_X), ZOOM_FOCUS_X);
     point.z = Math.min(Math.max(point.z, ZOOM_FOCUS_Z[0]), ZOOM_FOCUS_Z[1]);
     return point;
+  }
+
+  /** Schnittpunkt des Strahls durch einen Canvas-Punkt (CSS-Pixel) mit der Brettebene. */
+  private boardPointAt(x: number, y: number): Vector3 | null {
+    const ray = this.scene.createPickingRay(x, y, Matrix.Identity(), this.camera);
+    if (ray.direction.y >= 0) return null;
+    return ray.origin.add(ray.direction.scale(-ray.origin.y / ray.direction.y));
   }
 
   private updateCamera(): void {
