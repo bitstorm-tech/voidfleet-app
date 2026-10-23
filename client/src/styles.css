@@ -167,30 +167,30 @@ body {
   color: var(--accent);
 }
 
-.settings-speed {
+.settings-choice {
   display: flex;
   margin: 0 0 18px;
   padding: 0;
   border: none;
 }
 
-.settings-speed legend {
+.settings-choice legend {
   margin-bottom: 10px;
   padding: 0;
   font-size: 14px;
   color: var(--text-dim);
 }
 
-.settings-speed label {
+.settings-choice label {
   flex: 1;
 }
 
-.settings-speed input {
+.settings-choice input {
   position: absolute;
   opacity: 0;
 }
 
-.settings-speed span {
+.settings-choice span {
   display: block;
   padding: 8px 12px;
   font-size: 14px;
@@ -200,29 +200,29 @@ body {
   border: 1px solid rgb(255 255 255 / 0.08);
 }
 
-.settings-speed label:first-of-type span {
+.settings-choice label:first-of-type span {
   border-radius: 3px 0 0 3px;
 }
 
-.settings-speed label:last-of-type span {
+.settings-choice label:last-of-type span {
   border-radius: 0 3px 3px 0;
 }
 
-.settings-speed label + label span {
+.settings-choice label + label span {
   border-left: none;
 }
 
-.settings-speed span:hover {
+.settings-choice span:hover {
   background: var(--panel-hover);
 }
 
-.settings-speed input:checked + span {
+.settings-choice input:checked + span {
   color: rgb(var(--background));
   font-weight: 600;
   background: var(--accent);
 }
 
-.settings-speed input:focus-visible + span {
+.settings-choice input:focus-visible + span {
   outline: 2px solid rgb(var(--select));
 }
 

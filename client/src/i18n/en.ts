@@ -12,6 +12,8 @@ export interface CardText {
 }
 
 export const en = {
+  /** Name der Sprache in ihr selbst, für die Sprachwahl. */
+  languageName: "English",
   hud: {
     round: (round: number) => `Round ${round}`,
     newRound: "New round",
@@ -26,6 +28,7 @@ export const en = {
     title: "Settings",
     attackSpeed: "Attack speed",
     animationSpeed: "Other animations",
+    language: "Language",
     speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
     close: "Close",
   },

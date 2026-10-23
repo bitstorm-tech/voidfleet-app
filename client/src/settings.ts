@@ -1,6 +1,8 @@
 // Spieler-Einstellungen, vorerst nur im Browser (`localStorage`) gespeichert.
 // Änderungen gelten sofort; wer darauf reagieren muss, meldet sich mit `onSettingsChange` an.
 
+import type { Locale } from "./i18n/index.ts";
+
 /**
  * Animationsgeschwindigkeit als Streckungsfaktor aller Animationen (Tweens,
  * Partikel und CSS). „Normal“ streckt auf das Doppelte: Die Auflösung einer
@@ -15,6 +17,8 @@ export interface Settings {
   attackSpeed: AnimationSpeed;
   /** Alle übrigen Animationen. */
   animationSpeed: AnimationSpeed;
+  /** Gewählte Sprache; ohne Wahl gilt die Browsersprache. */
+  language?: Locale;
 }
 
 const STORAGE_KEY = "voidfleet.settings";

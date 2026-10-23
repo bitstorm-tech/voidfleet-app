@@ -1,9 +1,10 @@
 // Einstellungen: Zahnrad-Knopf oben rechts neben dem Log-Knopf öffnet einen modalen Dialog
-// mit je einer Geschwindigkeitswahl für Angriffe und für die übrigen Animationen.
-// Jede Auswahl gilt sofort und wird gespeichert (`settings.ts`).
+// mit je einer Geschwindigkeitswahl für Angriffe und für die übrigen Animationen sowie
+// der Sprache. Jede Auswahl wird gespeichert (`settings.ts`); die Geschwindigkeiten
+// gelten sofort, ein Sprachwechsel lädt die Seite neu.
 
-import { t } from "../i18n/index.ts";
-import { ANIMATION_SPEEDS, settings, updateSettings, type AnimationSpeed } from "../settings.ts";
+import { locale, LOCALE_NAMES, switchLocale, t } from "../i18n/index.ts";
+import { settings, updateSettings } from "../settings.ts";
 
 type SpeedSetting = "attackSpeed" | "animationSpeed";
 
@@ -28,7 +29,11 @@ export class SettingsDialog {
     toggle.title = t.settings.title;
     dialog.querySelector("h2")!.textContent = t.settings.title;
     close.textContent = t.settings.close;
-    close.before(speedChoice("attackSpeed"), speedChoice("animationSpeed"));
+    close.before(
+      speedChoice("attackSpeed"),
+      speedChoice("animationSpeed"),
+      choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
+    );
 
     toggle.addEventListener("click", () => dialog.showModal());
     close.addEventListener("click", () => dialog.close());
@@ -39,20 +44,25 @@ export class SettingsDialog {
   }
 }
 
-/** Segmentierte Auswahl der Stufen für eine Geschwindigkeits-Einstellung. */
 function speedChoice(setting: SpeedSetting): HTMLFieldSetElement {
-  const fieldset = Object.assign(document.createElement("fieldset"), { className: "settings-speed" });
-  fieldset.append(Object.assign(document.createElement("legend"), { textContent: t.settings[setting] }));
-  for (const option of Object.keys(ANIMATION_SPEEDS) as AnimationSpeed[]) {
+  return choice(setting, t.settings[setting], t.settings.speeds, settings[setting], (next) => updateSettings({ [setting]: next }));
+}
+
+/** Segmentierte Auswahl: ein Feld je Option, die gewählte hervorgehoben. */
+function choice<T extends string>(
+  name: string,
+  legend: string,
+  labels: Record<T, string>,
+  current: T,
+  onChange: (next: T) => void,
+): HTMLFieldSetElement {
+  const fieldset = Object.assign(document.createElement("fieldset"), { className: "settings-choice" });
+  fieldset.append(Object.assign(document.createElement("legend"), { textContent: legend }));
+  for (const option of Object.keys(labels) as T[]) {
     const label = document.createElement("label");
-    const input = Object.assign(document.createElement("input"), {
-      type: "radio",
-      name: setting,
-      value: option,
-      checked: option === settings[setting],
-    });
-    input.addEventListener("change", () => updateSettings({ [setting]: option }));
-    label.append(input, Object.assign(document.createElement("span"), { textContent: t.settings.speeds[option] }));
+    const input = Object.assign(document.createElement("input"), { type: "radio", name, value: option, checked: option === current });
+    input.addEventListener("change", () => onChange(option));
+    label.append(input, Object.assign(document.createElement("span"), { textContent: labels[option] }));
     fieldset.append(label);
   }
   return fieldset;

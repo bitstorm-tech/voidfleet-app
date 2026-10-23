@@ -1,6 +1,7 @@
 import type { Messages } from "./en.ts";
 
 export const de: Messages = {
+  languageName: "Deutsch",
   hud: {
     round: (round) => `Runde ${round}`,
     newRound: "Neue Runde",
@@ -15,6 +16,7 @@ export const de: Messages = {
     title: "Einstellungen",
     attackSpeed: "Geschwindigkeit der Angriffe",
     animationSpeed: "Übrige Animationen",
+    language: "Sprache",
     speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
     close: "Schließen",
   },
