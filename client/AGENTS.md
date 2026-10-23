@@ -6,7 +6,8 @@
 ## Aufbau
 
 - `../shared/` — mit dem Server geteilt: `cards.ts` (Kartendefinitionen), `board.ts` (Lanes, Slots, Platzierungsregeln, Snapshot), `protocol.ts` (Nachrichten).
-- `src/data/cardColors.ts` — Kartenfarben und Farb-Helfer.
+- `src/data/cardColors.ts` — Kartenfarben und Farb-Helfer; `src/data/cardArt.ts` — Illustrationen der Karten (`assets/images/cards/<id>.jpg`).
+- `tools/generateCardArt.ts` — erzeugt die Kartenillustrationen über fal.ai (Flux Pro 1.1, 736×1024, fester Seed je Karte): `FAL_KEY=… bun tools/generateCardArt.ts` generiert fehlende Bilder, `--force` alle, einzelne Ids als Argumente nur diese. Prompts und Stil-Suffix stehen im Skript.
 - `src/i18n/` — Übersetzungen. `en.ts` ist die Ausgangssprache und legt mit `Messages` Schlüssel und Parameter fest; jede weitere Sprache (`de.ts`, …) ist ein `Messages`-Objekt und wird in `index.ts` registriert. Die Sprache steht beim Start fest: `?lang=`, sonst die Browsersprache, sonst Englisch. Alle sichtbaren Texte laufen über `t`, auch Kartennamen und Effekttexte (`cardText`); `shared/` und der Server kennen nur Ids und Fehlercodes.
 - `src/game/match.ts` — Spielzustand aus Server-Sicht (Brett, Hände, Zugplan) ohne Rendering.
 - `src/net/connection.ts` — WebSocket zum Server; Match-Id aus `?match=`, Spieler-Token pro Tab im `sessionStorage`.

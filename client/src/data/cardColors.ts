@@ -39,7 +39,11 @@ export function lightened(color: Rgb, amount: number): Rgb {
   ];
 }
 
+/** Nur die drei Kanäle (0..255), für `rgb(var(--x) / alpha)` im CSS. */
+export function toCssChannels(color: Rgb): string {
+  return color.map((c) => Math.round(c * 255)).join(" ");
+}
+
 export function toCss(color: Rgb, alpha = 1): string {
-  const [r, g, b] = color.map((c) => Math.round(c * 255));
-  return `rgb(${r} ${g} ${b} / ${alpha})`;
+  return `rgb(${toCssChannels(color)} / ${alpha})`;
 }

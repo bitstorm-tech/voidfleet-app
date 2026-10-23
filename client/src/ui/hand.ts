@@ -1,8 +1,10 @@
 // Die Hand: Schiffskarten links, Submit in der Mitte, Befehlskarten rechts.
-// Karten werden bei jedem Refresh aus der Hand neu aufgebaut.
+// Karten werden bei jedem Refresh aus der Hand neu aufgebaut; jede trägt ihre
+// Illustration (`cardArt`) als Hintergrund, das CSS legt Verläufe für den Text darüber.
 
 import type { CommandCard, ShipCard } from "../../../shared/cards.ts";
-import { cardColor, darkened, toCss } from "../data/cardColors.ts";
+import { cardArt } from "../data/cardArt.ts";
+import { cardColor, darkened, toCss, toCssChannels } from "../data/cardColors.ts";
 import { cardText, t, upper } from "../i18n/index.ts";
 
 export interface HandCallbacks {
@@ -60,6 +62,7 @@ export class HandView {
     element.className = "card ship-card";
     element.style.setProperty("--card-bg", toCss(darkened(color, 0.72)));
     element.style.setProperty("--card-accent", toCss(color));
+    element.style.setProperty("--card-art", `url(${cardArt(card)})`);
     element.innerHTML = `
       <div class="name"></div>
       <div class="class"></div>
@@ -86,7 +89,8 @@ export class HandView {
   private createCommandCard(card: CommandCard): HTMLElement {
     const element = document.createElement("div");
     element.className = "card command-card";
-    element.style.setProperty("--card-bg", toCss(darkened(cardColor(card), 0.25)));
+    element.style.setProperty("--card-rgb", toCssChannels(darkened(cardColor(card), 0.25)));
+    element.style.setProperty("--card-art", `url(${cardArt(card)})`);
     element.innerHTML = `
       <div class="screen">
         <div class="name"></div>
