@@ -302,6 +302,22 @@ body {
   width: 140px;
   height: 196px;
   background: var(--card-bg, #14181f);
+  transform-origin: bottom center;
+  transition: scale 0.12s ease-out;
+}
+
+/* Hover vergrößert die Karte nach oben, damit der Text lesbar wird; die äußeren Karten wachsen zur Bildschirmmitte. */
+.card:hover {
+  z-index: 1;
+  scale: 1.8;
+}
+
+.ship-hand .card:first-child {
+  transform-origin: bottom left;
+}
+
+.command-hand .card:last-child {
+  transform-origin: bottom right;
 }
 
 .card.selected::after {
