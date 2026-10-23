@@ -32,11 +32,11 @@ export const de: Messages = {
       },
       {
         heading: "Das Brett",
-        text: "Jede Seite hat zwei Lanes: Strike vorne, Command dahinter. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 8. Schiffe in der Command-Lane werden erst angegriffen, wenn ihre Strike-Lane leer ist.",
+        text: "Jede Seite hat zwei Lanes: Strike vorne, Command dahinter. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 8. Ein Schiff in der Command-Lane ist gedeckt, solange im Strike-Slot direkt davor ein Schiff steht; sonst kann es angegriffen werden.",
       },
       {
         heading: "Auflösung",
-        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Effects (Befehle wirken), Combat (alle Schiffe feuern gleichzeitig), Cleanup (Rundeneffekte enden). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand).",
+        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Effects (Befehle wirken), Combat (alle Schiffe feuern gleichzeitig, kein Schuss geht auf ein schon zerstörtes Ziel), Cleanup (Rundeneffekte enden). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand).",
       },
       {
         heading: "Schiffe",

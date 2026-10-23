@@ -44,11 +44,11 @@ export const en = {
       },
       {
         heading: "The board",
-        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. Ships in the Command lane can only be attacked once their Strike lane is empty.",
+        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked.",
       },
       {
         heading: "Resolution",
-        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Effects (commands take effect), Combat (all ships fire at once), Cleanup (round effects expire). Then everyone draws a ship and a command (up to 6 cards per hand).",
+        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Effects (commands take effect), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire). Then everyone draws a ship and a command (up to 6 cards per hand).",
       },
       {
         heading: "Ships",
