@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import type { TurnPlan } from "../../shared/protocol.ts";
+import { SHIPS, shipById } from "../../shared/cards.ts";
 import { Match } from "./match.ts";
 
 function startedMatch(): Match {
@@ -30,19 +32,74 @@ test("Befehlsziele müssen in der passenden Lane stehen", () => {
   expect(match.submit(0, plan)).toBe("target_wrong_lane");
 });
 
-test("Wer keine angriffsfähigen Schiffe mehr hat, verliert; danach gibt es keine Züge mehr", () => {
-  const match = startedMatch();
-  const [first, second] = match.players;
-  for (const player of [first!, second!]) {
-    player.shipHand.splice(0, player.shipHand.length);
-    while (player.shipDeck.draw() !== null);
+test("Die Starthand hat genau 1 Support- und 2 Kampfschiffe", () => {
+  for (let i = 0; i < 50; i++) {
+    for (const player of startedMatch().players) {
+      const classes = player.shipHand.map((card) => card.shipClass === "support");
+      expect(classes.sort()).toEqual([false, false, true]);
+      expect(player.shipDeck.size).toBe(SHIPS.length * 2 - 3);
+    }
   }
-  match.board.place(match.board.lane("player", "strike"), 0, { kind: "ship", id: "void_interceptor", shipClass: "fighter", hp: 3, atk: 3, shield: 0 });
-  const pass = { ship: null, command: null };
-  match.submit(0, pass);
-  match.submit(1, pass);
+});
+
+const interceptor = { kind: "ship" as const, id: "void_interceptor" as const, shipClass: "fighter" as const, hp: 3, atk: 3, shield: 0 };
+const pass: TurnPlan = { ship: null, command: null };
+const deploy: TurnPlan = { ship: { handIndex: 0, target: { lane: "strike", slotIndex: 0 } }, command: null };
+
+function playRound(match: Match, plans = [pass, pass]): void {
+  match.submit(0, plans[0]!);
+  match.submit(1, plans[1]!);
   match.resolveRound();
+}
+
+test("Wer am Rundenende kein angriffsfähiges Schiff mehr auf dem Feld hat, verliert, auch mit Schiffen auf der Hand; danach gibt es keine Züge mehr", () => {
+  const match = startedMatch();
+  for (const player of match.players) {
+    player.shipHand.splice(0, player.shipHand.length, { ...interceptor, hp: 10 });
+    player.commandHand.splice(0, player.commandHand.length);
+  }
+  playRound(match, [deploy, deploy]);
+  expect(match.winner).toBeNull();
+
+  match.board.lane("enemy", "strike").slots[0]!.clear();
+  match.players[1]!.shipHand.push(interceptor);
+  playRound(match);
   expect(match.view(0).result).toBe("won");
   expect(match.view(1).result).toBe("lost");
   expect(match.submit(0, pass)).toBe("match_over");
+});
+
+test("Wer in Runde 1 kein Schiff legt, hat verloren", () => {
+  const match = startedMatch();
+  match.players[0]!.shipHand.splice(0, match.players[0]!.shipHand.length, interceptor);
+  playRound(match, [deploy, pass]);
+  expect(match.view(0).result).toBe("won");
+  expect(match.view(1).result).toBe("lost");
+});
+
+test("Support-Schiffe allein halten die Flotte nicht am Leben", () => {
+  const match = startedMatch();
+  const [first, second] = match.players;
+  first!.shipHand.splice(0, first!.shipHand.length, { ...interceptor, hp: 10 });
+  second!.shipHand.splice(0, second!.shipHand.length, shipById("repair_drone"));
+  playRound(match, [deploy, deploy]);
+  expect(match.view(0).result).toBe("won");
+  expect(match.view(1).result).toBe("lost");
+});
+
+test("Legen beide in Runde 1 kein Schiff, endet das Match unentschieden", () => {
+  const match = startedMatch();
+  playRound(match);
+  expect(match.view(0).result).toBe("draw");
+});
+
+test("Sind beide Flotten in derselben Runde vernichtet, endet das Match unentschieden", () => {
+  const match = startedMatch();
+  for (const player of match.players) {
+    player.shipHand.splice(0, player.shipHand.length, { ...interceptor, hp: 1 });
+    player.commandHand.splice(0, player.commandHand.length);
+  }
+  playRound(match, [deploy, deploy]);
+  expect(match.view(0).result).toBe("draw");
+  expect(match.view(1).result).toBe("draw");
 });

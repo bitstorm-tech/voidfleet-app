@@ -14,7 +14,9 @@ import { resolveCleanup, resolveCombat, resolveEffects, type Commander, type Pla
 export type Seat = 0 | 1;
 
 const HAND_LIMIT = 6;
-const STARTING_SHIPS = 3;
+/** Die Starthand bekommt immer 1 Support- und 2 Kampfschiffe, jeweils zufällig aus dem Deck. */
+const STARTING_SUPPORT_SHIPS = 1;
+const STARTING_COMBAT_SHIPS = 2;
 const STARTING_COMMANDS = 3;
 
 const SEAT_SIDE: Record<Seat, Side> = { 0: "player", 1: "enemy" };
@@ -31,8 +33,6 @@ function mirrorEvent<T>(value: T): T {
   ) as T;
 }
 
-const hasOffensiveShip = (card: ShipCard) => card.atk > 0;
-
 class Player implements Commander {
   readonly shipDeck: Deck<ShipCard> = buildDefaultShipDeck();
   readonly commandDeck: Deck<CommandCard> = buildDefaultCommandDeck();
@@ -44,7 +44,10 @@ class Player implements Commander {
     readonly token: string,
     readonly seat: Seat,
   ) {
-    this.shipHand = this.shipDeck.drawMany(STARTING_SHIPS);
+    this.shipHand = [
+      ...drawManyWhere(this.shipDeck, STARTING_SUPPORT_SHIPS, isSupport),
+      ...drawManyWhere(this.shipDeck, STARTING_COMBAT_SHIPS, (card) => !isSupport(card)),
+    ];
     this.commandHand = this.commandDeck.drawMany(STARTING_COMMANDS);
   }
 
@@ -65,14 +68,16 @@ class Player implements Commander {
     };
   }
 
-  /** Kein angriffsfähiges Schiff mehr auf dem Feld, auf der Hand oder im Deck. */
+  /** Kein angriffsfähiges Schiff (ATK > 0) mehr auf dem Feld; wer gar keines gelegt hat, zählt genauso. */
   isDefeated(board: Board): boolean {
-    return (
-      !board.ships(this.side).some((slot) => hasOffensiveShip(slot.card!)) &&
-      !this.shipHand.some(hasOffensiveShip) &&
-      !this.shipDeck.some(hasOffensiveShip)
-    );
+    return !board.ships(this.side).some((slot) => slot.card!.atk > 0);
   }
+}
+
+const isSupport = (card: ShipCard) => card.shipClass === "support";
+
+function drawManyWhere(deck: Deck<ShipCard>, count: number, predicate: (card: ShipCard) => boolean): ShipCard[] {
+  return Array.from({ length: count }, () => deck.drawWhere(predicate)!);
 }
 
 /** Zieht eine Karte; true, wenn sie auf der Hand gelandet ist. */

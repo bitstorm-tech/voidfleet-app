@@ -31,14 +31,14 @@ interface CommandStats {
 }
 
 const SHIP_STATS = {
-  horizon_cruiser: { shipClass: "cruiser", hp: 5, atk: 2, shield: 0 },
-  iron_dreadnought: { shipClass: "battleship", hp: 8, atk: 2, shield: 2 },
-  plasma_frigate: { shipClass: "cruiser", hp: 4, atk: 3, shield: 0 },
-  repair_drone: { shipClass: "support", hp: 3, atk: 0, shield: 0 },
-  scrap_raider: { shipClass: "fighter", hp: 4, atk: 2, shield: 0 },
-  signal_booster: { shipClass: "support", hp: 3, atk: 0, shield: 0 },
-  titan_carrier: { shipClass: "battleship", hp: 7, atk: 1, shield: 0 },
-  void_interceptor: { shipClass: "fighter", hp: 3, atk: 3, shield: 0 },
+  horizon_cruiser: { shipClass: "cruiser", hp: 8, atk: 2, shield: 0 },
+  iron_dreadnought: { shipClass: "battleship", hp: 12, atk: 2, shield: 2 },
+  plasma_frigate: { shipClass: "cruiser", hp: 6, atk: 3, shield: 0 },
+  repair_drone: { shipClass: "support", hp: 5, atk: 0, shield: 0 },
+  scrap_raider: { shipClass: "fighter", hp: 6, atk: 2, shield: 0 },
+  signal_booster: { shipClass: "support", hp: 5, atk: 0, shield: 0 },
+  titan_carrier: { shipClass: "battleship", hp: 11, atk: 1, shield: 0 },
+  void_interceptor: { shipClass: "fighter", hp: 5, atk: 3, shield: 0 },
 } satisfies Record<string, ShipStats>;
 
 const COMMAND_STATS = {

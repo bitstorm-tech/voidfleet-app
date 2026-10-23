@@ -8,6 +8,8 @@ function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: 
   return board.place(board.lane(side, lane), slotIndex, shipById(id))!;
 }
 
+const hp = (id: ShipId) => shipById(id).hp;
+
 function commander(side: Side): Commander {
   return { side, drawExtra: () => ({ ships: 1, commands: 1 }) };
 }
@@ -29,6 +31,8 @@ describe("Combat", () => {
     const board = new Board();
     const interceptor = place(board, "player", "strike", 0, "void_interceptor");
     const enemy = place(board, "enemy", "strike", 0, "void_interceptor");
+    interceptor.hp = 3;
+    enemy.hp = 3;
     const events = round(board);
     expect(interceptor.isOccupied).toBe(false);
     expect(enemy.isOccupied).toBe(false);
@@ -41,8 +45,8 @@ describe("Combat", () => {
     const front = place(board, "enemy", "strike", 3, "titan_carrier");
     const back = place(board, "enemy", "command", 0, "repair_drone");
     round(board);
-    expect(front.hp).toBe(7 - 2);
-    expect(back.hp).toBe(3);
+    expect(front.hp).toBe(hp("titan_carrier") - 2);
+    expect(back.hp).toBe(hp("repair_drone"));
   });
 
   test("Jäger nimmt das niedrigste HP, Schlachtschiff das höchste ATK, Kreuzer das nächstgelegene", () => {
@@ -53,6 +57,7 @@ describe("Combat", () => {
     const weak = place(board, "enemy", "strike", 0, "repair_drone");
     const strong = place(board, "enemy", "strike", 2, "plasma_frigate");
     const tough = place(board, "enemy", "strike", 5, "titan_carrier");
+    weak.hp = 3;
     const attacks = round(board)
       .filter((event) => event.kind === "attack")
       .filter((event) => event.attacker.side === "player");
@@ -62,8 +67,8 @@ describe("Combat", () => {
       ["horizon_cruiser", "titan_carrier"],
     ]);
     expect(weak.isOccupied).toBe(false);
-    expect(strong.hp).toBe(4 - 2);
-    expect(tough.hp).toBe(7 - 2);
+    expect(strong.hp).toBe(hp("plasma_frigate") - 2);
+    expect(tough.hp).toBe(hp("titan_carrier") - 2);
   });
 
   test("Jeder Schuss wird mit den Werten des Ziels danach gemeldet", () => {
@@ -75,8 +80,8 @@ describe("Combat", () => {
       .filter((event) => event.kind === "attack")
       .filter((event) => event.attacker.side === "player");
     expect(shots.map((event) => [event.amount, event.after])).toEqual([
-      [2, { hp: 8, shield: 0 }],
-      [2, { hp: 6, shield: 0 }],
+      [2, { hp: hp("iron_dreadnought"), shield: 0 }],
+      [2, { hp: hp("iron_dreadnought") - 2, shield: 0 }],
     ]);
   });
 
@@ -85,7 +90,7 @@ describe("Combat", () => {
     place(board, "player", "strike", 0, "plasma_frigate");
     const dreadnought = place(board, "enemy", "strike", 0, "iron_dreadnought");
     round(board);
-    expect([dreadnought.shield, dreadnought.hp]).toEqual([0, 7]);
+    expect([dreadnought.shield, dreadnought.hp]).toEqual([0, hp("iron_dreadnought") - 1]);
   });
 
   test("Support greift nicht an", () => {
@@ -93,7 +98,7 @@ describe("Combat", () => {
     place(board, "player", "strike", 0, "repair_drone");
     const enemy = place(board, "enemy", "strike", 0, "repair_drone");
     expect(round(board).some((event) => event.kind === "attack")).toBe(false);
-    expect(enemy.hp).toBe(3);
+    expect(enemy.hp).toBe(hp("repair_drone"));
   });
 });
 
@@ -101,12 +106,13 @@ describe("Befehle", () => {
   test("Orbital Strike trifft das Schiff mit dem höchsten HP, bevor es feuern kann", () => {
     const board = new Board();
     const own = place(board, "player", "strike", 0, "repair_drone");
-    place(board, "enemy", "strike", 0, "void_interceptor");
+    place(board, "enemy", "strike", 0, "void_interceptor").hp = 3;
     const target = place(board, "enemy", "command", 0, "scrap_raider");
+    own.hp = 4;
     target.hp = 4;
     round(board, [play("player", "orbital_strike")]);
     expect(target.isOccupied).toBe(false);
-    expect(own.isOccupied).toBe(false);
+    expect(own.hp).toBe(4 - 3);
   });
 
   test("Emergency Shields fängt Orbital Strike ab, weil Buffs vor Angriffen wirken", () => {
@@ -114,7 +120,7 @@ describe("Befehle", () => {
     const own = place(board, "player", "strike", 0, "horizon_cruiser");
     const events: RoundEvent[] = [];
     resolveEffects(board, [play("enemy", "orbital_strike"), play("player", "emergency_shields", own)], events);
-    expect([own.hp, own.shield]).toEqual([5 - (4 - 3), 0]);
+    expect([own.hp, own.shield]).toEqual([hp("horizon_cruiser") - (4 - 3), 0]);
     expect(events.map((event) => event.kind)).toEqual(["effect", "effect"]);
   });
 
@@ -122,7 +128,7 @@ describe("Befehle", () => {
     const board = new Board();
     const own = place(board, "player", "strike", 0, "iron_dreadnought");
     round(board, [play("player", "emergency_shields", own)]);
-    expect([own.shield, own.hp]).toEqual([2, 8]);
+    expect([own.shield, own.hp]).toEqual([2, hp("iron_dreadnought")]);
   });
 
   test("EMP Blast legt das stärkste Schiff lahm, Targeting Jammer senkt die Strike-Lane", () => {
@@ -131,7 +137,7 @@ describe("Befehle", () => {
     const cruiser = place(board, "enemy", "strike", 1, "horizon_cruiser");
     const own = place(board, "player", "strike", 0, "titan_carrier");
     round(board, [play("player", "emp_blast"), play("player", "targeting_jammer")]);
-    expect(own.hp).toBe(7 - (2 - 1));
+    expect(own.hp).toBe(hp("titan_carrier") - (2 - 1));
     expect(frigate.disabled).toBe(false);
     expect(cruiser.attack).toBe(2);
   });
@@ -143,7 +149,7 @@ describe("Befehle", () => {
     round(board, [play("player", "intercept", back)]);
     expect(back.isOccupied).toBe(false);
     expect(board.lane("player", "strike").slots[2]!.card?.id).toBe("horizon_cruiser");
-    expect(enemy.hp).toBe(7 - 4);
+    expect(enemy.hp).toBe(hp("titan_carrier") - 4);
   });
 
   test("Recall zieht zurück und heilt; Overcharge kostet nach dem Kampf 2", () => {

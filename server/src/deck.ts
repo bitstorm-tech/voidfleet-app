@@ -20,6 +20,12 @@ export class Deck<T extends Card> {
     return this.cards.pop() ?? null;
   }
 
+  /** Zieht die oberste passende Karte; null, wenn keine passt. */
+  drawWhere(predicate: (card: T) => boolean): T | null {
+    const index = this.cards.findLastIndex(predicate);
+    return index === -1 ? null : this.cards.splice(index, 1)[0]!;
+  }
+
   drawMany(count: number): T[] {
     const result: T[] = [];
     for (let i = 0; i < count; i++) {
@@ -28,10 +34,6 @@ export class Deck<T extends Card> {
       result.push(card);
     }
     return result;
-  }
-
-  some(predicate: (card: T) => boolean): boolean {
-    return this.cards.some(predicate);
   }
 
   get size(): number {
