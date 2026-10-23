@@ -146,7 +146,6 @@ export class RoundPlayback {
     const ship = new ShipView(this.view.scene, shipById(cardId), false);
     pad.attachShip(ship);
     await ship.land();
-    await this.view.effects.pulse(this.centerOf(pad), SIDE_COLORS[side], 1.7, 450);
   }
 
   private async effect(event: Extract<RoundEvent, { kind: "effect" }>): Promise<void> {
