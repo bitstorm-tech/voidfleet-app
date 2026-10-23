@@ -1,11 +1,12 @@
 // Verbindet Server, Spielzustand, 3D-Szene und DOM-UI zur Zugplanung:
 // Der Spieler stellt seinen Zug zusammen (1 Schiff + 1 Befehl), das gewählte
 // Schiff steht als Geist auf dem Slot, der gewählte Befehl bleibt markiert.
+// Beim Platzieren folgt der Geist dem Zeiger über die freien Slots.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
-import { canTargetLane, needsTarget } from "../../shared/cards.ts";
+import { canTargetLane, needsTarget, type ShipCard } from "../../shared/cards.ts";
 import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, type Lane } from "../../shared/board.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
 import { Match } from "./game/match.ts";
@@ -87,7 +88,6 @@ export class MatchController {
       case "round":
         // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
         this.isResolving = true;
-        this.clearGhost();
         this.refreshSelectionVisuals();
         await this.playback.play(message.round, message.events);
         this.isResolving = false;
@@ -106,7 +106,6 @@ export class MatchController {
     if (this.match.plan.ship?.handIndex === index) {
       // Erneutes Antippen der geplanten Karte nimmt den Zug zurück.
       this.match.plan.ship = null;
-      this.clearGhost();
       this.selectShip(null);
     } else if (this.selectedShipIndex === index) {
       this.selectShip(null);
@@ -195,7 +194,6 @@ export class MatchController {
       handIndex: this.selectedShipIndex!,
       target: { lane: pad.slot.lane.type, slotIndex: pad.slot.index },
     };
-    this.showGhost();
     this.selectShip(null);
   }
 
@@ -207,13 +205,27 @@ export class MatchController {
     this.selectCommand(null);
   }
 
-  private showGhost(): void {
+  /** Stellt den Geist dorthin, wo er laut `ghostTarget` stehen soll; steht er schon richtig, bleibt er. */
+  private refreshGhost(): void {
+    const target = this.ghostTarget();
+    if (target !== null && target.pad === this.ghostPad && target.card === this.ghostPad.ship?.card) return;
     this.clearGhost();
+    if (target === null) return;
+    this.ghostPad = target.pad;
+    this.ghostPad.attachShip(new ShipView(this.view.scene, target.card, true));
+  }
+
+  /** Beim Platzieren zeigt der Geist den Slot unter dem Zeiger, sonst das eingeplante Schiff. */
+  private ghostTarget(): { pad: SlotPad; card: ShipCard } | null {
+    if (this.isResolving) return null;
+    const hovered = this.hoveredPad;
+    if (this.selectedShipIndex !== null && hovered !== null && this.isValidTarget(hovered)) {
+      return { pad: hovered, card: this.match.shipHand[this.selectedShipIndex]! };
+    }
     const ship = this.match.plan.ship;
-    if (ship === null) return;
+    if (ship === null) return null;
     const lane = this.match.board.lane("player", ship.target.lane);
-    this.ghostPad = this.view.padsByLane.get(lane)![ship.target.slotIndex]!;
-    this.ghostPad.attachShip(new ShipView(this.view.scene, this.match.shipHand[ship.handIndex]!, true));
+    return { pad: this.view.padsByLane.get(lane)![ship.target.slotIndex]!, card: this.match.shipHand[ship.handIndex]! };
   }
 
   private clearGhost(): void {
@@ -240,7 +252,7 @@ export class MatchController {
       }
       pad.ship?.setStats(slot.hp, slot.shield);
     }
-    this.showGhost();
+    this.refreshGhost();
   }
 
   // --- Darstellung ---
@@ -266,6 +278,7 @@ export class MatchController {
       if (valid) this.validTargetCount += 1;
     }
     this.view.setGridVisible(this.selectedShipIndex !== null);
+    this.refreshGhost();
     this.updateHud();
   }
 
@@ -319,5 +332,6 @@ export class MatchController {
     this.hoveredPad?.setHovered(false);
     this.hoveredPad = pad;
     this.hoveredPad?.setHovered(true);
+    this.refreshGhost();
   }
 }

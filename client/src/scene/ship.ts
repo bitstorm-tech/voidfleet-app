@@ -5,6 +5,8 @@
 
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
+import { Material } from "@babylonjs/core/Materials/material";
+import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -34,8 +36,11 @@ const LANDING_PITCH = Tools.ToRadians(-16);
 const HIT_FLASH_COLOR = new Color3(1, 0.93, 0.8);
 const HIT_FLASH_ALPHA = 0.75;
 const HIT_FLASH_DURATION = 220;
-/** Geist-Schiffe zeigen einen geplanten, noch nicht ausgeführten Zug. */
-const GHOST_VISIBILITY = 0.3;
+/** Geist-Schiffe zeigen einen geplanten, noch nicht ausgeführten Zug: halb durchsichtig. */
+const GHOST_ALPHA = 0.35;
+/** Hologramm-Schimmer in der Farbe der leuchtenden Slots, damit der Geist nicht wie ein echtes Schiff wirkt. */
+const GHOST_TINT = new Color3(0.2, 0.62, 0.95);
+const GHOST_ALBEDO = new Color3(0.45, 0.6, 0.75);
 
 const BAR_WIDTH = 2.56;
 const HP_COLOR_EMPTY = new Color3(0.93, 0.22, 0.18);
@@ -60,8 +65,10 @@ export class ShipView {
   private readonly hpFill: Mesh;
   private readonly shieldRow: TransformNode;
   private readonly shieldFill: Mesh;
-  /** Eigene Materialien (Balken); glTF-Materialien gehören dem geteilten Container. */
-  private readonly ownedMaterials: StandardMaterial[] = [];
+  /** Eigene Materialien (Balken, Geist-Kopien); glTF-Materialien gehören dem geteilten Container. */
+  private readonly ownedMaterials: Material[] = [];
+  /** Geist-Kopie je glTF-Material, damit Meshes mit gleichem Material auch die Kopie teilen. */
+  private readonly ghostMaterials = new Map<Material, Material>();
   private disposed = false;
 
   constructor(
@@ -140,7 +147,8 @@ export class ShipView {
   dispose(): void {
     this.disposed = true;
     this.root.dispose(false, false);
-    for (const material of this.ownedMaterials) material.dispose();
+    // Geist-Kopien klonen beim `clone()` auch ihre Texturen; die gehören dann ebenfalls diesem Schiff.
+    for (const material of this.ownedMaterials) material.dispose(false, true);
   }
 
   private async addModel(url: string): Promise<void> {
@@ -162,7 +170,33 @@ export class ShipView {
 
   private prepareMesh(mesh: AbstractMesh): void {
     mesh.isPickable = false;
-    if (this.isGhost) mesh.visibility = GHOST_VISIBILITY;
+    if (this.isGhost && mesh.material) mesh.material = this.ghostMaterial(mesh.material);
+  }
+
+  /**
+   * Der glTF-Loader stellt undurchsichtige Materialien fest auf OPAQUE, `visibility` allein wirkt
+   * dann nicht. Der Geist bekommt deshalb geblendete Kopien; der Tiefen-Vorlauf zeigt nur die
+   * vorderste Hülle, statt Innenflächen durchscheinen zu lassen. Spiegelungen der Umgebung
+   * würden PBR-Material sonst unabhängig vom Alpha voll deckend zeichnen.
+   */
+  private ghostMaterial(source: Material): Material {
+    let ghost = this.ghostMaterials.get(source);
+    if (!ghost) {
+      ghost = source.clone(`${source.name}-ghost`)!;
+      ghost.transparencyMode = Material.MATERIAL_ALPHABLEND;
+      ghost.alpha = GHOST_ALPHA;
+      ghost.needDepthPrePass = true;
+      if (ghost instanceof PBRMaterial) {
+        ghost.useRadianceOverAlpha = false;
+        ghost.useSpecularOverAlpha = false;
+        ghost.albedoColor = GHOST_ALBEDO;
+        ghost.emissiveColor = GHOST_TINT;
+        ghost.emissiveIntensity = 1;
+      }
+      this.ghostMaterials.set(source, ghost);
+      this.ownedMaterials.push(ghost);
+    }
+    return ghost;
   }
 
   /** Alle Balken sind alpha-geblendet, damit `alphaIndex` die Reihenfolge Spur -> Füllung bestimmt. */
