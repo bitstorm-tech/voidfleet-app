@@ -1,47 +1,35 @@
 // Ein Schiff auf dem Brett. Die Nase zeigt nach lokal +Z, die Ausrichtung
 // bestimmt allein der Elternknoten (der Anker des SlotPads).
-// Handgebaute Modelle pro Karten-ID; Schiffe ohne Modell nutzen den
-// prozeduralen Kitbash-Fallback aus einfachen Primitiven.
+// Die Modelle kommen als glTF aus `tools/ships/` (Blender); jede Datei wird
+// einmal geladen und pro Schiff instanziiert.
 
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
-import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
-import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Tools } from "@babylonjs/core/Misc/tools";
 import type { Scene } from "@babylonjs/core/scene";
 import type { ShipCard } from "../../../shared/cards.ts";
-import { cardColor, lightened, type Rgb } from "../data/cardColors.ts";
-import voidInterceptorUrl from "../../assets/models/void_interceptor_low_poly.glb";
+import { shipModel } from "../data/shipModels.ts";
 import { easeInCubic, easeOutCubic, tween } from "./tween.ts";
 
-const MODEL_URLS: Record<string, string> = {
-  void_interceptor: voidInterceptorUrl,
-};
 /** Schiffe sind für den Hangar modelliert und auf dem Brett zu groß. */
 const BOARD_SCALE = 0.6;
-const MODEL_SCALE = 0.55;
+const MODEL_SCALE = 0.5;
+/** Die Balken schweben mindestens so hoch, bei hohen Aufbauten knapp über dem Modell. */
+const BAR_MIN_HEIGHT = 1.15;
+const BAR_MARGIN = 0.3;
 /** Deploy: Das Schiff kommt aus dieser Höhe über dem Pad herunter und richtet sich beim Abbremsen auf. */
 const LANDING_HEIGHT = 7;
 const LANDING_DURATION = 950;
 const LANDING_PITCH = Tools.ToRadians(-16);
 /** Geist-Schiffe zeigen einen geplanten, noch nicht ausgeführten Zug. */
 const GHOST_VISIBILITY = 0.3;
-
-/** Zylinder stehen aufrecht; um die x-Achse gekippt liegen sie entlang der Längsachse (z). */
-const ALONG_Z = new Vector3(Tools.ToRadians(90), 0, 0);
-const ALONG_X = new Vector3(0, 0, Tools.ToRadians(90));
-/** Leichte Schräge der Tragflächen. */
-const WING_CANT = new Vector3(0, 0, Tools.ToRadians(12));
-const FIN_CANT_Z = new Vector3(0, 0, Tools.ToRadians(18));
-const FIN_CANT_X = new Vector3(Tools.ToRadians(18), 0, 0);
 
 const BAR_WIDTH = 2.56;
 const HP_COLOR_EMPTY = new Color3(0.93, 0.22, 0.18);
@@ -66,7 +54,7 @@ export class ShipView {
   private readonly hpFill: Mesh;
   private readonly shieldRow: TransformNode;
   private readonly shieldFill: Mesh;
-  /** Eigene Materialien (Balken, Kitbash); glTF-Materialien gehören dem geteilten Container. */
+  /** Eigene Materialien (Balken); glTF-Materialien gehören dem geteilten Container. */
   private readonly ownedMaterials: StandardMaterial[] = [];
   private disposed = false;
 
@@ -83,7 +71,7 @@ export class ShipView {
 
     this.statusBars = new TransformNode("status", scene);
     this.statusBars.parent = this.root;
-    this.statusBars.position.y = 1.15;
+    this.statusBars.position.y = BAR_MIN_HEIGHT;
     this.statusBars.setEnabled(!isGhost);
 
     this.createBar("hp-track", 2.72, 0.3, new Color3(0.13, 0.15, 0.22), 0.92, this.statusBars, 1);
@@ -95,12 +83,7 @@ export class ShipView {
     this.createBar("shield-track", 2.72, 0.21, new Color3(0.13, 0.15, 0.22), 0.92, this.shieldRow, 1);
     this.shieldFill = this.createBar("shield-fill", BAR_WIDTH, 0.12, new Color3(0.36, 0.72, 1), 0.999, this.shieldRow, 2);
 
-    const modelUrl = MODEL_URLS[card.id];
-    if (modelUrl) {
-      void this.addImportedModel(modelUrl);
-    } else {
-      this.buildKitbash();
-    }
+    void this.addModel(shipModel(card));
     this.setStats(card.hp, card.shield);
   }
 
@@ -149,21 +132,24 @@ export class ShipView {
     for (const material of this.ownedMaterials) material.dispose();
   }
 
-  private async addImportedModel(url: string): Promise<void> {
+  private async addModel(url: string): Promise<void> {
     const container = await loadModel(url, this.scene);
     if (this.disposed) return;
     const entries = container.instantiateModelsToScene((name) => `${this.card.id}-${name}`, false);
     for (const node of entries.rootNodes) {
       node.parent = this.modelRoot;
-      if (node instanceof TransformNode) {
-        node.scaling.scaleInPlace(MODEL_SCALE);
-      }
-      for (const mesh of node.getChildMeshes()) this.applyGhost(mesh);
-      if (node instanceof AbstractMesh) this.applyGhost(node);
+      if (node instanceof TransformNode) node.scaling.scaleInPlace(MODEL_SCALE);
+      for (const mesh of node.getChildMeshes()) this.prepareMesh(mesh);
+      if (node instanceof AbstractMesh) this.prepareMesh(node);
     }
+    // Höchsten Punkt des Modells in den Raum des Schiffs zurückrechnen, damit die Balken frei bleiben.
+    this.root.computeWorldMatrix(true);
+    const { max } = this.modelRoot.getHierarchyBoundingVectors();
+    const top = Vector3.TransformCoordinates(max, this.root.getWorldMatrix().clone().invert()).y;
+    this.statusBars.position.y = Math.max(BAR_MIN_HEIGHT, top + BAR_MARGIN);
   }
 
-  private applyGhost(mesh: AbstractMesh): void {
+  private prepareMesh(mesh: AbstractMesh): void {
     mesh.isPickable = false;
     if (this.isGhost) mesh.visibility = GHOST_VISIBILITY;
   }
@@ -191,96 +177,6 @@ export class ShipView {
     bar.setEnabled(fillRatio > 0);
     bar.scaling.x = fillRatio;
     bar.position.x = (-BAR_WIDTH * (1 - fillRatio)) / 2;
-  }
-
-  // --- Kitbash-Fallback ---
-
-  private buildKitbash(): void {
-    const color = cardColor(this.card);
-    const hull = this.makeMaterial("hull", color);
-    const accent = this.makeMaterial("accent", lightened(color, 0.35));
-    switch (this.card.shipClass) {
-      case "fighter":
-        this.buildFighter(hull, accent);
-        break;
-      case "cruiser":
-        this.buildCruiser(hull, accent);
-        break;
-      case "support":
-        this.buildSupport(hull, accent);
-        break;
-      case "battleship":
-        this.buildBattleship(hull, accent);
-        break;
-    }
-  }
-
-  private makeMaterial(name: string, color: Rgb): StandardMaterial {
-    const material = new StandardMaterial(`${this.card.id}-${name}`, this.scene);
-    material.diffuseColor = new Color3(...color);
-    material.specularColor = new Color3(0.25, 0.25, 0.25);
-    this.ownedMaterials.push(material);
-    return material;
-  }
-
-  private addBox(size: Vector3, position: Vector3, rotation: Vector3, material: StandardMaterial): void {
-    const mesh = CreateBox("part", { width: size.x, height: size.y, depth: size.z }, this.scene);
-    this.addPart(mesh, position, rotation, material);
-  }
-
-  private addCylinder(topRadius: number, bottomRadius: number, height: number, position: Vector3, rotation: Vector3, material: StandardMaterial): void {
-    const mesh = CreateCylinder("part", { diameterTop: topRadius * 2, diameterBottom: bottomRadius * 2, height }, this.scene);
-    this.addPart(mesh, position, rotation, material);
-  }
-
-  private addSphere(radius: number, position: Vector3, material: StandardMaterial): void {
-    const mesh = CreateSphere("part", { diameter: radius * 2 }, this.scene);
-    this.addPart(mesh, position, Vector3.Zero(), material);
-  }
-
-  private addPart(mesh: Mesh, position: Vector3, rotation: Vector3, material: StandardMaterial): void {
-    mesh.position.copyFrom(position);
-    mesh.rotation.copyFrom(rotation);
-    mesh.material = material;
-    mesh.parent = this.modelRoot;
-    this.applyGhost(mesh);
-  }
-
-  private buildFighter(hull: StandardMaterial, accent: StandardMaterial): void {
-    this.addBox(new Vector3(0.38, 0.18, 2.2), new Vector3(0, 0, 0.1), Vector3.Zero(), hull);
-    this.addBox(new Vector3(1.45, 0.06, 0.92), new Vector3(0, -0.06, -0.1), WING_CANT, hull);
-    this.addBox(new Vector3(0.22, 0.16, 0.78), new Vector3(-0.48, 0, -0.82), Vector3.Zero(), accent);
-    this.addBox(new Vector3(0.22, 0.16, 0.78), new Vector3(0.48, 0, -0.82), Vector3.Zero(), accent);
-    this.addCylinder(0.16, 0.08, 0.44, new Vector3(0, 0, 1.18), ALONG_Z, accent);
-  }
-
-  private buildCruiser(hull: StandardMaterial, accent: StandardMaterial): void {
-    this.addBox(new Vector3(0.82, 0.28, 2.9), Vector3.Zero(), Vector3.Zero(), hull);
-    this.addBox(new Vector3(1.85, 0.12, 1.08), new Vector3(0, -0.08, -0.18), Vector3.Zero(), hull);
-    this.addBox(new Vector3(0.5, 0.22, 0.7), new Vector3(0, 0.26, -0.18), Vector3.Zero(), accent);
-    this.addBox(new Vector3(0.22, 0.16, 1.5), new Vector3(-0.78, 0, -0.3), Vector3.Zero(), accent);
-    this.addBox(new Vector3(0.22, 0.16, 1.5), new Vector3(0.78, 0, -0.3), Vector3.Zero(), accent);
-    this.addCylinder(0.18, 0.18, 0.58, new Vector3(0, 0, 1.56), ALONG_Z, accent);
-  }
-
-  private buildBattleship(hull: StandardMaterial, accent: StandardMaterial): void {
-    this.addBox(new Vector3(1.02, 0.34, 3.5), new Vector3(0, 0, -0.1), Vector3.Zero(), hull);
-    this.addBox(new Vector3(2.18, 0.18, 1.44), new Vector3(0, -0.1, -0.36), Vector3.Zero(), hull);
-    this.addBox(new Vector3(0.62, 0.28, 1.0), new Vector3(0, 0.28, -0.22), Vector3.Zero(), accent);
-    this.addBox(new Vector3(0.22, 0.3, 0.82), new Vector3(-0.88, 0.14, 0.28), Vector3.Zero(), accent);
-    this.addBox(new Vector3(0.22, 0.3, 0.82), new Vector3(0.88, 0.14, 0.28), Vector3.Zero(), accent);
-    this.addBox(new Vector3(0.18, 0.18, 0.84), new Vector3(-0.28, 0.34, 0.58), Vector3.Zero(), accent);
-    this.addBox(new Vector3(0.18, 0.18, 0.84), new Vector3(0.28, 0.34, 0.58), Vector3.Zero(), accent);
-    this.addCylinder(0.24, 0.22, 0.7, new Vector3(0, 0, 1.86), ALONG_Z, accent);
-  }
-
-  private buildSupport(hull: StandardMaterial, accent: StandardMaterial): void {
-    this.addSphere(0.42, Vector3.Zero(), hull);
-    this.addBox(new Vector3(1.8, 0.08, 0.3), Vector3.Zero(), FIN_CANT_Z, accent);
-    this.addBox(new Vector3(0.3, 0.08, 1.8), Vector3.Zero(), FIN_CANT_X, accent);
-    this.addBox(new Vector3(0.24, 0.18, 1.26), new Vector3(-0.62, 0, 0), Vector3.Zero(), hull);
-    this.addBox(new Vector3(0.24, 0.18, 1.26), new Vector3(0.62, 0, 0), Vector3.Zero(), hull);
-    this.addCylinder(0.12, 0.12, 1.5, Vector3.Zero(), ALONG_X, accent);
   }
 }
 
