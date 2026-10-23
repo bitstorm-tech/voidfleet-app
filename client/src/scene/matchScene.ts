@@ -11,6 +11,7 @@ import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
+import { HDRCubeTexture } from "@babylonjs/core/Materials/Textures/hdrCubeTexture";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
@@ -19,6 +20,7 @@ import { Tools } from "@babylonjs/core/Misc/tools";
 import { Scene } from "@babylonjs/core/scene";
 import "@babylonjs/core/Culling/ray";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
+import environmentUrl from "../../assets/env/space.hdr";
 import type { Board, Lane, LaneType, Side } from "../../../shared/board.ts";
 import { t, upper } from "../i18n/index.ts";
 import { Background } from "./background.ts";
@@ -36,6 +38,9 @@ const LANE_X: Record<Side, Record<Lane["type"], number>> = {
 };
 /** Slot 0 liegt am hinteren Ende der Lane (weit von der Kamera). */
 const SLOT_Z = [4.75, 2.85, 0.95, -0.95, -2.85, -4.75];
+/** Die HDR-Umgebung (tools/ships/env.py) liefert Reflexionen und indirektes Licht der PBR-Schiffe. */
+const ENVIRONMENT_SIZE = 128;
+const ENVIRONMENT_INTENSITY = 0.8;
 const LABEL_COLORS: Record<Side, string> = {
   player: "rgba(140, 217, 255, 0.7)",
   enemy: "rgba(255, 140, 128, 0.7)",
@@ -92,6 +97,7 @@ export class MatchScene {
     this.scene.skipPointerUpPicking = true;
 
     this.createLights();
+    this.createEnvironment();
     // Nur die Rahmen gültiger Ziele bekommen Bloom, alles andere bleibt scharf.
     this.glow = new GlowLayer("glow", this.scene, { blurKernelSize: 48 });
     this.glow.intensity = 0.7;
@@ -133,6 +139,11 @@ export class MatchScene {
     rim.range = 22;
     const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), this.scene);
     ambient.intensity = 0.25;
+  }
+
+  private createEnvironment(): void {
+    this.scene.environmentTexture = new HDRCubeTexture(environmentUrl, this.scene, ENVIRONMENT_SIZE, false, true, false, true);
+    this.scene.environmentIntensity = ENVIRONMENT_INTENSITY;
   }
 
   private createBoard(board: Board): void {
