@@ -8,7 +8,7 @@ import { Board } from "../../shared/board.ts";
 import { SHIPS } from "../../shared/cards.ts";
 import { HIT_NAMES, type HitName } from "../src/scene/effects.ts";
 import { MatchScene } from "../src/scene/matchScene.ts";
-import { ShipView } from "../src/scene/ship.ts";
+import { loadShipModels, ShipView } from "../src/scene/ship.ts";
 import type { SlotPad } from "../src/scene/slotPad.ts";
 import { wait } from "../src/scene/tween.ts";
 
@@ -21,6 +21,7 @@ declare global {
 
 const canvas = document.getElementById("render-canvas") as HTMLCanvasElement;
 const view = new MatchScene(canvas, new Board());
+await Promise.all(loadShipModels(view.scene));
 const params = new URLSearchParams(location.search);
 const slow = Number(params.get("slow") ?? 1);
 const forcedHit = HIT_NAMES.find((name) => name === params.get("hit"));

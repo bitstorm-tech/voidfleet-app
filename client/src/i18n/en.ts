@@ -60,6 +60,10 @@ export const en = {
   dialog: {
     close: "Close",
   },
+  loading: {
+    assets: (percent: number) => `Loading assets … ${percent} %`,
+    failed: "Loading failed — reload the page.",
+  },
   status: {
     disconnected: "Lost connection to the server — reload the page.",
     connecting: "Connecting to the server …",

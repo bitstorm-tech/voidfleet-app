@@ -48,6 +48,10 @@ export const de: Messages = {
   dialog: {
     close: "Schließen",
   },
+  loading: {
+    assets: (percent) => `Lade Assets … ${percent} %`,
+    failed: "Laden fehlgeschlagen — lade die Seite neu.",
+  },
   status: {
     disconnected: "Verbindung zum Server verloren — Seite neu laden.",
     connecting: "Verbinde mit dem Server …",

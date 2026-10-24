@@ -1,7 +1,7 @@
 // Ein Schiff auf dem Brett. Die Nase zeigt nach lokal +Z, die Ausrichtung
 // bestimmt allein der Elternknoten (der Anker des SlotPads).
-// Die Modelle kommen als glTF aus `tools/ships/` (Blender); jede Datei wird
-// einmal geladen und pro Schiff instanziiert. Zu jedem Modell gehört ein Wrack
+// Die Modelle kommen als glTF aus `tools/ships/` (Blender); alle Dateien werden
+// beim Start geladen (`loadShipModels`) und pro Schiff instanziiert. Zu jedem Modell gehört ein Wrack
 // aus Bruchstücken, das bei der Zerstörung an seine Stelle tritt (`destruction.ts`).
 
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
@@ -20,7 +20,7 @@ import { Tools } from "@babylonjs/core/Misc/tools";
 import type { Scene } from "@babylonjs/core/scene";
 // Registriert `renderOverlay` auf Mesh: zeichnet das Modell in einer Farbe darüber (Treffer-Blitz).
 import "@babylonjs/core/Rendering/outlineRenderer";
-import type { ShipCard } from "../../../shared/cards.ts";
+import { SHIPS, type ShipCard } from "../../../shared/cards.ts";
 import { color3 } from "../data/palette.ts";
 import { shipModel, wreckModel } from "../data/shipModels.ts";
 import { randomInCone } from "./effects.ts";
@@ -65,18 +65,15 @@ const HP_COLOR_HALF = color3("hpHalf");
 const HP_COLOR_FULL = color3("hpFull");
 const BAR_TRACK_COLOR = new Color3(0.13, 0.15, 0.22);
 
-const containerCache = new Map<string, Promise<AssetContainer>>();
+const containers = new Map<string, AssetContainer>();
 
-function loadModel(url: string, scene: Scene): Promise<AssetContainer> {
-  let promise = containerCache.get(url);
-  if (!promise) {
-    promise = LoadAssetContainerAsync(url, scene).then((container) => {
-      for (const material of container.materials) if (material instanceof PBRMaterial) material.maxSimultaneousLights = MAX_LIGHTS;
-      return container;
-    });
-    containerCache.set(url, promise);
-  }
-  return promise;
+/** Lädt Modell und Wrack aller Schiffe; erst danach lassen sich `ShipView`s erzeugen. */
+export function loadShipModels(scene: Scene): Promise<void>[] {
+  return SHIPS.flatMap((card) => [shipModel(card), wreckModel(card)]).map(async (url) => {
+    const container = await LoadAssetContainerAsync(url, scene);
+    for (const material of container.materials) if (material instanceof PBRMaterial) material.maxSimultaneousLights = MAX_LIGHTS;
+    containers.set(url, container);
+  });
 }
 
 /**
@@ -103,7 +100,6 @@ export class ShipView {
   private readonly ghostMaterials = new Map<Material, Material>();
   /** Zu welcher Seite das Schiff im Todeskampf krängt. */
   private readonly listSide = Math.random() < 0.5 ? 1 : -1;
-  private disposed = false;
 
   constructor(
     private readonly scene: Scene,
@@ -130,9 +126,7 @@ export class ShipView {
     this.createBar("shield-track", 2.72, 0.21, BAR_TRACK_COLOR, 0.92, this.shieldRow, 1);
     this.shieldFill = this.createBar("shield-fill", BAR_WIDTH, 0.12, color3("shield"), 0.999, this.shieldRow, 2);
 
-    void this.addModel(shipModel(card));
-    // Das Wrack wird schon jetzt geholt, damit es bei der Zerstörung ohne Wartezeit bereitliegt.
-    if (!isGhost) void this.loadWreck();
+    this.addModel();
     this.setStats(card.hp, card.shield);
   }
 
@@ -244,15 +238,10 @@ export class ShipView {
     this.modelRoot.rotation.set(DISTRESS_PITCH * amount ** 2, 0, this.listSide * DISTRESS_ROLL * amount ** 3);
   }
 
-  loadWreck(): Promise<AssetContainer> {
-    return loadModel(wreckModel(this.card), this.scene);
-  }
-
   /** Tauscht das Modell gegen die Bruchstücke, die exakt an seiner Stelle liegen (auch in der Krängung). */
-  async breakApart(): Promise<Wreck> {
-    const container = await this.loadWreck();
+  breakApart(): Wreck {
     for (const node of this.modelRoot.getChildren()) node.dispose();
-    const entries = container.instantiateModelsToScene((name) => `${this.card.id}-wreck-${name}`, true);
+    const entries = containers.get(wreckModel(this.card))!.instantiateModelsToScene((name) => `${this.card.id}-wreck-${name}`, true);
     const root = entries.rootNodes[0] as TransformNode;
     root.parent = this.modelRoot;
     root.scaling.scaleInPlace(MODEL_SCALE);
@@ -266,16 +255,13 @@ export class ShipView {
   }
 
   dispose(): void {
-    this.disposed = true;
     this.root.dispose(false, false);
     // Geist-Kopien klonen beim `clone()` auch ihre Texturen; die gehören dann ebenfalls diesem Schiff.
     for (const material of this.ownedMaterials) material.dispose(false, true);
   }
 
-  private async addModel(url: string): Promise<void> {
-    const container = await loadModel(url, this.scene);
-    if (this.disposed) return;
-    const entries = container.instantiateModelsToScene((name) => `${this.card.id}-${name}`, false);
+  private addModel(): void {
+    const entries = containers.get(shipModel(this.card))!.instantiateModelsToScene((name) => `${this.card.id}-${name}`, false);
     for (const node of entries.rootNodes) {
       node.parent = this.modelRoot;
       if (node instanceof TransformNode) node.scaling.scaleInPlace(MODEL_SCALE);

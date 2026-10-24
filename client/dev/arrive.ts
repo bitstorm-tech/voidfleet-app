@@ -5,7 +5,7 @@
 import { Board, type LaneType, type Side } from "../../shared/board.ts";
 import { SHIPS } from "../../shared/cards.ts";
 import { MatchScene } from "../src/scene/matchScene.ts";
-import { ShipView } from "../src/scene/ship.ts";
+import { loadShipModels, ShipView } from "../src/scene/ship.ts";
 import { wait } from "../src/scene/tween.ts";
 
 declare global {
@@ -17,6 +17,7 @@ declare global {
 
 const canvas = document.getElementById("render-canvas") as HTMLCanvasElement;
 const view = new MatchScene(canvas, new Board());
+await Promise.all(loadShipModels(view.scene));
 const slow = Number(new URLSearchParams(location.search).get("slow") ?? 1);
 const realDelta = view.engine.getDeltaTime.bind(view.engine);
 view.engine.getDeltaTime = () => realDelta() / slow;

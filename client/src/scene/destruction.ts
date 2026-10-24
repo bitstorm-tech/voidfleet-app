@@ -93,12 +93,10 @@ interface Body {
  */
 export async function destroyShip(ship: ShipView, view: MatchScene): Promise<void> {
   const profile = PROFILES[ship.card.id];
-  const wreckReady = ship.loadWreck();
   ship.hideStatus();
   await agony(ship, profile, view);
-  await wreckReady;
   const center = ship.center;
-  const wreck = await ship.breakApart();
+  const wreck = ship.breakApart();
   view.shake(profile.shake);
   void scatter(wreck, center, profile, ship, view);
   await view.effects.detonate(center, profile.energy, profile.size, profile.style);

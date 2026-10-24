@@ -12,12 +12,14 @@ const OVERSCAN = 1.06;
 
 export class Background {
   private readonly layer: Layer;
+  readonly texture: Texture;
 
   constructor(private readonly scene: Scene) {
     this.layer = new Layer("background", null, scene, true);
-    this.layer.texture = new Texture(backgroundUrl, scene, true, false, Texture.BILINEAR_SAMPLINGMODE, () => this.fit());
-    this.layer.texture.wrapU = Texture.CLAMP_ADDRESSMODE;
-    this.layer.texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+    this.texture = new Texture(backgroundUrl, scene, true, false, Texture.BILINEAR_SAMPLINGMODE, () => this.fit());
+    this.texture.wrapU = Texture.CLAMP_ADDRESSMODE;
+    this.texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+    this.layer.texture = this.texture;
     scene.getEngine().onResizeObservable.add(() => this.fit());
   }
 
@@ -28,9 +30,7 @@ export class Background {
   }
 
   private fit(): void {
-    const texture = this.layer.texture;
-    if (!texture) return;
-    const size = texture.getSize();
+    const size = this.texture.getSize();
     if (size.width === 0 || size.height === 0) return;
     const engine = this.scene.getEngine();
     const viewportAspect = engine.getRenderWidth() / engine.getRenderHeight();

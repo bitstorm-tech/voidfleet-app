@@ -14,6 +14,7 @@ import type { ServerMessage, SlotTarget } from "../../shared/protocol.ts";
 import { Match } from "./game/match.ts";
 import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
+import { preloadAssets } from "./preload.ts";
 import { RoundPlayback } from "./roundPlayback.ts";
 import { MatchScene, pickedPad } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
@@ -21,6 +22,7 @@ import type { SlotPad } from "./scene/slotPad.ts";
 import { FloatingTexts } from "./ui/floatingText.ts";
 import { HandView } from "./ui/hand.ts";
 import { Hud } from "./ui/hud.ts";
+import { LoadingScreen } from "./ui/loadingScreen.ts";
 import { ResultScreen } from "./ui/resultScreen.ts";
 import { RulesDialog } from "./ui/rulesDialog.ts";
 import { SettingsDialog } from "./ui/settingsDialog.ts";
@@ -34,8 +36,11 @@ export class MatchController {
   private readonly resultScreen: ResultScreen;
   private readonly connection: ServerConnection;
   private isConnected = true;
-  /** Server-Nachrichten werden der Reihe nach verarbeitet; eine Runde wartet, bis ihre Animation fertig ist. */
-  private inbox: Promise<void> = Promise.resolve();
+  /**
+   * Server-Nachrichten werden der Reihe nach verarbeitet; eine Runde wartet, bis ihre Animation fertig ist.
+   * Die erste wartet, bis alle Assets geladen sind.
+   */
+  private inbox: Promise<void>;
   private isResolving = false;
 
   private selectedShipIndex: number | null = null;
@@ -58,6 +63,14 @@ export class MatchController {
       onShipCardClick: (index) => this.onShipCardClick(index),
       onCommandCardClick: (index) => this.onCommandCardClick(index),
     });
+    const loading = new LoadingScreen(ui);
+    this.inbox = preloadAssets(this.view, (fraction) => loading.setProgress(fraction)).then(
+      () => loading.hide(),
+      (error) => {
+        loading.fail();
+        throw error;
+      },
+    );
 
     this.hud.submitButton.addEventListener("click", () => this.submit());
     this.hud.skipButton.addEventListener("click", () => this.playback.skip());

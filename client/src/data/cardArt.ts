@@ -49,3 +49,16 @@ const ART: Record<Card["id"], string> = {
 export function cardArt(card: Card): string {
   return ART[card.id];
 }
+
+/** Die vorgeladenen Bilder bleiben referenziert, damit der Browser sie nicht wieder verwirft. */
+const images: HTMLImageElement[] = [];
+
+/** Lädt und dekodiert alle Illustrationen, damit Karten ohne Verzögerung erscheinen. */
+export function loadCardArt(): Promise<void>[] {
+  return Object.values(ART).map((url) => {
+    const image = new Image();
+    image.src = url;
+    images.push(image);
+    return image.decode();
+  });
+}

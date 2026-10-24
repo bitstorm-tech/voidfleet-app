@@ -11,6 +11,8 @@ import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
+import { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
+import { Effect } from "@babylonjs/core/Materials/effect";
 import { HDRCubeTexture } from "@babylonjs/core/Materials/Textures/hdrCubeTexture";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -112,6 +114,9 @@ export class MatchScene {
     private readonly board: Board,
   ) {
     registerBuiltInLoaders();
+    // Übersetzte Shader bleiben, auch wenn ihr letztes Material entsorgt wird (Effekte, Wracks, Geister):
+    // Die Generalprobe beim Laden übersetzt sie alle einmal (`rehearsal.ts`).
+    Effect.PersistentMode = true;
     this.engine = new Engine(canvas, true, { adaptToDeviceRatio: true });
     this.scene = new Scene(this.engine);
     this.scene.clearColor = Color4.FromColor3(color3("background"), 1);
@@ -154,6 +159,11 @@ export class MatchScene {
   /** Ob die letzte Geste mit gedrückter Maustaste die Kamera verschoben hat statt zu klicken. */
   get wasPanned(): boolean {
     return this.panned;
+  }
+
+  /** Wartet, bis Hintergrundbild und HDR-Umgebung geladen sind. */
+  texturesReady(): Promise<void> {
+    return new Promise((resolve) => BaseTexture.WhenAllReady([this.background.texture, this.scene.environmentTexture!], resolve));
   }
 
   pad(side: Side, lane: LaneType, slotIndex: number): SlotPad {
