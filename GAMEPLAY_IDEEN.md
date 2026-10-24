@@ -8,7 +8,7 @@ Im Code sehe ich dafür einige konkrete Ansatzpunkte. Meine Prioritäten wären:
 
 1. **Die vorhandenen Karten zu echten taktischen Werkzeugen machen.**
 
-   Die beschriebenen Schiffsfähigkeiten sind aktuell noch nicht umgesetzt; auch Sensorscan bleibt wirkungslos. Reparaturdrohne, Signalverstärker und Träger verlieren dadurch einen großen Teil ihrer Identität. Das erklärt aus meiner Sicht bereits einiges vom eintönigen Spielgefühl. Siehe [aktueller Serverstatus](server/AGENTS.md).
+   Die beschriebenen Schiffsfähigkeiten sind aktuell noch nicht umgesetzt. Reparaturdrohne, Signalverstärker und Träger verlieren dadurch einen großen Teil ihrer Identität. Das erklärt aus meiner Sicht bereits einiges vom eintönigen Spielgefühl. Siehe [aktueller Serverstatus](server/AGENTS.md).
 
    Außerdem sollten Befehle auf das Schiff anwendbar sein, das man gerade ausspielt. Die [Zugprüfung](server/src/match.ts) verhindert das momentan. **Schiff und Befehl könnten dadurch viel stärker als gemeinsamer Zug funktionieren:** einen Angreifer sofort überladen, eine wichtige Verstärkung abschirmen oder eine Formation gezielt ergänzen.
 

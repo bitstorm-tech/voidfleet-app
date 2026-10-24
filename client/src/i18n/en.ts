@@ -120,7 +120,7 @@ export const en = {
         heading: "Commands",
         paragraphs: [
           "Commands are played once and resolved in the Effects phase, before combat. Some pick a target when you plan them (one of your ships, or a slot on the enemy side for the Torpedo), the others choose their target automatically. Round effects like ATK bonuses, extra shield and EMP end in Cleanup.",
-          "Commands resolve by type, in this order. Your command deck holds one copy of each, except Torpedo and Barrage with two. Sensor Sweep has no effect yet.",
+          "Commands resolve by type, in this order. Your command deck holds one copy of each, except Torpedo and Barrage with two.",
         ],
       },
       hand: {
@@ -328,7 +328,6 @@ export const en = {
     power_surge: { name: "Power Surge", effect: "All allied ships in the Strike Line gain +1 ATK this round." },
     recall: { name: "Recall", effect: "A chosen Strike Line ship retreats to a free Command Line slot of your choice. Heal 2 HP." },
     scavenge: { name: "Scavenge", effect: "Draw 1 extra ship and 1 extra command." },
-    sensor_sweep: { name: "Sensor Sweep", effect: "Reveal all cards in the enemy hand for the next round." },
     targeting_jammer: { name: "Targeting Jammer", effect: "All enemy ships in the Strike Line get -1 ATK this round (min 0)." },
     volley_fire: { name: "Volley Fire", effect: "Deal 1 damage to ALL enemy ships." },
     torpedo: { name: "Torpedo", effect: "Choose an enemy slot. After all moves, deal 5 damage to the ship there, even if covered. An empty slot: miss." },

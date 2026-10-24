@@ -100,7 +100,7 @@ export const de: Messages = {
         heading: "Befehle",
         paragraphs: [
           "Befehle werden einmal gespielt und in der Effects-Phase aufgelöst, vor dem Kampf. Manche brauchen beim Planen ein Ziel (ein eigenes Schiff, beim Torpedo ein Slot der Gegnerseite), die übrigen wählen ihr Ziel automatisch. Rundeneffekte wie ATK-Boni, Zusatzschild und EMP enden im Cleanup.",
-          "Befehle wirken nach Typ, in dieser Reihenfolge. Dein Befehlsdeck enthält jeden Befehl einmal, nur Torpedo und Sperrfeuer zweimal. Sensorscan hat noch keine Wirkung.",
+          "Befehle wirken nach Typ, in dieser Reihenfolge. Dein Befehlsdeck enthält jeden Befehl einmal, nur Torpedo und Sperrfeuer zweimal.",
         ],
       },
       hand: {
@@ -305,7 +305,6 @@ export const de: Messages = {
     power_surge: { name: "Energiestoß", effect: "Alle verbündeten Schiffe in der Strike Line erhalten diese Runde +1 ATK." },
     recall: { name: "Rückruf", effect: "Ein gewähltes Schiff der Strike Line zieht sich in einen freien Slot deiner Wahl in der Command Line zurück. Heilt 2 HP." },
     scavenge: { name: "Plündern", effect: "Ziehe 1 zusätzliches Schiff und 1 zusätzlichen Befehl." },
-    sensor_sweep: { name: "Sensorscan", effect: "Deckt in der nächsten Runde alle Karten auf der gegnerischen Hand auf." },
     targeting_jammer: { name: "Zielstörer", effect: "Alle gegnerischen Schiffe in der Strike Line erhalten diese Runde -1 ATK (min. 0)." },
     volley_fire: { name: "Salvenfeuer", effect: "1 Schaden an ALLE gegnerischen Schiffe." },
     torpedo: { name: "Torpedo", effect: "Wähle einen gegnerischen Slot. Nach allen Bewegungen 5 Schaden an das Schiff dort, auch wenn es gedeckt ist. Leerer Slot: verpufft." },

@@ -18,7 +18,6 @@ import overcharge from "../../assets/images/cards/overcharge.jpg";
 import power_surge from "../../assets/images/cards/power_surge.jpg";
 import recall from "../../assets/images/cards/recall.jpg";
 import scavenge from "../../assets/images/cards/scavenge.jpg";
-import sensor_sweep from "../../assets/images/cards/sensor_sweep.jpg";
 import targeting_jammer from "../../assets/images/cards/targeting_jammer.jpg";
 import volley_fire from "../../assets/images/cards/volley_fire.jpg";
 import torpedo from "../../assets/images/cards/torpedo.jpg";
@@ -42,7 +41,6 @@ const ART: Record<Card["id"], string> = {
   power_surge,
   recall,
   scavenge,
-  sensor_sweep,
   targeting_jammer,
   volley_fire,
   torpedo,

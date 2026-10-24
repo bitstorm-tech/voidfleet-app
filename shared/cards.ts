@@ -55,7 +55,6 @@ const COMMAND_STATS = {
   power_surge: { commandType: "buff", targetMode: "all_friendly_strike" },
   recall: { commandType: "reposition", targetMode: "choose_friendly", targetLane: "strike", moves: true },
   scavenge: { commandType: "tactic", targetMode: "none" },
-  sensor_sweep: { commandType: "special", targetMode: "none" },
   targeting_jammer: { commandType: "debuff", targetMode: "all_enemy_strike" },
   volley_fire: { commandType: "attack", targetMode: "auto_all" },
   torpedo: { commandType: "attack", targetMode: "choose_enemy_slot" },

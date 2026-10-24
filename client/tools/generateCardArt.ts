@@ -77,8 +77,6 @@ const SUBJECTS: Record<Card["id"], string> = {
     "A warship surging forward with blazing afterburners along a holographic vector pointing ahead, bright engine trails",
   recall:
     "A damaged warship pulling back along a curved holographic retreat vector, small repair drones around it, engines glowing",
-  sensor_sweep:
-    "A radar sweep beam rotating out from a scanner ship, revealing the glowing holographic outlines of hidden enemy ships",
   overcharge:
     "A warship with its reactor core overloading, glowing cracks spreading across the hull, energy venting from every seam",
   torpedo:

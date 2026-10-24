@@ -60,7 +60,6 @@ const COMMAND_SOUNDS: Record<CommandId, SoundId | null> = {
   power_surge: "power_up",
   recall: "repair",
   scavenge: "scavenge",
-  sensor_sweep: null,
   targeting_jammer: "jammer",
   volley_fire: "missile_volley",
   torpedo: "orbital_strike",

@@ -349,9 +349,6 @@ class Situation {
       case "scavenge":
         // Nachziehen lohnt sich, solange die Schiffshand dünn ist; eine volle Hand verschluckt die Karte.
         return untargeted(this.bot.shipHand.length <= 3 ? 1.5 : 0.5);
-      case "sensor_sweep":
-        // Noch ohne Wirkung; spielen räumt wenigstens die Hand auf.
-        return untargeted(0.1);
     }
   }
 

@@ -162,9 +162,6 @@ function applyCommand(board: Board, { commander, card, target, destination }: Pl
     case "scavenge":
       events.push({ kind: "draw", side, cardId: card.id, ...commander.drawExtra() });
       return true;
-    case "sensor_sweep":
-      // Braucht eine aufgedeckte Gegnerhand in der Sicht des Spielers; kommt später.
-      return false;
   }
 }
 
