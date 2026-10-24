@@ -75,7 +75,7 @@ export class MatchController {
     new SettingsDialog(ui);
     new RulesDialog(ui);
     this.surrenderDialog = new SurrenderDialog(ui, () => this.connection.send({ type: "surrender" }));
-    this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton, this.hud.botButton], {
+    this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton, this.hud.botButton, this.hud.checklist], {
       onShipCardClick: (index) => this.onShipCardClick(index),
       onCommandCardClick: (index) => this.onCommandCardClick(index),
     });
@@ -532,6 +532,11 @@ export class MatchController {
     this.hud.showAction(this.isResolving ? "skip" : waitingForOpponent ? "bot" : "submit");
     this.hud.submitButton.disabled = !this.canPlan || !this.match.opponent.joined;
     this.hud.submitButton.textContent = this.match.submitted ? t.hud.waiting : t.hud.endTurn;
+    const planning = !this.isResolving && this.canPlan && this.match.opponent.joined;
+    this.hud.setChecklist(planning ? this.match.turnProgress : null, {
+      planned: this.match.plan.ships.length,
+      max: maxDeploys(this.match.round),
+    });
     this.surrenderDialog.setAvailable(this.isConnected && this.match.opponent.joined && this.match.result === null);
   }
 

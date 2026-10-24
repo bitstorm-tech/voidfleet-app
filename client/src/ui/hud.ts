@@ -1,8 +1,9 @@
 // Kopfzeile (Runde, Overdrive ab Runde 8, Status), Log-Panel, Befehls-Banner, Ankündigung einer neuen Runde sowie der Aktionsknopf
-// (Submit, Überspringen oder Computergegner, je nach Lage) als DOM-Overlay.
+// (Submit, Überspringen oder Computergegner, je nach Lage) mit der Checkliste des Zugs darunter als DOM-Overlay.
 
 import { overdriveBonus, type Side } from "../../../shared/board.ts";
 import { playUiSound } from "../audio/uiSounds.ts";
+import type { TurnPartState } from "../game/match.ts";
 import { t } from "../i18n/index.ts";
 
 export class Hud {
@@ -19,6 +20,8 @@ export class Hud {
   readonly skipButton: HTMLButtonElement;
   /** Steht an der Stelle des Submit-Buttons, solange kein Gegner da ist. */
   readonly botButton: HTMLButtonElement;
+  /** Unter dem Submit-Button: welche Teile des Zugs eingeplant, noch möglich oder nicht möglich sind. */
+  readonly checklist: HTMLUListElement;
   private readonly logLines: string[] = [];
 
   constructor(container: HTMLElement) {
@@ -54,7 +57,22 @@ export class Hud {
     this.submitButton = createButton("submit-button", t.hud.endTurn);
     this.skipButton = createButton("submit-button", t.hud.skip);
     this.botButton = createButton("submit-button", t.hud.playComputer);
+    this.checklist = Object.assign(document.createElement("ul"), { className: "turn-checklist" });
     this.showAction("submit");
+  }
+
+  /** Füllt die Checkliste; `null` blendet sie aus, ohne dass der Knopf darüber springt. */
+  setChecklist(progress: Record<"ships" | "command" | "maneuver", TurnPartState> | null, deploys: { planned: number; max: number }): void {
+    this.checklist.classList.toggle("inactive", progress === null);
+    if (progress === null) return;
+    const items: [string, TurnPartState][] = [
+      [t.hud.checklist.ships(deploys.planned, deploys.max), progress.ships],
+      [t.hud.checklist.command, progress.command],
+      [t.hud.checklist.maneuver, progress.maneuver],
+    ];
+    this.checklist.replaceChildren(
+      ...items.map(([text, state]) => Object.assign(document.createElement("li"), { textContent: text, className: state })),
+    );
   }
 
   /** Welcher Knopf an der Stelle des Submit-Buttons steht. */

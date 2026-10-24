@@ -1,4 +1,4 @@
-// Die Hand: Schiffskarten links, Submit in der Mitte, Befehlskarten rechts.
+// Die Hand: Schiffskarten links, Submit samt Checkliste in der Mitte, Befehlskarten rechts.
 // Karten werden nur neu aufgebaut, wenn sich die Hand ändert (sonst würde die Karte
 // unter der Maus ihr Hover verlieren und neu aufzoomen); aufgebaut werden sie in `cardView.ts`.
 // Neu gezogene Karten fliegen nacheinander ein, jede mit einem Wischen, und leuchten kurz auf.
@@ -20,7 +20,7 @@ export class HandView {
 
   constructor(
     container: HTMLElement,
-    actionButtons: readonly HTMLButtonElement[],
+    actionElements: readonly HTMLElement[],
     private readonly callbacks: HandCallbacks,
   ) {
     container.insertAdjacentHTML(
@@ -33,7 +33,7 @@ export class HandView {
     );
     this.shipRow = container.querySelector(".ship-hand")!;
     this.commandRow = container.querySelector(".command-hand")!;
-    container.querySelector(".submit-area")!.append(...actionButtons);
+    container.querySelector(".submit-area")!.append(...actionElements);
   }
 
   renderShips(hand: readonly ShipCard[], markedIndices: ReadonlySet<number>): void {

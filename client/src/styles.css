@@ -699,8 +699,59 @@ body {
 
 .submit-area {
   display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 10px;
   align-self: center;
+}
+
+/* Checkliste unter dem Submit-Button; ausgeblendet behält sie ihren Platz, damit der Knopf nicht springt. */
+.turn-checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.turn-checklist.inactive {
+  visibility: hidden;
+}
+
+.turn-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.turn-checklist li::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+
+.turn-checklist li.done {
+  color: var(--accent);
+}
+
+.turn-checklist li.done::before {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.turn-checklist li.blocked {
+  opacity: 0.4;
+  text-decoration: line-through;
 }
 
 .submit-button {

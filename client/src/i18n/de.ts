@@ -13,6 +13,11 @@ export const de: Messages = {
     hideLog: "Log ausblenden",
     overdrive: (bonus) => `Overdrive +${bonus}`,
     overdriveHint: (bonus) => `Overdrive: alle Kampfschiffe +${bonus} ATK`,
+    checklist: {
+      ships: (planned, max) => (max > 1 ? `Schiffe legen (${planned}/${max})` : "Schiff legen"),
+      command: "Befehl spielen",
+      maneuver: "Grundmanöver",
+    },
   },
   settings: {
     title: "Einstellungen",

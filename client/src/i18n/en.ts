@@ -32,6 +32,11 @@ export const en = {
     hideLog: "Hide log",
     overdrive: (bonus: number) => `Overdrive +${bonus}`,
     overdriveHint: (bonus: number) => `Overdrive: all combat ships +${bonus} ATK`,
+    checklist: {
+      ships: (planned: number, max: number) => (max > 1 ? `Deploy ships (${planned}/${max})` : "Deploy a ship"),
+      command: "Play a command",
+      maneuver: "Maneuver a ship",
+    },
   },
   settings: {
     title: "Settings",

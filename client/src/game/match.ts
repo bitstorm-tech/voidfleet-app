@@ -12,6 +12,9 @@ export interface PlannedMove {
   to: Slot;
 }
 
+/** Stand eines Zug-Teils: eingeplant, noch möglich oder gar nicht möglich. */
+export type TurnPartState = "done" | "open" | "blocked";
+
 const emptyPlan = (): TurnPlan => ({ ships: [], command: null, maneuver: null });
 
 export class Match {
@@ -130,6 +133,22 @@ export class Match {
     const fits = (move: PlannedMove | null, other: PlannedMove | null) =>
       move === null || this.board.canMove(move.from, slotTarget(move.to), [...deploys, other && slotTarget(other.to)]);
     return fits(keptCommand, maneuver) && fits(maneuver, keptCommand);
+  }
+
+  /**
+   * Was vom Zug noch offen ist. Schiffe gelten als erledigt, sobald alle Deploys vergeben sind oder
+   * wenigstens eines eingeplant ist und kein weiteres mehr passt.
+   */
+  get turnProgress(): Record<"ships" | "command" | "maneuver", TurnPartState> {
+    const playerSlots = this.board.lanesFor("player").flatMap((lane) => lane.slots);
+    const unplanned = this.shipHand.map((_, index) => index).filter((index) => !this.plan.ships.some((ship) => ship.handIndex === index));
+    const canDeployMore = this.deploysLeft > 0 && unplanned.some((index) => playerSlots.some((slot) => this.canDeploy(slot, index)));
+    const canManeuver = playerSlots.some((slot) => this.maneuverDestinations(slot).length > 0);
+    return {
+      ships: canDeployMore ? "open" : this.plan.ships.length > 0 ? "done" : "blocked",
+      command: this.plan.command ? "done" : this.commandHand.length > 0 ? "open" : "blocked",
+      maneuver: this.plan.maneuver ? "done" : canManeuver ? "open" : "blocked",
+    };
   }
 
   private get plannedDeploys(): SlotTarget[] {
