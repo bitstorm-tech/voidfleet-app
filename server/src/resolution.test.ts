@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import { commandById, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
 import type { RoundEvent } from "../../shared/protocol.ts";
-import { resolveCleanup, resolveCombat, resolveEffects, type Commander, type PlayedCommand } from "./resolution.ts";
+import { resolveCleanup, resolveCombat, resolveEffects, resolveManeuver, type Commander, type PlayedCommand } from "./resolution.ts";
 
 function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: ShipId): Slot {
   return board.place(board.lane(side, lane), slotIndex, shipById(id))!;
@@ -25,6 +25,36 @@ function round(board: Board, commands: PlayedCommand[] = []): RoundEvent[] {
   resolveCleanup(board, events);
   return events;
 }
+
+describe("Manöver", () => {
+  test("das manövrierte Schiff feuert nicht, wird aber beschossen", () => {
+    const board = new Board();
+    const from = place(board, "player", "strike", 0, "void_interceptor");
+    place(board, "enemy", "strike", 0, "void_interceptor");
+    const to = board.lane("player", "command").slots[0]!;
+    const events: RoundEvent[] = [];
+    resolveManeuver(from, to, events);
+    expect(from.isOccupied).toBe(false);
+    expect(to.maneuvered).toBe(true);
+    const attacks = round(board).filter((event) => event.kind === "attack");
+    expect(attacks.map((event) => [event.attacker.side, event.target.lane, event.target.slotIndex])).toEqual([["enemy", "command", 0]]);
+    expect(to.hp).toBe(hp("void_interceptor") - 3);
+    expect(to.maneuvered).toBe(false);
+  });
+
+  test("die Deckung nach dem Manöver gilt schon in derselben Runde", () => {
+    const board = new Board();
+    const drone = place(board, "player", "command", 2, "repair_drone");
+    const cruiser = place(board, "player", "command", 4, "horizon_cruiser");
+    place(board, "enemy", "strike", 0, "void_interceptor");
+    const front = board.lane("player", "strike").slots[2]!;
+    resolveManeuver(cruiser, front, []);
+    // Der Jäger nähme sonst die Drohne (wenigste HP); jetzt deckt der Kreuzer sie.
+    const attacks = round(board).filter((event) => event.kind === "attack");
+    expect(attacks.map((event) => [event.attacker.side, event.target.cardId])).toEqual([["enemy", "horizon_cruiser"]]);
+    expect(drone.hp).toBe(hp("repair_drone"));
+  });
+});
 
 describe("Combat", () => {
   test("alle Schiffe feuern gleichzeitig, auch ein im selben Kampf zerstörtes", () => {

@@ -30,6 +30,10 @@ export function isSameSlot(a: SlotTarget, b: SlotTarget): boolean {
   return a.lane === b.lane && a.slotIndex === b.slotIndex;
 }
 
+export function slotTarget(slot: Slot): SlotTarget {
+  return { lane: slot.lane.type, slotIndex: slot.index };
+}
+
 export const SLOT_COUNT = 6;
 export const MAX_SHIPS_PER_LANE = 4;
 export const MAX_SHIPS_PER_SIDE = 8;
@@ -44,6 +48,8 @@ export class Slot {
   attackBonus = 0;
   shieldBonus = 0;
   disabled = false;
+  /** Grundmanöver: Das Schiff hat diese Runde die Lane gewechselt und feuert dafür nicht. */
+  maneuvered = false;
   selfDamageAfterCombat = 0;
 
   constructor(
@@ -73,7 +79,7 @@ export class Slot {
 
   /** Support-Schiffe (Basis-ATK 0) greifen nie an, auch nicht mit Bonus. */
   get canAttack(): boolean {
-    return this.card !== null && this.card.atk > 0 && this.attack > 0 && !this.disabled && !this.isDestroyed;
+    return this.card !== null && this.card.atk > 0 && this.attack > 0 && !this.disabled && !this.maneuvered && !this.isDestroyed;
   }
 
   place(card: ShipCard): void {
@@ -90,6 +96,7 @@ export class Slot {
     this.attackBonus = 0;
     this.shieldBonus = 0;
     this.disabled = false;
+    this.maneuvered = false;
     this.selfDamageAfterCombat = 0;
   }
 
@@ -117,6 +124,7 @@ export class Slot {
     this.attackBonus = 0;
     this.shieldBonus = 0;
     this.disabled = false;
+    this.maneuvered = false;
     this.selfDamageAfterCombat = 0;
   }
 
@@ -128,6 +136,7 @@ export class Slot {
     this.attackBonus = other.attackBonus;
     this.shieldBonus = other.shieldBonus;
     this.disabled = other.disabled;
+    this.maneuvered = other.maneuvered;
     this.selfDamageAfterCombat = other.selfDamageAfterCombat;
     other.clear();
   }
@@ -221,21 +230,24 @@ export class Board {
   }
 
   /**
-   * Ob das Schiff in `from` in den Slot `index` der anderen Lane wechseln kann. `deploy` ist das
-   * Schiff, das dieselbe Seite in dieser Runde legt: Es landet vor den Befehlen und belegt seinen Slot.
+   * Ob das Schiff in `from` in den Slot `index` der anderen Lane wechseln kann. `arrivals` sind die
+   * Slots, die dieselbe Seite in dieser Runde sonst noch belegt: der Deploy (er landet vor allen
+   * Bewegungen) und das Ziel der zweiten Bewegung (Grundmanöver bzw. Bewegungsbefehl). Sie gelten als
+   * besetzt und zählen zur Lane-Grenze. Bewusst streng: Ein Schiff, das seine Lane verlässt, gibt
+   * seinen Slot und seinen Platz in der Lane für die anderen Bewegungen dieser Runde nicht frei.
    */
-  canMove(from: Slot, index: number, deploy: SlotTarget | null = null): boolean {
+  canMove(from: Slot, index: number, arrivals: readonly (SlotTarget | null)[] = []): boolean {
     const lane = this.lane(from.lane.side, otherLane(from.lane.type));
     const slot = lane.slots[index];
     if (slot === undefined || slot.isOccupied) return false;
-    const deploysHere = deploy?.lane === lane.type;
-    if (deploysHere && deploy.slotIndex === index) return false;
-    return lane.occupiedSlots.length + (deploysHere ? 1 : 0) < MAX_SHIPS_PER_LANE;
+    const incoming = arrivals.filter((arrival) => arrival?.lane === lane.type);
+    if (incoming.some((arrival) => arrival!.slotIndex === index)) return false;
+    return lane.occupiedSlots.length + incoming.length < MAX_SHIPS_PER_LANE;
   }
 
   /** Slot-Indizes der anderen Lane, in die das Schiff in `from` wechseln kann (siehe `canMove`). */
-  moveDestinations(from: Slot, deploy: SlotTarget | null = null): number[] {
-    return from.lane.slots.map((slot) => slot.index).filter((index) => this.canMove(from, index, deploy));
+  moveDestinations(from: Slot, arrivals: readonly (SlotTarget | null)[] = []): number[] {
+    return from.lane.slots.map((slot) => slot.index).filter((index) => this.canMove(from, index, arrivals));
   }
 
   /** Platziert ein Schiff; gibt den Slot zurück oder null bei Regelverstoß. */

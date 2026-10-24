@@ -43,15 +43,15 @@ export const en = {
       },
       {
         heading: "Your turn",
-        text: "Each round, pick up to one ship and one command from your hand, then end your turn. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit. A command may also target the ship you deploy this round, for example to overcharge it or move it straight to the other lane.",
+        text: "Each round, pick up to one ship and one command from your hand, then end your turn. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit. A command may also target the ship you deploy this round, for example to overcharge it or move it straight to the other lane. On top of that, you may maneuver one of your ships already on the board to a free slot in the other lane — tap it, then the slot. The price: that ship doesn't fire this round. A command on it follows it to its new slot.",
       },
       {
         heading: "The board",
-        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. Commands that move a ship to the other lane let you pick any free slot there.",
+        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. Ships change lanes through the maneuver of your turn or through commands like Flanking Maneuver, Intercept and Recall; these don't cost the ship its attack. Either way you pick any free slot in the other lane. Maneuver and command can't move the same ship or land on the same slot, and a slot vacated this round only frees up next round.",
       },
       {
         heading: "Resolution",
-        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Effects (commands take effect), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand).",
+        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Maneuvers (ships switch lanes), Effects (commands take effect), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand).",
       },
       {
         heading: "Ships",
@@ -80,8 +80,10 @@ export const en = {
     chooseCommandTarget: (command: string) => `${command}: tap one of your ships. Click the card again to take it back.`,
     chooseDestination: (command: string, ship: string) =>
       `${command}: tap a glowing slot for ${ship}. Click the card again to take it back.`,
-    planned: (cards: string) => `${cards} ready. Click “End turn”, or tap a card to take it back.`,
-    idle: "Tap a ship or command card, or click “End turn” without a card to pass.",
+    chooseManeuver: (ship: string) => `Maneuver: tap a glowing slot for ${ship}; it won't fire this round. Tap the ship again or press Esc to cancel.`,
+    maneuver: (ship: string) => `maneuver of ${ship}`,
+    planned: (cards: string) => `${cards} ready. Click “End turn”, or tap a card or the maneuvering ship to take it back.`,
+    idle: "Tap a ship or command card, or one of your ships on the board to maneuver it. Click “End turn” without a card to pass.",
     resolving: "Both turns are revealed — resolving the round …",
     matchOver: "The match is over.",
   },
@@ -100,6 +102,7 @@ export const en = {
     ship: (ship: string, slot: string) => `${ship} (${slot})`,
     deploy: (who: string, ship: string, slot: string) => `Deploy: ${who} — ${ship} on ${slot}`,
     pass: (who: string) => `Deploy: ${who} — no ship`,
+    maneuver: (who: string, ship: string, slot: string) => `Maneuver: ${who} — ${ship} moves to ${slot} and holds fire this round`,
     command: (who: string, command: string) => `Command: ${who} — ${command}`,
     commandOn: (who: string, command: string, slot: string) => `Command: ${who} — ${command} on ${slot}`,
     damage: (command: string, ship: string, amount: number) => `Effect: ${command} hits ${ship} for ${amount}`,
@@ -128,6 +131,7 @@ export const en = {
     shield: (amount: number) => `+${amount} Shield`,
     attack: (delta: number) => `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ATK`,
     disabled: "Disabled",
+    holdFire: "Holds fire",
   },
   errors: {
     match_full: "This match is already full.",
@@ -144,6 +148,9 @@ export const en = {
     destination_required: "This command needs a slot to move the ship to.",
     destination_not_allowed: "This command doesn't move a ship.",
     destination_unavailable: "The ship can't move to this slot.",
+    maneuver_not_own_ship: "Only one of your ships already on the board can maneuver.",
+    maneuver_destination_unavailable: "The ship can't maneuver to this slot.",
+    maneuver_conflict: "A command can't move the ship that maneuvers this round.",
   } satisfies Record<ErrorCode, string>,
   lanes: { strike: "Strike", command: "Command" } satisfies Record<LaneType, string>,
   stats: { hp: "HP", atk: "ATK", shield: "Shield" },

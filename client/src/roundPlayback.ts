@@ -1,5 +1,5 @@
 // Spielt die aufgedeckten Ereignisse einer Runde auf dem Brett ab: Deploy,
-// Befehle, Kampf und Cleanup nacheinander, gleichartige Ereignisse jeweils
+// Manöver, Befehle, Kampf und Cleanup nacheinander, gleichartige Ereignisse jeweils
 // gleichzeitig. Die Schüsse im Kampf laufen als Salve kurz versetzt und
 // überlappend ab, Einschläge auf dasselbe Ziel mit etwas Abstand, damit man bei
 // vollem Brett nachvollziehen kann, wer wen trifft. Die Szene läuft dabei dem Spielzustand voraus; den Endzustand
@@ -200,6 +200,8 @@ export class RoundPlayback {
     switch (event.kind) {
       case "deploy":
         return this.deploy(event.side, event.cardId, event.target);
+      case "maneuver":
+        return this.maneuver(event);
       case "effect":
         return this.effect(event);
       case "ability":
@@ -226,6 +228,14 @@ export class RoundPlayback {
 
   private async deploy(side: Side, cardId: ShipId, target: SlotTarget): Promise<void> {
     await this.view.deploy(new ShipView(this.view.scene, shipById(cardId), false), side, target.lane, target.slotIndex);
+  }
+
+  /** Grundmanöver: Flug in den neuen Slot, danach sind die Balken gedämpft, bis die Runde vorbei ist (`MatchController.syncBoard`). */
+  private async maneuver(event: Extract<RoundEvent, { kind: "maneuver" }>): Promise<void> {
+    const to = this.view.pad(event.side, event.to.lane, event.to.slotIndex);
+    await this.move(this.padOf(event.ship), to);
+    to.ship!.setHoldingFire(true);
+    return this.mark(to, t.float.holdFire, "debuff");
   }
 
   private async effect(event: Extract<RoundEvent, { kind: "effect" }>): Promise<void> {

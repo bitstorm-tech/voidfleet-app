@@ -8,10 +8,17 @@
 
 import { canTargetLane, needsTarget, type CommandCard, type ShipCard } from "../../shared/cards.ts";
 import { Board, isSameSlot, opposite, otherLane, type BoardSnapshot, type Side } from "../../shared/board.ts";
-import type { ErrorCode, MatchResult, PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
+import type { ErrorCode, MatchResult, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { planBotTurn } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
-import { resolveCleanup, resolveCombat, resolveEffects, type Commander, type PlayedCommand } from "./resolution.ts";
+import {
+  resolveCleanup,
+  resolveCombat,
+  resolveEffects,
+  resolveManeuver,
+  type Commander,
+  type PlayedCommand,
+} from "./resolution.ts";
 
 export type Seat = 0 | 1;
 
@@ -145,22 +152,32 @@ export class Match {
       if (player.shipHand[handIndex] === undefined) return "ship_not_in_hand";
       if (!this.board.canPlace(this.board.lane(player.side, target.lane), target.slotIndex)) return "slot_unavailable";
     }
+    // Das Schiff, das in dieser Runde gelegt wird, landet vor Manöver und Befehlen und belegt seinen Slot.
+    const deploy = plan.ship?.target ?? null;
+    // Manöver und Bewegungsbefehl dürfen nicht im selben Slot landen und zusammen mit dem Deploy die
+    // Lane-Grenze nicht überschreiten; `canMove` prüft das beim Befehl mit beiden Ankünften.
+    const maneuver = plan.maneuver && { lane: otherLane(plan.maneuver.ship.lane), slotIndex: plan.maneuver.destination };
+    if (plan.maneuver) {
+      const { ship, destination } = plan.maneuver;
+      const slot = this.board.lane(player.side, ship.lane).slots[ship.slotIndex];
+      if (!slot?.isOccupied) return "maneuver_not_own_ship";
+      if (!this.board.canMove(slot, destination, [deploy])) return "maneuver_destination_unavailable";
+    }
     if (plan.command) {
       const { handIndex, target } = plan.command;
       const card = player.commandHand[handIndex];
       if (card === undefined) return "command_not_in_hand";
       if (needsTarget(card) && target === null) return "target_required";
       if (!needsTarget(card) && target !== null) return "target_not_allowed";
-      // Das Schiff, das in dieser Runde gelegt wird, landet vor den Befehlen und ist schon ein gültiges Ziel.
-      const deploy = plan.ship?.target ?? null;
       const slot = target && this.board.lane(player.side, target.lane).slots[target.slotIndex];
       if (target && !slot?.isOccupied && !(deploy && isSameSlot(target, deploy))) return "target_not_own_ship";
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
       const { destination } = plan.command;
       if (card.moves && destination === null) return "destination_required";
       if (!card.moves && destination !== null) return "destination_not_allowed";
+      if (card.moves && target && plan.maneuver && isSameSlot(target, plan.maneuver.ship)) return "maneuver_conflict";
       // Bewegt sich das gelegte Schiff, ist `from` sein noch leerer Slot; `canMove` zählt den Deploy nur in der Ziel-Lane.
-      if (slot && destination !== null && !this.board.canMove(slot, destination, deploy)) return "destination_unavailable";
+      if (slot && destination !== null && !this.board.canMove(slot, destination, [deploy, maneuver])) return "destination_unavailable";
     }
     return null;
   }
@@ -170,7 +187,7 @@ export class Match {
   }
 
   /**
-   * Deckt beide Züge auf und löst die Runde in Phasen auf: Deploy, Effects,
+   * Deckt beide Züge auf und löst die Runde in Phasen auf: Deploy, Manöver, Effects,
    * Combat, Cleanup. Danach wird geprüft, ob eine Flotte vernichtet ist; sonst
    * ziehen beide nach. Gibt die Ereignisse aus Sicht von Seat 0 zurück.
    */
@@ -188,12 +205,21 @@ export class Match {
       }
     }
 
+    // Jede Seite bewegt nur eigene Schiffe, die Manöver kommen sich also nicht in die Quere.
+    for (const player of this.players) {
+      const maneuver = player.plan!.maneuver;
+      if (!maneuver) continue;
+      const lane = this.board.lane(player.side, maneuver.ship.lane);
+      resolveManeuver(lane.slots[maneuver.ship.slotIndex]!, this.board.lane(player.side, otherLane(lane.type)).slots[maneuver.destination]!, events);
+    }
+
     const commands: PlayedCommand[] = [];
     for (const player of this.players) {
       const command = player.plan!.command;
       if (!command) continue;
       const [card] = player.commandHand.splice(command.handIndex, 1);
-      const { target, destination } = command;
+      const { destination } = command;
+      const target = command.target && this.afterManeuver(player, command.target);
       commands.push({
         commander: player,
         card: card!,
@@ -214,6 +240,13 @@ export class Match {
       this.round += 1;
     }
     return events;
+  }
+
+  /** Wo ein Befehlsziel nach dem Manöver steht: Zielt der Befehl auf das manövrierte Schiff, folgt er ihm. */
+  private afterManeuver(player: Player, target: SlotTarget): SlotTarget {
+    const maneuver = player.plan!.maneuver;
+    if (!maneuver || !isSameSlot(target, maneuver.ship)) return target;
+    return { lane: otherLane(target.lane), slotIndex: maneuver.destination };
   }
 
   private decideWinner(): Side | "draw" | null {

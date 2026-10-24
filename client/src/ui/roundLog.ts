@@ -18,6 +18,8 @@ export function describeEvent(event: RoundEvent): string {
       return t.log.deploy(t.log.who[event.side], t.ships[event.cardId].name, slotLabel(event.side, event.target));
     case "pass":
       return t.log.pass(t.log.who[event.side]);
+    case "maneuver":
+      return t.log.maneuver(t.log.who[event.side], shipLabel(event.ship), slotLabel(event.side, event.to));
     case "command": {
       const who = t.log.who[event.side];
       const name = t.commands[event.cardId].name;

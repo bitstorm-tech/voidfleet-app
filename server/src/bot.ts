@@ -2,7 +2,8 @@
 // was auch ein Spieler sieht, insbesondere nicht den Plan des Gegners.
 // Faustregeln: immer ein Schiff legen (Kampfschiffe zuerst, robuste nach vorne,
 // Jäger und Support in einen gedeckten Command-Slot) und den Befehl spielen, der
-// nach grober Schätzung am meisten Schaden anrichtet oder verhindert.
+// nach grober Schätzung am meisten Schaden anrichtet oder verhindert. Das
+// Grundmanöver nutzt er noch nicht.
 
 import { nearest, opposite, otherLane, SLOT_COUNT, type Board, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import type { CommandCard, ShipCard } from "../../shared/cards.ts";
@@ -22,7 +23,7 @@ const KILL_BONUS = 2;
 
 export function planBotTurn(board: Board, bot: BotHands): TurnPlan {
   const ship = planShip(board, bot);
-  return { ship, command: planCommand(board, bot, ship) };
+  return { ship, command: planCommand(board, bot, ship), maneuver: null };
 }
 
 // --- Schiff ---
@@ -139,7 +140,7 @@ class Situation {
    */
   private move(slot: Slot): { destination: Slot; paired: boolean } | null {
     const lane = this.lane(otherLane(slot.lane.type));
-    const free = this.board.moveDestinations(slot, this.deploy).map((index) => lane.slots[index]!);
+    const free = this.board.moveDestinations(slot, [this.deploy]).map((index) => lane.slots[index]!);
     const paired = free.filter((other) => other.index !== slot.index && this.occupied(slot.lane.type, other.index));
     const destination = nearest(paired.length > 0 ? paired : free, slot.index);
     return destination && { destination, paired: paired.length > 0 };

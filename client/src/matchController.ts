@@ -5,6 +5,9 @@
 // Schiffs ist für Befehle ein Ziel wie jedes andere eigene Schiff. Befehle, die
 // ein Schiff in die andere Lane verlegen, brauchen zwei Klicks: Schiff, dann Ziel-Slot;
 // dort steht das verlegte Schiff ebenfalls als Geist, ein Bogenpfeil zeigt den Weg.
+// Ist keine Karte gewählt, plant ein Klick auf ein eigenes Schiff das Grundmanöver ebenso
+// mit Ziel-Slot, Geist und Pfeil; das Schiff feuert dann nicht, seine Balken sind gedämpft.
+// Ein Klick auf das manövrierende Schiff oder Escape nimmt das Manöver zurück.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 // „Neues Match“ wechselt nur die Verbindung; Szene und geladene Assets bleiben.
@@ -12,16 +15,17 @@
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { canTargetLane, needsTarget, type ShipCard } from "../../shared/cards.ts";
-import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, type Lane, type Slot } from "../../shared/board.ts";
-import type { ServerMessage, SlotTarget } from "../../shared/protocol.ts";
+import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, slotTarget, type Lane, type Slot } from "../../shared/board.ts";
+import type { ServerMessage } from "../../shared/protocol.ts";
 import { setMusicMood } from "./audio/music.ts";
 import { playUiSound } from "./audio/uiSounds.ts";
-import { Match } from "./game/match.ts";
+import { Match, type PlannedMove } from "./game/match.ts";
 import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
 import { preloadAssets } from "./preload.ts";
 import { RoundPlayback } from "./roundPlayback.ts";
 import { MatchScene, pickedPad } from "./scene/matchScene.ts";
+import type { MoveArrow } from "./scene/moveArrow.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
 import { FloatingTexts } from "./ui/floatingText.ts";
@@ -52,6 +56,8 @@ export class MatchController {
   private selectedCommandIndex: number | null = null;
   /** Bei einem verlegenden Befehl: das gewählte Schiff, solange der Ziel-Slot noch fehlt. */
   private moveSource: Slot | null = null;
+  /** Beim Grundmanöver: das gewählte Schiff, solange der Ziel-Slot noch fehlt. */
+  private maneuverSource: Slot | null = null;
   private hoveredPad: SlotPad | null = null;
   private ghostPads: SlotPad[] = [];
   private validTargetCount = 0;
@@ -81,6 +87,7 @@ export class MatchController {
     this.hud.skipButton.addEventListener("click", () => this.playback.skip());
     this.hud.botButton.addEventListener("click", () => this.connection.send({ type: "addBot" }));
     this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
+    window.addEventListener("keydown", (event) => this.onKeyDown(event));
 
     this.connection = this.connect(false);
     this.refreshSelectionVisuals();
@@ -124,6 +131,8 @@ export class MatchController {
         setMusicMood(this.match.result === null ? "calm" : null);
         this.selectedShipIndex = null;
         this.selectedCommandIndex = null;
+        this.moveSource = null;
+        this.maneuverSource = null;
         this.syncBoard();
         this.refreshSelectionVisuals();
         this.resultScreen.show(this.match.result, this.match.round);
@@ -187,12 +196,13 @@ export class MatchController {
     }
   }
 
-  /** Schiffs- und Befehlskarte sind nie gleichzeitig gewählt. */
+  /** Schiffskarte, Befehlskarte und Manöver-Schiff sind nie gleichzeitig gewählt. */
   private selectShip(index: number | null): void {
     this.selectedShipIndex = index;
     if (index !== null) {
       this.selectedCommandIndex = null;
       this.moveSource = null;
+      this.maneuverSource = null;
     }
     this.refreshSelectionVisuals();
   }
@@ -200,74 +210,127 @@ export class MatchController {
   private selectCommand(index: number | null): void {
     this.selectedCommandIndex = index;
     this.moveSource = null;
-    if (index !== null) this.selectedShipIndex = null;
+    if (index !== null) {
+      this.selectedShipIndex = null;
+      this.maneuverSource = null;
+    }
     this.refreshSelectionVisuals();
+  }
+
+  private selectManeuver(slot: Slot | null): void {
+    this.maneuverSource = slot;
+    if (slot !== null) {
+      this.selectedShipIndex = null;
+      this.selectedCommandIndex = null;
+      this.moveSource = null;
+    }
+    this.refreshSelectionVisuals();
+  }
+
+  private clearSelection(): void {
+    this.selectedShipIndex = null;
+    this.selectedCommandIndex = null;
+    this.moveSource = null;
+    this.maneuverSource = null;
+    this.refreshSelectionVisuals();
+  }
+
+  private get hasSelection(): boolean {
+    return this.selectedShipIndex !== null || this.selectedCommandIndex !== null || this.maneuverSource !== null;
+  }
+
+  private cancelManeuver(): void {
+    this.match.plan.maneuver = null;
+    this.refreshSelectionVisuals();
+    playUiSound("cancel");
+  }
+
+  /** Escape bricht eine angefangene Auswahl ab, sonst nimmt es das eingeplante Manöver zurück. Offene Dialoge gehen vor. */
+  private onKeyDown(event: KeyboardEvent): void {
+    if (event.key !== "Escape" || !this.canPlan || document.querySelector("dialog[open]") !== null) return;
+    if (this.hasSelection) {
+      this.clearSelection();
+      playUiSound("cancel");
+    } else if (this.match.plan.maneuver !== null) {
+      this.cancelManeuver();
+    }
   }
 
   // --- Brett ---
 
   /**
-   * Das Brett reagiert nur, solange eine Karte gewählt ist; `pickInfo` wird erst beim Zugriff berechnet.
+   * Das Brett zeigt den Zeiger nur, solange eine Karte oder ein Manöver-Schiff gewählt ist; ohne
+   * Auswahl startet ein Klick das Grundmanöver. `pickInfo` wird erst beim Zugriff berechnet.
    * Geklickt wird beim Loslassen, damit Ziehen die Kamera verschiebt, ohne Karten zu platzieren.
    */
   private onScenePointer(info: PointerInfo): void {
-    const hasSelection = this.selectedShipIndex !== null || this.selectedCommandIndex !== null;
     if (info.type === PointerEventTypes.POINTERMOVE) {
-      this.setHoveredPad(hasSelection ? pickedPad(info) : null);
-    } else if (info.type === PointerEventTypes.POINTERUP && info.event.button === 0 && hasSelection && !this.view.wasPanned) {
-      this.onBoardClick(pickedPad(info));
+      this.setHoveredPad(this.hasSelection ? pickedPad(info) : null);
+    } else if (info.type === PointerEventTypes.POINTERUP && info.event.button === 0 && !this.view.wasPanned) {
+      if (this.hasSelection) this.onBoardClick(pickedPad(info));
+      else if (this.canPlan && !this.isResolving) this.onShipClick(pickedPad(info));
     }
   }
 
   private onBoardClick(pad: SlotPad | null): void {
-    if (pad === null) {
-      this.selectShip(null);
-      this.selectCommand(null);
+    // Daneben oder erneut auf das Manöver-Schiff: Die Auswahl bricht ab.
+    if (pad === null || pad.slot === this.maneuverSource) {
+      this.clearSelection();
       return playUiSound("cancel");
     }
     if (!this.isValidTarget(pad)) return playUiSound("denied");
 
     if (this.selectedShipIndex !== null) {
       this.stageShipOn(pad);
+    } else if (this.maneuverSource !== null) {
+      this.stageManeuverOn(pad);
     } else {
       this.stageCommandTargetOn(pad);
     }
   }
 
   /**
+   * Ohne gewählte Karte: Ein Klick auf ein eigenes Schiff beginnt das Grundmanöver, einer auf das
+   * manövrierende Schiff oder seinen Geist nimmt es zurück. Leere Slots und Geister reagieren nicht.
+   */
+  private onShipClick(pad: SlotPad | null): void {
+    if (pad === null || pad.slot.lane.side === "enemy") return;
+    const maneuver = this.match.plannedManeuver;
+    if (maneuver !== null && (pad.slot === maneuver.from || pad.slot === maneuver.to)) return this.cancelManeuver();
+    if (!pad.slot.isOccupied) return;
+    if (this.match.maneuverDestinations(pad.slot).length === 0) return playUiSound("denied");
+    this.selectManeuver(pad.slot);
+    playUiSound("select");
+  }
+
+  /**
    * Einzige Gültigkeitsregel für Highlight und Klick: gewähltes Schiff -> freie
-   * eigene Slots, die einem eingeplanten Lane-Wechsel nicht im Weg stehen; gewählter Befehl ->
-   * eigene Schiffe in einer erlaubten Lane, auch das eingeplante, bei verlegenden Befehlen nur mit
-   * freiem Ziel-Slot, danach die freien Slots der anderen Lane. Ohne Auswahl leuchten nur das bereits gewählte
-   * Befehlsziel und sein Ziel-Slot weiter, bis die Runde aufgelöst wird. Die Gegnerseite ist nie Ziel.
+   * eigene Slots, die den eingeplanten Lane-Wechseln nicht im Weg stehen; Manöver-Schiff -> seine
+   * Ziel-Slots in der anderen Lane; gewählter Befehl -> eigene Schiffe in einer erlaubten Lane, auch
+   * das eingeplante, bei verlegenden Befehlen nur mit freiem Ziel-Slot, danach die freien Slots der
+   * anderen Lane. Ohne Auswahl leuchten nur das bereits gewählte Befehlsziel, die Ziel-Slots und das
+   * manövrierende Schiff weiter, bis die Runde aufgelöst wird. Die Gegnerseite ist nie Ziel.
    */
   private isValidTarget(pad: SlotPad): boolean {
     const { slot } = pad;
     const lane: Lane = slot.lane;
-    const board = this.match.board;
     if (lane.side === "enemy" || this.isResolving) return false;
-    if (this.selectedShipIndex !== null) {
-      // Verlegt der Befehl das bisher geplante Schiff, fällt er beim Umplanen ohnehin weg (`planShip`).
-      const move = this.match.plannedMove;
-      const deploy = { lane: lane.type, slotIndex: slot.index };
-      const keepsMove = move !== null && !this.match.isPlannedDeploy(move.from);
-      return board.canPlace(lane, slot.index) && (!keepsMove || board.canMove(move.from, move.to.index, deploy));
+    if (this.selectedShipIndex !== null) return this.match.canDeploy(slot);
+    if (this.maneuverSource !== null) {
+      return lane !== this.maneuverSource.lane && this.match.maneuverDestinations(this.maneuverSource).includes(slot.index);
     }
     if (this.selectedCommandIndex !== null) {
       if (this.moveSource !== null) {
-        return lane !== this.moveSource.lane && board.canMove(this.moveSource, slot.index, this.plannedDeploy);
+        return lane !== this.moveSource.lane && this.match.commandMoveDestinations(this.moveSource).includes(slot.index);
       }
       const card = this.match.commandHand[this.selectedCommandIndex]!;
       if (this.match.shipAt(slot) === null || !canTargetLane(card, lane.type)) return false;
-      return !card.moves || board.moveDestinations(slot, this.plannedDeploy).length > 0;
+      return !card.moves || this.match.commandMoveDestinations(slot).length > 0;
     }
     const target = this.match.plan.command?.target;
     const isTarget = target?.lane === lane.type && target.slotIndex === slot.index;
-    return isTarget || this.match.plannedMove?.to === slot;
-  }
-
-  private get plannedDeploy(): SlotTarget | null {
-    return this.match.plan.ship?.target ?? null;
+    const maneuver = this.match.plannedManeuver;
+    return isTarget || this.match.plannedCommandMove?.to === slot || maneuver?.from === slot || maneuver?.to === slot;
   }
 
   /** Plant das Schiff auf den Slot; bis zur Auflösung steht es dort nur als Geist. */
@@ -277,6 +340,13 @@ export class MatchController {
       target: { lane: pad.slot.lane.type, slotIndex: pad.slot.index },
     });
     this.selectShip(null);
+    playUiSound("place");
+  }
+
+  /** Plant das Grundmanöver; das Schiff steht bis zur Auflösung als Geist im Ziel-Slot. */
+  private stageManeuverOn(pad: SlotPad): void {
+    this.match.plan.maneuver = { ship: slotTarget(this.maneuverSource!), destination: pad.slot.index };
+    this.selectManeuver(null);
     playUiSound("place");
   }
 
@@ -300,12 +370,11 @@ export class MatchController {
 
   /**
    * Stellt die Geister dorthin, wo sie laut `ghostTargets` stehen sollen; stehen sie schon richtig, bleiben sie.
-   * Der Pfeil des Lane-Wechsels folgt dem Geist des verlegten Schiffs.
+   * Die Pfeile der Lane-Wechsel folgen den Geistern der verlegten Schiffe.
    */
   private refreshGhosts(): void {
-    const move = this.moveArrowTarget();
-    if (move === null) this.view.moveArrow.hide();
-    else this.view.moveArrow.show(move.from, move.to);
+    showArrow(this.view.moveArrow, this.shownCommandMove());
+    showArrow(this.view.maneuverArrow, this.shownManeuver());
 
     const targets = this.ghostTargets();
     const unchanged =
@@ -319,8 +388,8 @@ export class MatchController {
 
   /**
    * Beim Platzieren zeigt der Geist den Slot unter dem Zeiger, sonst das eingeplante Schiff.
-   * Ebenso steht das verlegte Schiff beim Wählen des Ziel-Slots unter dem Zeiger, sonst auf dem
-   * eingeplanten Ziel-Slot, solange nicht gerade ein anderer Befehl gewählt wird.
+   * Ebenso stehen die verlegten Schiffe beim Wählen des Ziel-Slots unter dem Zeiger, sonst auf dem
+   * eingeplanten Ziel-Slot (siehe `shownMove`).
    */
   private ghostTargets(): { pad: SlotPad; card: ShipCard }[] {
     if (this.isResolving) return [];
@@ -332,22 +401,40 @@ export class MatchController {
     } else if (ship !== null) {
       ghosts.push({ pad: this.view.pad("player", ship.target.lane, ship.target.slotIndex), card: this.match.shipHand[ship.handIndex]! });
     }
-    const move = this.moveArrowTarget();
-    if (move !== null) ghosts.push({ pad: move.to, card: this.match.shipAt(move.from.slot)! });
+    for (const move of [this.shownCommandMove(), this.shownManeuver()]) {
+      if (move !== null) ghosts.push({ pad: move.to, card: this.match.shipAt(move.from.slot)! });
+    }
     return ghosts;
   }
 
-  /** Der Lane-Wechsel, den Geist und Pfeil zeigen: beim Wählen zum Slot unter dem Zeiger, sonst der eingeplante. */
-  private moveArrowTarget(): { from: SlotPad; to: SlotPad } | null {
+  private shownCommandMove(): { from: SlotPad; to: SlotPad } | null {
+    return this.shownMove(this.moveSource, this.match.plannedCommandMove, this.selectedCommandIndex !== null);
+  }
+
+  private shownManeuver(): { from: SlotPad; to: SlotPad } | null {
+    return this.shownMove(this.maneuverSource, this.match.plannedManeuver, false);
+  }
+
+  /**
+   * Ein Lane-Wechsel, wie Geist und Pfeil ihn zeigen: beim Wählen (`source`) zum Slot unter dem Zeiger,
+   * sonst der eingeplante, solange er nicht gerade neu gewählt wird.
+   */
+  private shownMove(source: Slot | null, planned: PlannedMove | null, isReplanning: boolean): { from: SlotPad; to: SlotPad } | null {
     if (this.isResolving) return null;
     const padOf = (slot: Slot) => this.view.pad("player", slot.lane.type, slot.index);
     const hovered = this.hoveredPad;
-    if (this.moveSource !== null) {
-      return hovered !== null && this.isValidTarget(hovered) ? { from: padOf(this.moveSource), to: hovered } : null;
+    if (source !== null) {
+      return hovered !== null && this.isValidTarget(hovered) ? { from: padOf(source), to: hovered } : null;
     }
-    const move = this.match.plannedMove;
-    if (this.selectedCommandIndex !== null || move === null) return null;
-    return { from: padOf(move.from), to: padOf(move.to) };
+    if (isReplanning || planned === null) return null;
+    return { from: padOf(planned.from), to: padOf(planned.to) };
+  }
+
+  /** Das manövrierende Schiff feuert nicht und zeigt das mit gedämpften Balken; in der Auflösung setzt sie die Wiedergabe. */
+  private refreshHoldFire(): void {
+    if (this.isResolving) return;
+    const maneuvering = this.maneuverSource ?? this.match.plannedManeuver?.from ?? null;
+    for (const pad of this.view.pads) pad.ship?.setHoldingFire(pad.slot === maneuvering);
   }
 
   private clearGhosts(): void {
@@ -400,8 +487,9 @@ export class MatchController {
       pad.setValidTarget(valid);
       if (valid) this.validTargetCount += 1;
     }
-    this.view.setGridVisible(this.selectedShipIndex !== null || this.moveSource !== null);
+    this.view.setGridVisible(this.selectedShipIndex !== null || this.moveSource !== null || this.maneuverSource !== null);
     this.refreshGhosts();
+    this.refreshHoldFire();
     this.updateHud();
   }
 
@@ -435,6 +523,7 @@ export class MatchController {
   }
 
   private buildPlanningText(): string {
+    if (this.maneuverSource !== null) return t.status.chooseManeuver(cardText(this.maneuverSource.card!).name);
     if (this.selectedShipIndex !== null) {
       const name = cardText(this.match.shipHand[this.selectedShipIndex]!).name;
       if (this.validTargetCount === 0) return t.status.noFreeSlot(name, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE);
@@ -446,8 +535,11 @@ export class MatchController {
       if (this.validTargetCount === 0) return t.status.noCommandTarget(name);
       return t.status.chooseCommandTarget(name);
     }
-    const planned = [this.match.plannedShip, this.match.plannedCommand].filter((card) => card !== null);
-    if (planned.length > 0) return t.status.planned(planned.map((card) => cardText(card).name).join(" + "));
+    const cards = [this.match.plannedShip, this.match.plannedCommand].filter((card) => card !== null);
+    const planned = cards.map((card) => cardText(card).name);
+    const maneuver = this.match.plannedManeuver;
+    if (maneuver !== null) planned.push(t.status.maneuver(cardText(maneuver.from.card!).name));
+    if (planned.length > 0) return t.status.planned(planned.join(" + "));
     return t.status.idle;
   }
 
@@ -458,4 +550,9 @@ export class MatchController {
     this.hoveredPad?.setHovered(true);
     this.refreshGhosts();
   }
+}
+
+function showArrow(arrow: MoveArrow, move: { from: SlotPad; to: SlotPad } | null): void {
+  if (move === null) arrow.hide();
+  else arrow.show(move.from, move.to);
 }

@@ -12,12 +12,16 @@ export interface SlotTarget {
 }
 
 /**
- * Der Zug einer Runde: bis zu 1 Schiff und 1 Befehl, jeweils per Hand-Index.
- * Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane, sonst null.
+ * Der Zug einer Runde: bis zu 1 Schiff und 1 Befehl, jeweils per Hand-Index, dazu höchstens ein
+ * Grundmanöver. Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane,
+ * sonst null. Das Manöver verlegt ein eigenes Schiff, das schon auf dem Brett steht, in den Slot
+ * `destination` der anderen Lane; dafür feuert es in dieser Runde nicht. Ziele beziehen sich auf die
+ * Stellung vor dem Manöver: Ein Befehl auf das manövrierte Schiff folgt ihm.
  */
 export interface TurnPlan {
   ship: { handIndex: number; target: SlotTarget } | null;
   command: { handIndex: number; target: SlotTarget | null; destination: number | null } | null;
+  maneuver: { ship: SlotTarget; destination: number } | null;
 }
 
 /** Ein Schiff an einer Stelle des Bretts; die Karte steht dabei, weil der Slot danach leer sein kann. */
@@ -70,6 +74,8 @@ export type AbilityEffect = Extract<CommandEffect, { type: "heal" }>;
 export type RoundEvent =
   | { kind: "deploy"; side: Side; cardId: ShipId; target: SlotTarget }
   | { kind: "pass"; side: Side }
+  /** Grundmanöver nach dem Deploy: `ship` ist die Stelle davor; das Schiff feuert in dieser Runde nicht. */
+  | { kind: "maneuver"; side: Side; ship: ShipRef; to: SlotTarget }
   | { kind: "command"; side: Side; cardId: CommandId; target: SlotTarget | null }
   | { kind: "effect"; side: Side; cardId: CommandId; ship: ShipRef; effect: CommandEffect; after: ShipStats }
   | { kind: "draw"; side: Side; cardId: CommandId; ships: number; commands: number }
@@ -101,7 +107,10 @@ export type ErrorCode =
   | "target_wrong_lane"
   | "destination_required"
   | "destination_not_allowed"
-  | "destination_unavailable";
+  | "destination_unavailable"
+  | "maneuver_not_own_ship"
+  | "maneuver_destination_unavailable"
+  | "maneuver_conflict";
 
 export type ServerMessage =
   | { type: "state"; view: PlayerView }

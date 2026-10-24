@@ -1,8 +1,8 @@
-// Die Auflösung einer Runde nach dem Deploy: Effects, Combat, Cleanup.
+// Die Auflösung einer Runde nach dem Deploy: Manöver, Effects, Combat, Cleanup.
 // Portiert aus game_mechanics.gd. Jede Phase arbeitet auf dem Brett aus Sicht
 // von Seat 0 und hängt ihre Ereignisse an `events` an.
 
-import { nearest, opposite, type Board, type Side, type Slot } from "../../shared/board.ts";
+import { nearest, opposite, slotTarget, type Board, type Side, type Slot } from "../../shared/board.ts";
 import type { CommandCard, CommandType } from "../../shared/cards.ts";
 import type { CommandEffect, RoundEvent, ShipRef, ShipStats } from "../../shared/protocol.ts";
 
@@ -46,6 +46,16 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
   return best;
 }
 
+// --- Manöver ---
+
+/** Grundmanöver: Das Schiff wechselt in den freien Slot der anderen Lane und feuert dafür in dieser Runde nicht. */
+export function resolveManeuver(from: Slot, to: Slot, events: RoundEvent[]): void {
+  const ship = shipRef(from);
+  to.takeFrom(from);
+  to.maneuvered = true;
+  events.push({ kind: "maneuver", side: ship.side, ship, to: slotTarget(to) });
+}
+
 // --- Effects ---
 
 export function resolveEffects(board: Board, commands: readonly PlayedCommand[], events: RoundEvent[]): void {
@@ -76,11 +86,14 @@ function applyCommand(board: Board, { commander, card, target, destination }: Pl
     return ships.length > 0;
   };
   const affectOne = (ship: Slot | null, apply: (slot: Slot) => CommandEffect) => affectAll(ship ? [ship] : [], apply);
-  /** Verlegt das Ziel in den gewählten Slot. Positionen ändern sich nur durch eigene Befehle, er ist also noch frei. */
+  /**
+   * Verlegt das Ziel in den gewählten Slot. Positionen ändern sich nur durch eigene Manöver und Befehle,
+   * und die Zugprüfung hält ihre Ziel-Slots auseinander; er ist also noch frei.
+   */
   const moveTarget = (): Slot => {
     const from = shipRef(target!);
     destination!.takeFrom(target!);
-    affect(from, { type: "move", to: { lane: destination!.lane.type, slotIndex: destination!.index } }, destination!);
+    affect(from, { type: "move", to: slotTarget(destination!) }, destination!);
     return destination!;
   };
 
@@ -164,8 +177,8 @@ function chooseTarget(attacker: Slot, ships: readonly Slot[]): Slot | null {
 }
 
 /**
- * Beide Seiten feuern gleichzeitig: Wer zu Kampfbeginn schießen kann, schießt,
- * auch wenn er im selben Kampf zerstört wird. Ziel sind nur ungedeckte Schiffe
+ * Beide Seiten feuern gleichzeitig: Wer zu Kampfbeginn schießen kann (`Slot.canAttack`,
+ * also weder per EMP gelähmt noch manövriert), schießt, auch wenn er im selben Kampf zerstört wird. Ziel sind nur ungedeckte Schiffe
  * (`Board.exposedShips`); die Deckung gilt für die ganze Runde, auch wenn das
  * deckende Schiff im selben Kampf zerstört wird. Innerhalb einer Seite zielen
  * die Schiffe nacheinander in Slot-Reihenfolge und überspringen Ziele, die ein

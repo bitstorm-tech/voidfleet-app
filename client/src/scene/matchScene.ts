@@ -91,7 +91,9 @@ export class MatchScene {
   readonly pads: SlotPad[] = [];
   readonly padsByLane = new Map<Lane, SlotPad[]>();
   readonly effects: BoardEffects;
+  /** Pfeile der beiden möglichen Lane-Wechsel eines Zugs: Bewegungsbefehl und Grundmanöver. */
   readonly moveArrow: MoveArrow;
+  readonly maneuverArrow: MoveArrow;
   private readonly camera: TargetCamera;
   private readonly cameraRig: TransformNode;
   private readonly glow: GlowLayer;
@@ -143,6 +145,7 @@ export class MatchScene {
     this.glow.intensity = 0.7;
     this.effects = new BoardEffects(this.scene, this.glow);
     this.moveArrow = new MoveArrow(this.scene, this.glow);
+    this.maneuverArrow = new MoveArrow(this.scene, this.glow);
 
     this.createBoard(board);
 

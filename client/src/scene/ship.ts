@@ -74,6 +74,8 @@ const HP_COLOR_EMPTY = color3("hpEmpty");
 const HP_COLOR_HALF = color3("hpHalf");
 const HP_COLOR_FULL = color3("hpFull");
 const BAR_TRACK_COLOR = new Color3(0.13, 0.15, 0.22);
+/** Ein Schiff, das diese Runde manövriert und deshalb nicht feuert, zeigt seine Balken gedämpft. */
+const HOLD_FIRE_ALPHA = 0.3;
 
 const containers = new Map<string, AssetContainer>();
 
@@ -104,6 +106,8 @@ export class ShipView {
   private readonly hpFill: Mesh;
   private readonly shieldRow: TransformNode;
   private readonly shieldFill: Mesh;
+  /** Material und volle Deckkraft je Balken, zum Dämpfen (`setHoldingFire`). */
+  private readonly bars: { material: StandardMaterial; alpha: number }[] = [];
   /** Eigene Materialien (Balken, Geist-Kopien, Wrack); glTF-Materialien gehören dem geteilten Container. */
   private readonly ownedMaterials: Material[] = [];
   /** Geist-Kopie je glTF-Material, damit Meshes mit gleichem Material auch die Kopie teilen. */
@@ -149,6 +153,11 @@ export class ShipView {
     const shieldMax = Math.max(this.card.shield, shield);
     this.shieldRow.setEnabled(shieldMax > 0);
     if (shieldMax > 0) this.setFill(this.shieldFill, ratio(shield, shieldMax));
+  }
+
+  /** Dämpft die Statusbalken, solange das Schiff wegen seines Manövers nicht feuert. */
+  setHoldingFire(value: boolean): void {
+    for (const { material, alpha } of this.bars) material.alpha = alpha * (value ? HOLD_FIRE_ALPHA : 1);
   }
 
   /** Mittelpunkt des Modells in Weltkoordinaten. */
@@ -334,6 +343,7 @@ export class ShipView {
     material.alpha = alpha;
     material.disableDepthWrite = true;
     this.ownedMaterials.push(material);
+    this.bars.push({ material, alpha });
     const mesh = CreatePlane(name, { width, height }, this.scene);
     mesh.material = material;
     mesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
