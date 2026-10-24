@@ -48,6 +48,7 @@ const SHOT_SOUNDS: Record<ShipId, SoundId> = {
   titan_carrier: "laser_medium",
   repair_drone: "laser_light",
   signal_booster: "laser_light",
+  drone: "laser_light",
 };
 /** Was man von einem Befehl hört, sobald er wirkt; Lane-Wechsel hört man an den Triebwerken, Treffer an den Einschlägen. */
 const COMMAND_SOUNDS: Record<CommandId, SoundId | null> = {
@@ -117,6 +118,8 @@ function stepKey(event: RoundEvent): string {
       return `command-${event.side}-${event.cardId}`;
     case "ability":
       return `ability-${event.source.side}-${event.source.lane}-${event.source.slotIndex}`;
+    case "spawn":
+      return `spawn-${event.source.side}`;
     default:
       return event.kind;
   }
@@ -175,7 +178,7 @@ export class RoundPlayback {
       this.announceCommand(first);
       await wait(this.view.scene, BANNER_LEAD);
       this.commandSound(first);
-    } else if (first.kind === "ability") {
+    } else if (first.kind === "ability" || first.kind === "spawn") {
       this.hud.showBanner(t.banner.command(t.log.who[first.source.side], t.ships[first.source.cardId].name), null, first.source.side);
       await wait(this.view.scene, BANNER_LEAD);
     }
@@ -231,6 +234,8 @@ export class RoundPlayback {
         return this.miss(event);
       case "ability":
         return this.ability(event);
+      case "spawn":
+        return this.spawn(event);
       case "attack": {
         const color = SIDE_COLORS[event.attacker.side];
         const origin = this.centerOf(this.padOf(event.attacker));
@@ -299,14 +304,37 @@ export class RoundPlayback {
     await this.view.effects.hit(point, origin, color);
   }
 
-  /** Erst ein Impuls an der Quelle, dann die Reparatur am Ziel. */
+  /**
+   * Plasma Frigate: ein Schuss auf das Ziel. Repair Drone: erst ein Impuls an der Quelle, dann die Reparatur
+   * am Ziel. Scrap Raider: der Bonus leuchtet am Raider selbst auf.
+   */
   private async ability(event: Extract<RoundEvent, { kind: "ability" }>): Promise<void> {
     const pad = this.padOf(event.ship);
     const source = this.centerOf(this.padOf(event.source));
-    playSound("repair", { x: source.x });
-    await this.view.effects.pulse(source, SIDE_COLORS[event.source.side], 1.2, 350);
-    pad.ship!.setStats(event.after.hp, event.after.shield);
-    return this.mark(pad, t.float.heal(event.effect.amount), "heal");
+    const { effect, after } = event;
+    switch (effect.type) {
+      case "damage": {
+        const color = SIDE_COLORS[event.source.side];
+        await this.shoot(source, pad, color, SHOT_SOUNDS[event.source.cardId]);
+        return this.damage(event.ship, effect.amount, after, source, color);
+      }
+      case "heal":
+        playSound("repair", { x: source.x });
+        await this.view.effects.pulse(source, SIDE_COLORS[event.source.side], 1.2, 350);
+        pad.ship!.setStats(after.hp, after.shield);
+        return this.mark(pad, t.float.heal(effect.amount), "heal");
+      case "attack":
+        playSound("power_up", { x: source.x });
+        return this.mark(pad, t.float.attack(effect.delta), "buff");
+    }
+  }
+
+  /** Titan Carrier: Die Drohne startet am Träger und fliegt in ihren Slot. */
+  private async spawn(event: Extract<RoundEvent, { kind: "spawn" }>): Promise<void> {
+    const ship = new ShipView(this.view.scene, shipById(event.ship.cardId), false);
+    this.padOf(event.ship).attachShip(ship);
+    ship.root.setAbsolutePosition(this.padOf(event.source).shipAnchor.getAbsolutePosition());
+    await ship.maneuver();
   }
 
   /** Mündungsblitz und Schuss bei `origin`, dann fliegt der Bolzen bis auf die Hülle des Ziels. */

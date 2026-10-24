@@ -9,6 +9,7 @@ import scrap_raider from "../../assets/images/cards/scrap_raider.jpg";
 import signal_booster from "../../assets/images/cards/signal_booster.jpg";
 import titan_carrier from "../../assets/images/cards/titan_carrier.jpg";
 import void_interceptor from "../../assets/images/cards/void_interceptor.jpg";
+import drone from "../../assets/images/cards/drone.jpg";
 import emergency_shields from "../../assets/images/cards/emergency_shields.jpg";
 import emp_blast from "../../assets/images/cards/emp_blast.jpg";
 import flanking_maneuver from "../../assets/images/cards/flanking_maneuver.jpg";
@@ -32,6 +33,7 @@ const ART: Record<Card["id"], string> = {
   signal_booster,
   titan_carrier,
   void_interceptor,
+  drone,
   emergency_shields,
   emp_blast,
   flanking_maneuver,

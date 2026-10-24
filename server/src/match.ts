@@ -7,7 +7,7 @@
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
 import { canTargetLane, needsTarget, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
-import { Board, isSameSlot, maxDeploys, opposite, otherLane, overdriveBonus, type BoardSnapshot, type Side } from "../../shared/board.ts";
+import { Board, isSameSlot, maxDeploys, opposite, otherLane, overdriveBonus, type BoardSnapshot, type Side, type Slot } from "../../shared/board.ts";
 import type { ErrorCode, MatchResult, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { planBotTurn } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
@@ -15,6 +15,7 @@ import {
   resolveCleanup,
   resolveCombat,
   resolveEffects,
+  resolveDeployAbilities,
   resolveManeuver,
   type Commander,
   type PlayedCommand,
@@ -112,7 +113,11 @@ export class Match {
   /** Wer aufgegeben hat; null, wenn das Match auf dem Brett entschieden wurde oder noch läuft. */
   surrenderedBy: Side | null = null;
 
-  constructor(readonly id: string) {}
+  /** `random` (Zahlen in [0, 1)) entscheidet über das Ziel der Plasma Frigate; Tests geben ihn fest vor. */
+  constructor(
+    readonly id: string,
+    private readonly random: () => number = Math.random,
+  ) {}
 
   /** Sitzplatz für ein Token: bekannter Spieler, sonst ein freier Platz; null, wenn das Match voll ist. */
   join(token: string): Seat | null {
@@ -208,31 +213,34 @@ export class Match {
   }
 
   /**
-   * Deckt beide Züge auf und löst die Runde in Phasen auf: Deploy, Manöver, Effects,
+   * Deckt beide Züge auf und löst die Runde in Phasen auf: Deploy (samt Fähigkeiten beim Deploy), Manöver, Effects,
    * Combat, Cleanup. Danach ziehen beide nach, und es wird geprüft, ob eine Flotte
    * vernichtet ist; sonst beginnt die nächste Runde. Gibt die Ereignisse aus Sicht von Seat 0 zurück.
    */
   resolveRound(): RoundEvent[] {
     const events: RoundEvent[] = [];
 
+    const deployed: Slot[] = [];
     for (const player of this.players) {
       const { ships } = player.plan!;
       for (const { handIndex, target } of ships) {
         const card = player.shipHand[handIndex]!;
-        this.board.place(this.board.lane(player.side, target.lane), target.slotIndex, card);
+        deployed.push(this.board.place(this.board.lane(player.side, target.lane), target.slotIndex, card)!);
         events.push({ kind: "deploy", side: player.side, cardId: card.id, target });
       }
       // Von hinten entfernen, damit die übrigen Hand-Indizes gültig bleiben.
       for (const index of ships.map((ship) => ship.handIndex).sort((a, b) => b - a)) player.shipHand.splice(index, 1);
       if (ships.length === 0) events.push({ kind: "pass", side: player.side });
     }
+    resolveDeployAbilities(this.board, deployed, this.players.flatMap((player) => this.moveDestinations(player)), this.random, events);
 
     // Jede Seite bewegt nur eigene Schiffe, die Manöver kommen sich also nicht in die Quere.
+    // Ein Schiff, das schon beim Deploy gefallen ist, bewegt sich nicht mehr.
     for (const player of this.players) {
       const maneuver = player.plan!.maneuver;
-      if (!maneuver) continue;
-      const slotOf = ({ lane, slotIndex }: SlotTarget) => this.board.lane(player.side, lane).slots[slotIndex]!;
-      resolveManeuver(slotOf(maneuver.ship), slotOf(maneuver.destination), events);
+      const from = maneuver && this.ownSlot(player, maneuver.ship);
+      if (!from?.isOccupied) continue;
+      resolveManeuver(from, this.ownSlot(player, maneuver!.destination), events);
     }
 
     const commands: PlayedCommand[] = [];
@@ -268,6 +276,17 @@ export class Match {
       this.board.overdrive = overdriveBonus(this.round);
     }
     return events;
+  }
+
+  private ownSlot(player: Player, { lane, slotIndex }: SlotTarget) {
+    return this.board.lane(player.side, lane).slots[slotIndex]!;
+  }
+
+  /** Die Ziel-Slots der Bewegungen im Plan: Grundmanöver und Bewegungsbefehl (der nie das manövrierte Schiff verlegt). */
+  private moveDestinations(player: Player) {
+    const { maneuver, command } = player.plan!;
+    const moved = command?.target && command.destination !== null ? { lane: otherLane(command.target.lane), slotIndex: command.destination } : null;
+    return [maneuver?.destination, moved].filter((target) => target != null).map((target) => this.ownSlot(player, target));
   }
 
   /** Wo ein Befehlsziel nach dem Manöver steht: Zielt der Befehl auf das manövrierte Schiff, folgt er ihm. */

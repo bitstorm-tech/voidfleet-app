@@ -20,10 +20,10 @@ import { Tools } from "@babylonjs/core/Misc/tools";
 import type { Scene } from "@babylonjs/core/scene";
 // Registriert `renderOverlay` auf Mesh: zeichnet das Modell in einer Farbe darüber (Treffer-Blitz).
 import "@babylonjs/core/Rendering/outlineRenderer";
-import { SHIPS, type ShipCard, type ShipClass } from "../../../shared/cards.ts";
+import type { ShipCard, ShipClass } from "../../../shared/cards.ts";
 import { loopSound } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
-import { shipModel, wreckModel } from "../data/shipModels.ts";
+import { allShipModels, shipModel, wreckModel } from "../data/shipModels.ts";
 import type { SoundId } from "../data/sounds.ts";
 import { randomInCone } from "./effects.ts";
 import { Maneuver } from "./maneuver.ts";
@@ -81,7 +81,7 @@ const containers = new Map<string, AssetContainer>();
 
 /** Lädt Modell und Wrack aller Schiffe; erst danach lassen sich `ShipView`s erzeugen. */
 export function loadShipModels(scene: Scene): Promise<void>[] {
-  return SHIPS.flatMap((card) => [shipModel(card), wreckModel(card)]).map(async (url) => {
+  return allShipModels().map(async (url) => {
     const container = await LoadAssetContainerAsync(url, scene);
     for (const material of container.materials) if (material instanceof PBRMaterial) material.maxSimultaneousLights = MAX_LIGHTS;
     containers.set(url, container);

@@ -43,8 +43,20 @@ export function describeEvent(event: RoundEvent): string {
           return t.log.move(name, ship, slotLabel({ side: event.ship.side, ...effect.to }));
       }
     }
-    case "ability":
-      return t.log.repair(shipLabel(event.source), shipLabel(event.ship), event.effect.amount);
+    case "ability": {
+      const source = shipLabel(event.source);
+      const effect = event.effect;
+      switch (effect.type) {
+        case "damage":
+          return t.log.abilityDamage(source, shipLabel(event.ship), effect.amount);
+        case "heal":
+          return t.log.repair(source, shipLabel(event.ship), effect.amount);
+        case "attack":
+          return t.log.scrap(source, effect.delta);
+      }
+    }
+    case "spawn":
+      return t.log.spawn(shipLabel(event.source), shipLabel(event.ship));
     case "draw":
       return t.log.draw(t.commands[event.cardId].name, t.log.who[event.side], event.ships, event.commands);
     case "noEffect":

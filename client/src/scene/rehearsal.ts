@@ -5,7 +5,7 @@
 // Die Effekte bleiben dabei stumm, auch wenn ein Klick auf den Ladebildschirm den Ton schon freigegeben hat.
 
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { SHIPS } from "../../../shared/cards.ts";
+import { SHIPS, TOKENS } from "../../../shared/cards.ts";
 import { muteSounds } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
 import { HIT_NAMES } from "./effects.ts";
@@ -20,7 +20,7 @@ export async function rehearse(view: MatchScene): Promise<void> {
   const color = color3("player");
   muteSounds(true);
   const ships: ShipView[] = [];
-  for (const card of SHIPS) {
+  for (const card of [...SHIPS, ...TOKENS]) {
     const ship = new ShipView(scene, card, false);
     const ghost = new ShipView(scene, card, true);
     const wrecked = new ShipView(scene, card, false);

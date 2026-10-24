@@ -1,4 +1,4 @@
-"""Die acht Schiffe von Voidfleet, je eine Funktion pro Karten-ID (siehe shared/cards.ts).
+"""Die Schiffe von Voidfleet samt der Drohne des Titan Carriers, je eine Funktion pro Karten-ID (siehe shared/cards.ts).
 
 Größen in Blender-Einheiten; auf dem Brett wirkt MODEL_SCALE × BOARD_SCALE aus ship.ts.
 Jäger ~6, Kreuzer ~6-7.5, Schlachtschiffe ~8.5, Unterstützer ~5 Einheiten lang.
@@ -15,6 +15,7 @@ FIGHTER_ACCENT, FIGHTER_GLOW = (0.8, 0.14, 0.05), (1.0, 0.35, 0.1)
 CRUISER_ACCENT, CRUISER_GLOW = (0.1, 0.3, 0.9), (0.25, 0.55, 1.0)
 BATTLESHIP_HULL, BATTLESHIP_ACCENT, BATTLESHIP_GLOW = (0.34, 0.37, 0.42), (0.5, 0.54, 0.6), (0.3, 0.6, 1.0)
 SUPPORT_ACCENT, SUPPORT_GLOW, SUPPORT_CANOPY = (0.08, 0.62, 0.4), (0.3, 1.0, 0.6), (0.1, 0.5, 0.3)
+DRONE_ACCENT, DRONE_GLOW = (0.3, 0.16, 0.62), (0.6, 0.25, 1.0)  # Farben des Titan Carriers
 OCT = math.pi / 8  # Achteck mit flacher Ober- und Unterseite
 
 
@@ -563,6 +564,68 @@ def titan_carrier():
     return s.finish()
 
 
+def drone():
+    """Unbemannter Jäger des Titan Carriers (Token, keine Deck-Karte): kleiner als die Jäger, in den Farben des Trägers."""
+    s = Ship("drone")
+    m = palette(s.name, DRONE_ACCENT, DRONE_GLOW, hull=BATTLESHIP_HULL, tile=0.9, canopy_glow=DRONE_GLOW)
+    # Keilrumpf: facettierter Achteck-Querschnitt, vorn flach und spitz
+    s.add(loft(smooth([
+        tip(-2.0, 0, -0.02),
+        sec(-1.6, octagon(0.34, 0.16, 0.35)),
+        sec(-0.9, octagon(0.62, 0.32, 0.35)),
+        sec(0.0, octagon(0.78, 0.42, 0.35)),
+        sec(0.9, octagon(0.74, 0.4, 0.35)),
+        sec(1.35, octagon(0.6, 0.34, 0.35)),
+    ], 2)), m["hull"])
+    # Rückenbuckel mit Sensorauge statt Kanzel: dunkler Rahmen, leuchtender Schlitz
+    s.add(loft(smooth([sec(-1.1, rounded(0.2, 0.06, 0.02)), sec(-0.6, rounded(0.42, 0.2, 0.06)), sec(0.5, rounded(0.44, 0.22, 0.06)),
+                       sec(1.2, rounded(0.3, 0.12, 0.04))], 2)), m["accent"], at=(0, 0, 0.17))
+    s.add(loft(smooth([sec(-0.95, rounded(0.16, 0.04, 0.015)), sec(-0.7, rounded(0.34, 0.16, 0.05)), sec(-0.3, rounded(0.34, 0.16, 0.05)),
+                       sec(-0.15, rounded(0.24, 0.08, 0.03))], 1)), m["dark"], at=(0, 0, 0.27))
+    s.add(loft(smooth([sec(-0.9, rounded(0.12, 0.03, 0.012)), sec(-0.68, rounded(0.28, 0.14, 0.04)), sec(-0.35, rounded(0.28, 0.14, 0.04)),
+                       sec(-0.22, rounded(0.18, 0.06, 0.02))], 1)), m["canopy"], at=(0, 0, 0.3))
+    s.add(box(0.012, 0.42, 0.012), m["steel"], at=(0, 0.2, 0.39))
+    # Bugsensor und Leuchtschlitze an den Bugflanken (rot wie auf der Karte)
+    s.add(tube(8, 0.016, 0.01, -1.95, -2.35), m["steel"], at=(0, 0, -0.02))
+    s.add(plate([(-1.3, 0.0), (-0.75, 0.0), (-0.8, 0.05), (-1.25, 0.05)], 0.02, "yz"), m["navred"], at=(0.29, 0, 0.0), rot=(0, 18, 0), mirror=True)
+    # Gepfeilte Flügel mit Plattenfuge, Akzentstreifen an der Vorderkante und Wurzelverkleidung
+    wing = plate([(0.3, -0.45), (1.75, 0.55), (1.75, 0.78), (0.3, 0.95)], 0.06, "xy")
+    inset(wing, 0.03, 0.008, 0.12)
+    s.add(wing, m["hull"], at=(0, 0, 0.0), rot=(0, -3, 0), mirror=True)
+    s.add(plate([(0.35, -0.4), (1.7, 0.55), (1.7, 0.63), (0.35, -0.27)], 0.075, "xy"), m["accent"], at=(0, 0, 0.0), rot=(0, -3, 0), mirror=True)
+    s.add(box(0.02, 0.3, 0.02), m["navred"], at=(1.1, 0.42, 0.06), rot=(0, -3, 34), mirror=True)
+    s.add(loft(smooth([sec(-0.55, rounded(0.14, 0.08, 0.02)), sec(-0.1, rounded(0.36, 0.16, 0.05)), sec(0.7, rounded(0.36, 0.16, 0.05)),
+                       sec(1.1, rounded(0.18, 0.1, 0.03))], 1)), m["hull"], at=(0.42, 0, 0.0), mirror=True)
+    # Flügelspitzen mit nach außen geneigten Flossen und Positionslichtern
+    tipfin = plate([(0.42, -0.04), (0.84, -0.04), (0.9, 0.3), (0.68, 0.32)], 0.04, "yz")
+    inset(tipfin, 0.02, 0.006, 0.05)
+    s.add(tipfin, m["hull"], at=(1.72, 0, -0.07), rot=(0, 14, 0), mirror=True)
+    s.add(plate([(0.66, 0.28), (0.9, 0.27), (0.91, 0.34), (0.67, 0.35)], 0.05, "yz"), m["accent"], at=(1.72, 0, -0.07), rot=(0, 14, 0), mirror=True)
+    s.add(sphere(0.03, 1), m["navgreen"], at=(1.77, 0.4, -0.08))
+    s.add(sphere(0.03, 1), m["navred"], at=(-1.77, 0.4, -0.08))
+    # Bugkanonen in den Flügelwurzeln
+    s.add(tube(10, 0.06, 0.05, -0.5, -1.1), m["dark"], at=(0.52, 0, -0.06), mirror=True)
+    s.add(tube(10, 0.03, 0.026, -1.1, -1.65), m["steel"], at=(0.52, 0, -0.06), mirror=True)
+    s.add(tube(8, 0.018, 0.018, -1.65, -1.69), m["glow"], at=(0.52, 0, -0.06), mirror=True)
+    # Zwei Triebwerke mit Einlaufring, dazwischen ein Kühlschlitz
+    ex, ez = 0.3, -0.04
+    s.add(loft(smooth([tip(-0.6), sec(-0.3, superellipse(0.36, 0.32, 16)), sec(0.6, superellipse(0.4, 0.36, 16)),
+                       sec(1.3, superellipse(0.38, 0.34, 16))], 2)), m["hull"], at=(ex, 0, ez), mirror=True)
+    s.add(hoop(16, 0.17, 0.21, 0.04), m["steel"], at=(ex, 0.3, ez), rot=(90, 0, 0), mirror=True)
+    s.engine(m, 0.17, 1.3, 1.75, dx=ex, dz=ez, n=16, mirror=True)
+    s.add(box(0.16, 0.04, 0.06), m["glow"], at=(0, 1.36, 0.02))
+    s.add(box(0.2, 0.06, 0.1), m["dark"], at=(0, 1.35, 0.02))
+    # Kielflosse, Bauchsensor, Antenne, Lüfter, Kleinteile, Leuchtstreifen
+    s.add(plate([(0.1, 0.0), (1.2, 0.0), (1.15, -0.2), (0.4, -0.22)], 0.04, "yz"), m["hull"], at=(0, 0, -0.18))
+    s.add(sphere(0.06, 2), m["plain"], at=(0, -0.7, -0.19))
+    s.add(hoop(12, 0.06, 0.09, 0.03), m["steel"], at=(0, -0.7, -0.19))
+    antenna(s, m, (0.14, 0.75, 0.33), 0.22, r=0.015, discs=1)
+    vents(s, m, (0.17, 0.25, 0.33), 0.1, 0.07, slots=3, rot=(-90, 0, 0), mirror=True)
+    greebles(s, m, (-0.12, 0.6, 0.12, 1.05), 0.3, 4, size=(0.03, 0.09), seed=7)
+    s.add(box(0.03, 0.5, 0.03), m["glow"], at=(0.37, 0.15, 0.1), mirror=True)
+    return s.finish()
+
+
 # ---------------------------------------------------------------- Unterstützer
 
 
@@ -728,6 +791,7 @@ SHIPS = {
     "plasma_frigate": plasma_frigate,
     "iron_dreadnought": iron_dreadnought,
     "titan_carrier": titan_carrier,
+    "drone": drone,
     "repair_drone": repair_drone,
     "signal_booster": signal_booster,
 }

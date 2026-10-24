@@ -3,7 +3,7 @@
 // ganze Szene um den Faktor, `?ship=<id>` zeigt nur dieses Schiff in Dauerschleife.
 
 import { Board } from "../../shared/board.ts";
-import { SHIPS, type ShipCard } from "../../shared/cards.ts";
+import { SHIPS, type ShipCard, TOKENS } from "../../shared/cards.ts";
 import { loadSounds } from "../src/audio/sounds.ts";
 import { destroyShip } from "../src/scene/destruction.ts";
 import { MatchScene } from "../src/scene/matchScene.ts";
@@ -26,7 +26,7 @@ const view = new MatchScene(canvas, new Board());
 await Promise.all([...loadShipModels(view.scene), ...loadSounds()]);
 const params = new URLSearchParams(location.search);
 const slow = Number(params.get("slow") ?? 1);
-const only = SHIPS.find((ship) => ship.id === params.get("ship"));
+const only = [...SHIPS, ...TOKENS].find((ship) => ship.id === params.get("ship"));
 const realDelta = view.engine.getDeltaTime.bind(view.engine);
 view.engine.getDeltaTime = () => realDelta() / slow;
 

@@ -77,7 +77,7 @@ export type CommandEffect =
   | { type: "move"; to: SlotTarget };
 
 /** Was eine Schiffs-Fähigkeit an einem Schiff bewirkt. */
-export type AbilityEffect = Extract<CommandEffect, { type: "heal" }>;
+export type AbilityEffect = Extract<CommandEffect, { type: "heal" | "damage" | "attack" }>;
 
 /**
  * Was in einer Runde aufgedeckt und aufgelöst wurde, in Auflösungsreihenfolge.
@@ -95,8 +95,14 @@ export type RoundEvent =
   | { kind: "noEffect"; side: Side; cardId: CommandId }
   /** Torpedo in einen Slot, in dem nach allen Bewegungen kein Schiff steht. */
   | { kind: "miss"; side: Side; cardId: CommandId; target: SlotRef }
-  /** Fähigkeit eines Schiffs (`source`) an einem anderen, bisher nur die Reparatur der Repair Drone im Cleanup. */
+  /**
+   * Fähigkeit eines Schiffs (`source`) an einem Schiff: der Schuss der Plasma Frigate beim Deploy (`damage`),
+   * die Reparatur der Repair Drone im Cleanup (`heal`), der dauerhafte ATK-Bonus des Scrap Raiders an sich
+   * selbst, sobald in seiner Lane Gegner zerstört wurden (`attack`, gleich nach den `destroyed`-Ereignissen).
+   */
   | { kind: "ability"; source: ShipRef; ship: ShipRef; effect: AbilityEffect; after: ShipStats }
+  /** Titan Carrier beim Deploy: Seine Drohne startet in den freien Slot `ship` derselben Lane. */
+  | { kind: "spawn"; source: ShipRef; ship: ShipRef }
   | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number; after: ShipStats }
   | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "destroyed"; ship: ShipRef };

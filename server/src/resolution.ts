@@ -1,9 +1,9 @@
-// Die Auflösung einer Runde nach dem Deploy: Manöver, Effects, Combat, Cleanup.
+// Die Auflösung einer Runde ab dem Deploy: Fähigkeiten beim Deploy, Manöver, Effects, Combat, Cleanup.
 // Portiert aus game_mechanics.gd. Jede Phase arbeitet auf dem Brett aus Sicht
 // von Seat 0 und hängt ihre Ereignisse an `events` an.
 
 import { nearest, opposite, slotTarget, type Board, type Side, type Slot } from "../../shared/board.ts";
-import { COMMAND_ORDER, type CommandCard } from "../../shared/cards.ts";
+import { COMMAND_ORDER, shipById, targetsEnemySlot, type CommandCard } from "../../shared/cards.ts";
 import type { CommandEffect, RoundEvent, ShipRef, ShipStats } from "../../shared/protocol.ts";
 
 const SIDES: readonly Side[] = ["player", "enemy"];
@@ -40,6 +40,41 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
   return best;
 }
 
+// --- Deploy ---
+
+/**
+ * Fähigkeiten beim Deploy, sobald beide Seiten gelegt haben (`deployed`, in Deploy-Reihenfolge): Erst
+ * startet die Drohne jedes Titan Carriers in den freien Slot seiner Lane, der ihm am nächsten liegt.
+ * `reserved` sind die Ziel-Slots der Bewegungen dieser Runde (Grundmanöver, Bewegungsbefehl): Die Drohne
+ * meidet sie, die Bewegungen bleiben also gültig. Zu Lane- und Flottengrenze zählt sie nicht; nur wenn
+ * kein Slot der Lane frei ist, gibt es keine Drohne. Dann schießt jede Plasma Frigate 3 Schaden
+ * auf ein zufälliges gegnerisches Schiff der gleichnamigen Lane, gedeckt oder nicht, auch auf eine frische Drohne.
+ * `random` liefert Zahlen in [0, 1).
+ */
+export function resolveDeployAbilities(
+  board: Board,
+  deployed: readonly Slot[],
+  reserved: readonly Slot[],
+  random: () => number,
+  events: RoundEvent[],
+): void {
+  for (const carrier of deployed.filter((slot) => slot.card!.id === "titan_carrier")) {
+    const slot = nearest(carrier.lane.slots.filter((slot) => !slot.isOccupied && !reserved.includes(slot)), carrier.index);
+    if (slot === null) continue;
+    slot.place(shipById("drone"));
+    events.push({ kind: "spawn", source: shipRef(carrier), ship: shipRef(slot) });
+  }
+  for (const frigate of deployed.filter((slot) => slot.card!.id === "plasma_frigate")) {
+    const targets = board.lane(opposite(frigate.lane.side), frigate.lane.type).occupiedSlots.filter((slot) => !slot.isDestroyed);
+    if (targets.length === 0) continue;
+    const target = targets[Math.floor(random() * targets.length)]!;
+    const ship = shipRef(target);
+    target.damage(3);
+    events.push({ kind: "ability", source: shipRef(frigate), ship, effect: { type: "damage", amount: 3 }, after: stats(target) });
+  }
+  removeDestroyed(board, events);
+}
+
 // --- Manöver ---
 
 /** Grundmanöver: Das Schiff wechselt in einen freien Slot, in der anderen oder derselben Lane, und feuert dafür in dieser Runde nicht. */
@@ -66,6 +101,8 @@ export function resolveEffects(board: Board, commands: readonly PlayedCommand[],
 
 /** Wendet den Befehl an; false, wenn er nichts bewirkt hat. */
 function applyCommand(board: Board, { commander, card, target, destination }: PlayedCommand, events: RoundEvent[]): boolean {
+  // Das eigene Ziel kann schon vor den Befehlen gefallen sein, durch den Schuss einer Plasma Frigate.
+  if (target && !target.isOccupied && !targetsEnemySlot(card)) return false;
   const side = commander.side;
   const enemyShips = board.ships(opposite(side));
   /** `ship` ist die Stelle vor dem Effekt, `after` gibt die Werte danach an. */
@@ -264,12 +301,20 @@ function resolveRepairs(board: Board, events: RoundEvent[]): void {
   }
 }
 
+/**
+ * Entfernt die zerstörten Schiffe. Jeder überlebende Scrap Raider bekommt dauerhaft +1 ATK für jedes
+ * davon, das auf der Gegenseite in der gleichnamigen Lane stand, egal wodurch es fiel.
+ */
 function removeDestroyed(board: Board, events: RoundEvent[]): void {
-  for (const side of SIDES) {
-    for (const slot of board.ships(side)) {
-      if (!slot.isDestroyed) continue;
-      events.push({ kind: "destroyed", ship: shipRef(slot) });
-      slot.clear();
-    }
+  const destroyed = SIDES.flatMap((side) => board.ships(side)).filter((slot) => slot.isDestroyed);
+  for (const slot of destroyed) events.push({ kind: "destroyed", ship: shipRef(slot) });
+  for (const raider of SIDES.flatMap((side) => board.ships(side))) {
+    if (raider.card!.id !== "scrap_raider" || raider.isDestroyed) continue;
+    const kills = destroyed.filter((slot) => slot.lane.side !== raider.lane.side && slot.lane.type === raider.lane.type).length;
+    if (kills === 0) continue;
+    raider.scrapBonus += kills;
+    const ship = shipRef(raider);
+    events.push({ kind: "ability", source: ship, ship, effect: { type: "attack", delta: kills }, after: stats(raider) });
   }
+  for (const slot of destroyed) slot.clear();
 }

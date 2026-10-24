@@ -5,7 +5,7 @@
 //   FAL_KEY=… bun tools/generateCardArt.ts --force    # alle neu
 //   FAL_KEY=… bun tools/generateCardArt.ts recall emp_blast   # nur diese (immer neu)
 
-import { COMMANDS, SHIPS, type Card, type CommandType, type ShipClass } from "../../shared/cards.ts";
+import { COMMANDS, SHIPS, TOKENS, type Card, type CommandType, type ShipClass } from "../../shared/cards.ts";
 
 const MODEL = "fal-ai/flux-pro/v1.1";
 const OUT_DIR = `${import.meta.dir}/../assets/images/cards`;
@@ -56,6 +56,8 @@ const SUBJECTS: Record<Card["id"], string> = {
     "A compact rounded utility support drone ship with folded multi-jointed robotic repair arms, welding lasers and a spherical sensor eye, white and gunmetal hull, three-quarter view",
   signal_booster:
     "A rounded technical support vessel bristling with communication dish antennas and relay masts, one large central parabolic dish with pulsing signal rings radiating from it, white and gunmetal hull, three-quarter view",
+  drone:
+    "A tiny unmanned attack drone with a compact wedge-shaped body, stubby wings and a single glowing engine, launching out of the open glowing hangar bay of a huge carrier in the dark background, three-quarter front view",
   // Befehle
   orbital_strike:
     "A blinding orbital beam strikes down from above onto a warship, an impact explosion of light and debris, seen from the side at a distance",
@@ -120,7 +122,8 @@ if (!apiKey) throw new Error("FAL_KEY fehlt in der Umgebung.");
 const args = process.argv.slice(2);
 const force = args.includes("--force");
 const requested = new Set(args.filter((arg) => !arg.startsWith("--")));
-const all: readonly Card[] = [...SHIPS, ...COMMANDS];
+// Tokens hinten anhängen: Der Seed folgt dem Index, die übrigen Karten behalten ihr Bild.
+const all: readonly Card[] = [...SHIPS, ...COMMANDS, ...TOKENS];
 const unknown = [...requested].filter((id) => !all.some((card) => card.id === id));
 if (unknown.length) throw new Error(`Unbekannte Karten: ${unknown.join(", ")}`);
 

@@ -75,7 +75,7 @@ export const en = {
       board: {
         heading: "The board",
         paragraphs: [
-          "Each side has two lanes with 6 slots each: the Strike lane in front, facing the enemy, and the Command lane behind it. A lane holds at most 4 ships and a side at most 6, so at least two slots per lane stay empty.",
+          "Each side has two lanes with 6 slots each: the Strike lane in front, facing the enemy, and the Command lane behind it. A lane holds at most 4 ships and a side at most 6 (Drones count toward neither), so at least two slots per lane stay empty.",
           "The Command lane offers cover: a ship there is covered as long as a ship stands in the Strike slot directly in front of it (same slot number). Covered ships can't be targeted by regular fire. Without a ship in front, a Command ship is just as exposed as one in the Strike lane.",
           "Cover is decided once at the start of combat and lasts for the whole combat: if the covering ship is destroyed by a shot of the same combat, the ship behind it stays covered until next round. Damage from commands ignores cover: Orbital Strike, Volley Fire, Torpedo and Barrage hit covered ships too.",
           "Ships in either lane fire with full strength; the lane only matters for cover, for lane-specific commands (Power Surge, Targeting Jammer, Intercept, Recall) and for the Signal Booster, which boosts the ships in its own lane.",
@@ -105,7 +105,7 @@ export const en = {
           "Every ship with attack above 0 fires once per round, unless it maneuvered this round or was disabled by EMP Blast. Ships pick their targets automatically by class among the exposed enemy ships: Fighters shoot the ship with the fewest HP, Battleships the ship with the highest ATK, Cruisers the ship opposite them (same slot number, otherwise the nearest). On a tie, the ship with the lower slot number is hit.",
           "All shots are simultaneous: a ship destroyed in this combat still fires. The ships of one side take aim one after the other in slot order (Strike before Command) and skip targets that their own earlier shots have already destroyed, so no shot is wasted. If no target is left, the remaining shots of that side fizzle.",
           "Damage goes to the shield first and only then to the hull. A ship's own shield (Iron Dreadnought: 2) doesn't regenerate; the extra shield from Emergency Shields lasts for the round only. A ship with 0 HP is destroyed and removed — after the Effects phase, after combat, and after self-damage in Cleanup.",
-          "The attack value shown on the board already includes everything: round bonuses from commands, the Signal Booster aura and Overdrive. Support ships never attack, no matter the bonus.",
+          "The attack value already includes everything: round bonuses from commands, the Scrap Raider's bonus, the Signal Booster aura and Overdrive. Support ships never attack, no matter the bonus.",
         ],
         caption: "Targeting by class: Fighters pick the lowest HP, Battleships the highest ATK, Cruisers the ship opposite them.",
       },
@@ -113,7 +113,8 @@ export const en = {
         heading: "Ships",
         paragraphs: [
           "Ships have hull points (HP), attack (ATK) and sometimes a shield. There are four classes; the class decides how the ship picks its target in combat. Your ship deck holds two copies of each ship.",
-          "Still in the works: the abilities of Plasma Frigate, Scrap Raider and Titan Carrier printed on their cards are not active yet.",
+          "Some ships have an ability. On deploy, once both sides have placed their ships: a Titan Carrier launches its Drone into the nearest free slot of its lane (Drones count toward neither the lane nor the fleet limit; there is no Drone only if every slot of the lane is taken), then every Plasma Frigate deals 3 damage to a random enemy ship in the lane of the same name (Strike against Strike, Command against Command), ignoring cover — a fresh Drone can be hit too. A ship destroyed that way neither maneuvers nor receives your command.",
+          "The Drone (1 HP, 1 ATK, Fighter) isn't in any deck; it counts as a combat ship and toward the lane and fleet limits. It only launches if there is room — also for the destinations of your maneuver and movement command this round. The Scrap Raider permanently gains +1 ATK whenever an enemy ship in the lane of the same name is destroyed, however it falls; it keeps the bonus when it moves. The Repair Drone repairs in Cleanup, the Signal Booster boosts its lane.",
         ],
       },
       commands: {
@@ -139,7 +140,7 @@ export const en = {
       },
     } satisfies Record<string, RulesSection>,
     phases: {
-      deploy: { name: "Deploy", text: "Both players' new ships land on their slots." },
+      deploy: { name: "Deploy", text: "Both players' new ships land on their slots; Titan Carriers launch Drones, Plasma Frigates fire." },
       maneuver: { name: "Maneuvers", text: "Maneuvering ships switch slots and hold fire." },
       effects: { name: "Effects", text: "Commands take effect, by type; damage last. Destroyed ships are removed." },
       combat: { name: "Combat", text: "All ships fire at once at exposed targets; destroyed ships are removed." },
@@ -244,6 +245,9 @@ export const en = {
     heal: (command: string, ship: string, amount: number) => `Effect: ${command} heals ${ship} for ${amount}`,
     move: (command: string, ship: string, slot: string) => `Effect: ${command} — ${ship} moves to ${slot}`,
     repair: (source: string, ship: string, amount: number) => `Cleanup: ${source} repairs ${ship} for ${amount}`,
+    abilityDamage: (source: string, ship: string, amount: number) => `Deploy: ${source} hits ${ship} for ${amount}`,
+    spawn: (source: string, ship: string) => `Deploy: ${source} launches ${ship}`,
+    scrap: (ship: string, delta: number) => `Salvage: ${ship} permanently +${delta} ATK`,
     draw: (command: string, who: string, ships: number, commands: number) =>
       `Effect: ${command} — ${who} +${ships} ship, +${commands} command`,
     noEffect: (command: string, who: string) => `Effect: ${command} (${who}) has no effect`,
@@ -311,11 +315,12 @@ export const en = {
   ships: {
     horizon_cruiser: { name: "Horizon Cruiser", effect: "Solid stats, reliable." },
     iron_dreadnought: { name: "Iron Dreadnought", effect: "Shield 2: Absorbs the first 2 damage before the hull." },
-    plasma_frigate: { name: "Plasma Frigate", effect: "On Deploy: Deal 1 damage to a random enemy ship in the same lane." },
+    plasma_frigate: { name: "Plasma Frigate", effect: "On Deploy: Deal 3 damage to a random enemy ship in the same lane." },
     repair_drone: { name: "Repair Drone", effect: "End of each round: Repairs 2 HP on the damaged allied combat ship with the lowest HP." },
     scrap_raider: { name: "Scrap Raider", effect: "When an enemy ship in the same lane is destroyed: +1 ATK permanently." },
     signal_booster: { name: "Signal Booster", effect: "All other allied ships in the same lane have +1 ATK, as long as the Signal Booster is there." },
     titan_carrier: { name: "Titan Carrier", effect: "On Deploy: Spawn a Drone (1 HP, 1 ATK) in the same lane." },
+    drone: { name: "Drone", effect: "Launched by the Titan Carrier on deploy; not part of any deck." },
     void_interceptor: { name: "Void Interceptor", effect: "Pure damage, no tricks." },
   } satisfies Record<ShipId, CardText>,
   commands: {

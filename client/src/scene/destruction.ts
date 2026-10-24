@@ -41,6 +41,8 @@ const CYAN = new Color3(0.2, 0.9, 1);
 export const PROFILES: Record<ShipId, DestructionProfile> = {
   /** Jäger: zu klein für einen langen Todeskampf, ein einziger scharfer Knall reißt ihn auseinander. */
   void_interceptor: { energy: FIGHTER_ENERGY, style: "fire", size: 0.9, agony: 350, pops: 1, force: 5, shake: 0.12, linger: 1400 },
+  /** Träger-Drohne: verpufft fast ohne Todeskampf in einem kleinen Knall. */
+  drone: { energy: FIGHTER_ENERGY, style: "fire", size: 0.6, agony: 200, pops: 0, force: 5, shake: 0.06, linger: 1000 },
   /** Schrott: fällt schon vor der Detonation an mehreren Stellen auseinander. */
   scrap_raider: { energy: FIGHTER_ENERGY, style: "fire", size: 1, agony: 650, pops: 3, force: 4, shake: 0.14, linger: 1600 },
   /** Kreuzer: eine Kette von Explosionen läuft den Rumpf entlang, dann bricht er in Sektionen. */

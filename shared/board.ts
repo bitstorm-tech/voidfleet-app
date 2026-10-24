@@ -3,7 +3,7 @@
 // Live-Zustand der Schiffe (HP, Schild, Rundenmodifikatoren). "player" ist immer die
 // Seite des Betrachters; der Server spiegelt das Brett für den zweiten Spieler.
 
-import { shipById, type ShipCard, type ShipId } from "./cards.ts";
+import { isToken, shipById, type ShipCard, type ShipId } from "./cards.ts";
 import type { SlotTarget } from "./protocol.ts";
 
 export type Side = "player" | "enemy";
@@ -13,6 +13,8 @@ export interface SlotState {
   cardId: ShipId;
   hp: number;
   shield: number;
+  /** Dauerhafter ATK-Bonus des Scrap Raiders (`Slot.scrapBonus`). */
+  scrapBonus: number;
 }
 
 /** Serialisierbarer Brettzustand, je Seite und Lane die Slots in Index-Reihenfolge. */
@@ -57,6 +59,8 @@ export class Slot {
   card: ShipCard | null = null;
   hp = 0;
   shield = 0;
+  /** Scrap Raider: +1 ATK für jedes gegnerische Schiff, das in seiner Lane zerstört wurde; bleibt bis zu seiner Zerstörung. */
+  scrapBonus = 0;
 
   // Nur für die laufende Runde, im Cleanup zurückgesetzt. Zwischen den Runden
   // sind sie immer neutral und gehören deshalb nicht in den Snapshot.
@@ -86,7 +90,7 @@ export class Slot {
   get attack(): number {
     if (!this.card) return 0;
     const overdrive = this.card.atk > 0 ? this.lane.board.overdrive : 0;
-    return Math.max(0, this.card.atk + overdrive + this.signalBoost + this.attackBonus);
+    return Math.max(0, this.card.atk + overdrive + this.scrapBonus + this.signalBoost + this.attackBonus);
   }
 
   /**
@@ -113,6 +117,7 @@ export class Slot {
     this.card = null;
     this.hp = 0;
     this.shield = 0;
+    this.scrapBonus = 0;
     this.attackBonus = 0;
     this.shieldBonus = 0;
     this.disabled = false;
@@ -155,6 +160,7 @@ export class Slot {
     this.card = other.card;
     this.hp = other.hp;
     this.shield = other.shield;
+    this.scrapBonus = other.scrapBonus;
     this.attackBonus = other.attackBonus;
     this.shieldBonus = other.shieldBonus;
     this.disabled = other.disabled;
@@ -165,7 +171,7 @@ export class Slot {
   }
 
   get state(): SlotState | null {
-    return this.card ? { cardId: this.card.id, hp: this.hp, shield: this.shield } : null;
+    return this.card ? { cardId: this.card.id, hp: this.hp, shield: this.shield, scrapBonus: this.scrapBonus } : null;
   }
 
   set state(state: SlotState | null) {
@@ -174,6 +180,7 @@ export class Slot {
     this.card = shipById(state.cardId);
     this.hp = state.hp;
     this.shield = state.shield;
+    this.scrapBonus = state.scrapBonus;
   }
 }
 
@@ -192,8 +199,13 @@ export class Lane {
     return this.slots.filter((slot) => slot.isOccupied);
   }
 
+  /** Schiffe der Lane für die Lane-Grenze (`MAX_SHIPS_PER_LANE`); Drohnen zählen nicht. */
+  get shipCount(): number {
+    return this.occupiedSlots.filter((slot) => !isToken(slot.card!)).length;
+  }
+
   get isFull(): boolean {
-    return this.occupiedSlots.length >= MAX_SHIPS_PER_LANE;
+    return this.shipCount >= MAX_SHIPS_PER_LANE;
   }
 
   /** Freier Slot für ein Schiff, das hierher wechselt: derselbe Index, sonst der nächstgelegene. */
@@ -245,8 +257,9 @@ export class Board {
     return this.ships(side).filter((slot) => this.isExposed(slot));
   }
 
+  /** Schiffe einer Seite für die Flottengrenze (`MAX_SHIPS_PER_SIDE`); Drohnen zählen nicht. */
   shipCount(side: Side): number {
-    return this.ships(side).length;
+    return this.ships(side).filter((slot) => !isToken(slot.card!)).length;
   }
 
   /**
@@ -258,7 +271,7 @@ export class Board {
     if (slot === undefined || slot.isOccupied) return false;
     const incoming = arrivals.filter((arrival) => arrival.lane === lane.type);
     if (incoming.some((arrival) => arrival.slotIndex === slotIndex)) return false;
-    if (lane.occupiedSlots.length + incoming.length >= MAX_SHIPS_PER_LANE) return false;
+    if (lane.shipCount + incoming.length >= MAX_SHIPS_PER_LANE) return false;
     return this.shipCount(lane.side) + arrivals.length < MAX_SHIPS_PER_SIDE;
   }
 
@@ -268,7 +281,8 @@ export class Board {
    * die Deploys (sie landen vor allen Bewegungen) und das Ziel der zweiten Bewegung (Grundmanöver bzw.
    * Bewegungsbefehl). Sie gelten als besetzt und zählen zur Lane-Grenze. Bewusst streng: Ein Schiff,
    * das sich bewegt, gibt seinen Slot und seinen Platz in der Lane für die anderen Bewegungen dieser
-   * Runde nicht frei. Nur die eigene Bewegung innerhalb der Lane ändert deren Schiffszahl nicht.
+   * Runde nicht frei. Nur die eigene Bewegung innerhalb der Lane ändert deren Schiffszahl nicht. Eine
+   * Drohne zählt nicht zur Lane-Grenze und braucht nur einen freien Slot.
    */
   canMove(from: Slot, to: SlotTarget, arrivals: readonly (SlotTarget | null)[] = []): boolean {
     const lane = this.lane(from.lane.side, to.lane);
@@ -276,8 +290,10 @@ export class Board {
     if (slot === undefined || slot.isOccupied) return false;
     const incoming = arrivals.filter((arrival) => arrival?.lane === lane.type);
     if (incoming.some((arrival) => arrival!.slotIndex === to.slotIndex)) return false;
+    // `from` ist noch leer, wenn das Schiff erst in dieser Runde landet.
+    if (from.card && isToken(from.card)) return true;
     const staying = lane === from.lane ? 1 : 0;
-    return lane.occupiedSlots.length + incoming.length - staying < MAX_SHIPS_PER_LANE;
+    return lane.shipCount + incoming.length - staying < MAX_SHIPS_PER_LANE;
   }
 
   /** Slots der anderen Lane, in die das Schiff in `from` per Bewegungsbefehl wechseln kann (siehe `canMove`). */

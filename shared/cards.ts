@@ -45,6 +45,11 @@ const SHIP_STATS = {
   void_interceptor: { shipClass: "fighter", hp: 5, atk: 3, shield: 0 },
 } satisfies Record<string, ShipStats>;
 
+/** Schiffe, die nicht im Deck liegen, sondern erst auf dem Brett entstehen: die Drohne des Titan Carriers. */
+const TOKEN_STATS = {
+  drone: { shipClass: "fighter", hp: 1, atk: 1, shield: 0 },
+} satisfies Record<string, ShipStats>;
+
 const COMMAND_STATS = {
   emergency_shields: { commandType: "buff", targetMode: "choose_friendly" },
   emp_blast: { commandType: "debuff", targetMode: "auto_highest_atk" },
@@ -61,7 +66,7 @@ const COMMAND_STATS = {
   barrage: { commandType: "debuff", targetMode: "auto_moved" },
 } satisfies Record<string, CommandStats>;
 
-export type ShipId = keyof typeof SHIP_STATS;
+export type ShipId = keyof typeof SHIP_STATS | keyof typeof TOKEN_STATS;
 export type CommandId = keyof typeof COMMAND_STATS;
 
 /**
@@ -83,11 +88,14 @@ export interface CommandCard extends CommandStats {
 
 export type Card = ShipCard | CommandCard;
 
-export const SHIPS: readonly ShipCard[] = Object.entries(SHIP_STATS).map(([id, stats]) => ({
-  kind: "ship",
-  id: id as ShipId,
-  ...stats,
-}));
+function shipCards(stats: Record<string, ShipStats>): ShipCard[] {
+  return Object.entries(stats).map(([id, ship]) => ({ kind: "ship", id: id as ShipId, ...ship }));
+}
+
+/** Die Schiffe im Deck. */
+export const SHIPS: readonly ShipCard[] = shipCards(SHIP_STATS);
+/** Schiffe, die nur durch Fähigkeiten aufs Brett kommen (`TOKEN_STATS`). */
+export const TOKENS: readonly ShipCard[] = shipCards(TOKEN_STATS);
 
 export const COMMANDS: readonly CommandCard[] = Object.entries(COMMAND_STATS).map(([id, stats]) => ({
   kind: "command",
@@ -95,7 +103,7 @@ export const COMMANDS: readonly CommandCard[] = Object.entries(COMMAND_STATS).ma
   ...stats,
 }));
 
-const SHIPS_BY_ID = new Map(SHIPS.map((card) => [card.id, card]));
+const SHIPS_BY_ID = new Map([...SHIPS, ...TOKENS].map((card) => [card.id, card]));
 const COMMANDS_BY_ID = new Map(COMMANDS.map((card) => [card.id, card]));
 
 export function shipById(id: ShipId): ShipCard {
@@ -121,7 +129,13 @@ export function canTargetLane(card: CommandCard, lane: LaneType): boolean {
   return needsTarget(card) && (card.targetLane === undefined || card.targetLane === lane);
 }
 
-/** Kopien je Karte im Nachziehstapel: jedes Schiff zweimal, die Konter Torpedo und Sperrfeuer auch, jeder andere Befehl einmal. */
+/** Ob das Schiff ein Token ist (`TOKEN_STATS`): Es liegt in keinem Deck und zählt weder zur Lane- noch zur Flottengrenze. */
+export function isToken(card: Card): boolean {
+  return card.id in TOKEN_STATS;
+}
+
+/** Kopien je Karte im Nachziehstapel: jedes Schiff zweimal, die Konter Torpedo und Sperrfeuer auch, jeder andere Befehl einmal, Tokens nie. */
 export function deckCopies(card: Card): number {
+  if (isToken(card)) return 0;
   return card.kind === "ship" || card.id === "torpedo" || card.id === "barrage" ? 2 : 1;
 }

@@ -55,7 +55,7 @@ export const de: Messages = {
       board: {
         heading: "Das Brett",
         paragraphs: [
-          "Jede Seite hat zwei Lanes mit je 6 Slots: vorne, dem Gegner zugewandt, die Strike-Lane, dahinter die Command-Lane. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 6; mindestens zwei Slots je Lane bleiben also frei.",
+          "Jede Seite hat zwei Lanes mit je 6 Slots: vorne, dem Gegner zugewandt, die Strike-Lane, dahinter die Command-Lane. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 6 (Drohnen zählen bei beidem nicht mit); mindestens zwei Slots je Lane bleiben also frei.",
           "Die Command-Lane bietet Deckung: Ein Schiff dort ist gedeckt, solange im Strike-Slot direkt davor (gleiche Slot-Nummer) ein Schiff steht. Gedeckte Schiffe können im Kampf nicht beschossen werden. Ohne Schiff davor ist ein Command-Schiff genauso ungedeckt wie eines in der Strike-Lane.",
           "Die Deckung wird einmal zu Beginn des Kampfs bestimmt und gilt für den ganzen Kampf: Wird das deckende Schiff von einem Schuss desselben Kampfs zerstört, bleibt das Schiff dahinter bis zur nächsten Runde gedeckt. Schaden durch Befehle ignoriert die Deckung: Orbitalschlag, Salvenfeuer, Torpedo und Sperrfeuer treffen auch gedeckte Schiffe.",
           "Schiffe feuern in beiden Lanes mit voller Stärke; die Lane zählt nur für die Deckung, für Befehle auf eine bestimmte Lane (Energiestoß, Zielstörer, Abfangen, Rückruf) und für den Signalverstärker, der die Schiffe seiner eigenen Lane verstärkt.",
@@ -85,7 +85,7 @@ export const de: Messages = {
           "Jedes Schiff mit Angriff über 0 feuert einmal pro Runde, außer es hat in dieser Runde manövriert oder wurde vom EMP-Stoß gelähmt. Das Ziel wählen die Schiffe automatisch nach Klasse unter den ungedeckten Gegnern: Jäger beschießen das Schiff mit den wenigsten HP, Schlachtschiffe das mit dem höchsten ATK, Kreuzer das gegenüberliegende (gleiche Slot-Nummer, sonst das nächstgelegene). Bei Gleichstand trifft es das Schiff mit der niedrigeren Slot-Nummer.",
           "Alle Schüsse fallen gleichzeitig: Ein Schiff, das in diesem Kampf zerstört wird, feuert trotzdem noch. Die Schiffe einer Seite zielen nacheinander in Slot-Reihenfolge (Strike vor Command) und überspringen Ziele, die ihre eigenen früheren Schüsse schon zerstört haben; so verpufft kein Schuss. Bleibt kein Ziel mehr, verfallen die übrigen Schüsse dieser Seite.",
           "Schaden trifft zuerst den Schild und erst dann den Rumpf. Der eigene Schild eines Schiffs (Eisen-Dreadnought: 2) regeneriert nicht; der Zusatzschild der Notschilde gilt nur für die Runde. Ein Schiff mit 0 HP ist zerstört und verlässt das Brett — nach der Effects-Phase, nach dem Kampf und nach dem Eigenschaden im Cleanup.",
-          "Der Angriffswert, der auf dem Brett steht, enthält schon alles: Rundenboni aus Befehlen, die Aura des Signalverstärkers und den Overdrive. Support-Schiffe greifen nie an, egal mit welchem Bonus.",
+          "Der Angriffswert enthält schon alles: Rundenboni aus Befehlen, den Bonus des Schrott-Raiders, die Aura des Signalverstärkers und den Overdrive. Support-Schiffe greifen nie an, egal mit welchem Bonus.",
         ],
         caption: "Zielwahl nach Klasse: Jäger nehmen die wenigsten HP, Schlachtschiffe den höchsten ATK, Kreuzer das gegenüberliegende Schiff.",
       },
@@ -93,7 +93,8 @@ export const de: Messages = {
         heading: "Schiffe",
         paragraphs: [
           "Schiffe haben Rumpfpunkte (HP), Angriff (ATK) und manchmal einen Schild. Es gibt vier Klassen; die Klasse entscheidet, wie das Schiff im Kampf sein Ziel wählt. Dein Schiffsdeck enthält jedes Schiff zweimal.",
-          "Noch in Arbeit: Die auf den Karten gedruckten Fähigkeiten von Plasma-Fregatte, Schrott-Raider und Titan-Träger sind noch nicht aktiv.",
+          "Manche Schiffe haben eine Fähigkeit. Beim Deploy, sobald beide Seiten gelegt haben: Ein Titan-Träger schickt seine Drohne in den nächsten freien Slot seiner Lane — sie zählt weder zur Lane- noch zur Flottengrenze und entfällt nur, wenn kein Slot der Lane frei ist —, danach richtet jede Plasma-Fregatte 3 Schaden an einem zufälligen gegnerischen Schiff der gleichnamigen Lane an (Strike gegen Strike, Command gegen Command), ohne Rücksicht auf Deckung — auch eine frische Drohne kann es treffen. Ein so zerstörtes Schiff manövriert nicht mehr und bekommt deinen Befehl nicht.",
+          "Die Drohne (1 HP, 1 ATK, Jäger) liegt in keinem Deck; sie zählt als Kampfschiff und zur Lane- und Flottengrenze. Sie startet nur, wenn Platz ist — auch für die Ziele deines Manövers und Bewegungsbefehls dieser Runde. Der Schrott-Raider bekommt dauerhaft +1 ATK, sobald ein gegnerisches Schiff in der gleichnamigen Lane zerstört wird, egal wodurch; den Bonus behält er auch, wenn er sich bewegt. Die Reparaturdrohne repariert im Cleanup, der Signalverstärker verstärkt seine Lane.",
         ],
       },
       commands: {
@@ -119,7 +120,7 @@ export const de: Messages = {
       },
     },
     phases: {
-      deploy: { name: "Deploy", text: "Die neuen Schiffe beider Spieler landen auf ihren Slots." },
+      deploy: { name: "Deploy", text: "Die neuen Schiffe beider Spieler landen auf ihren Slots; Titan-Träger schicken Drohnen, Plasma-Fregatten feuern." },
       maneuver: { name: "Manöver", text: "Manövrierende Schiffe wechseln den Slot und halten das Feuer." },
       effects: { name: "Effects", text: "Befehle wirken, nach Typ; Schaden zuletzt. Zerstörte Schiffe verschwinden." },
       combat: { name: "Combat", text: "Alle Schiffe feuern gleichzeitig auf ungedeckte Ziele; Zerstörte verschwinden." },
@@ -222,6 +223,9 @@ export const de: Messages = {
     heal: (command, ship, amount) => `Wirkung: ${command} heilt ${ship} um ${amount}`,
     move: (command, ship, slot) => `Wirkung: ${command} — ${ship} wechselt auf ${slot}`,
     repair: (source, ship, amount) => `Cleanup: ${source} repariert ${ship} um ${amount}`,
+    abilityDamage: (source, ship, amount) => `Deploy: ${source} trifft ${ship} mit ${amount}`,
+    spawn: (source, ship) => `Deploy: ${source} schickt ${ship} los`,
+    scrap: (ship, delta) => `Beute: ${ship} dauerhaft +${delta} ATK`,
     draw: (command, who, ships, commands) => `Wirkung: ${command} — ${who} +${ships} Schiff, +${commands} Befehl`,
     noEffect: (command, who) => `Wirkung: ${command} (${who}) bleibt ohne Wirkung`,
     miss: (command, slot) => `Wirkung: ${command} verpufft auf ${slot}`,
@@ -288,11 +292,12 @@ export const de: Messages = {
   ships: {
     horizon_cruiser: { name: "Horizon-Kreuzer", effect: "Solide Werte, zuverlässig." },
     iron_dreadnought: { name: "Eisen-Dreadnought", effect: "Schild 2: Absorbiert die ersten 2 Schaden vor dem Rumpf." },
-    plasma_frigate: { name: "Plasma-Fregatte", effect: "Beim Deploy: 1 Schaden an ein zufälliges gegnerisches Schiff in derselben Lane." },
+    plasma_frigate: { name: "Plasma-Fregatte", effect: "Beim Deploy: 3 Schaden an ein zufälliges gegnerisches Schiff in derselben Lane." },
     repair_drone: { name: "Reparaturdrohne", effect: "Am Ende jeder Runde: Repariert 2 HP beim beschädigten verbündeten Kampfschiff mit den wenigsten HP." },
     scrap_raider: { name: "Schrott-Raider", effect: "Wird ein gegnerisches Schiff in derselben Lane zerstört: dauerhaft +1 ATK." },
     signal_booster: { name: "Signalverstärker", effect: "Alle anderen verbündeten Schiffe in derselben Lane haben +1 ATK, solange der Signalverstärker dort steht." },
     titan_carrier: { name: "Titan-Träger", effect: "Beim Deploy: Erzeugt eine Drohne (1 HP, 1 ATK) in derselben Lane." },
+    drone: { name: "Drohne", effect: "Startet beim Deploy vom Titan-Träger; liegt in keinem Deck." },
     void_interceptor: { name: "Void-Abfangjäger", effect: "Reiner Schaden, keine Tricks." },
   },
   commands: {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Board, overdriveBonus, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import { commandById, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
 import type { RoundEvent } from "../../shared/protocol.ts";
-import { resolveCleanup, resolveCombat, resolveEffects, resolveManeuver, type Commander, type PlayedCommand } from "./resolution.ts";
+import { resolveCleanup, resolveCombat, resolveDeployAbilities, resolveEffects, resolveManeuver, type Commander, type PlayedCommand } from "./resolution.ts";
 
 function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: ShipId): Slot {
   return board.place(board.lane(side, lane), slotIndex, shipById(id))!;
@@ -25,6 +25,121 @@ function round(board: Board, commands: PlayedCommand[] = []): RoundEvent[] {
   resolveCleanup(board, events);
   return events;
 }
+
+describe("Fähigkeiten beim Deploy", () => {
+  test("der Titan Carrier setzt eine Drohne in den nächsten freien Slot seiner Lane", () => {
+    const board = new Board();
+    place(board, "player", "strike", 3, "horizon_cruiser");
+    const carrier = place(board, "player", "strike", 2, "titan_carrier");
+    const events: RoundEvent[] = [];
+    resolveDeployAbilities(board, [carrier], [], Math.random, events);
+    expect(board.lane("player", "strike").slots[1]!.state).toEqual({ cardId: "drone", hp: 1, scrapBonus: 0, shield: 0 });
+    expect(events).toEqual([
+      {
+        kind: "spawn",
+        source: { side: "player", lane: "strike", slotIndex: 2, cardId: "titan_carrier" },
+        ship: { side: "player", lane: "strike", slotIndex: 1, cardId: "drone" },
+      },
+    ]);
+  });
+
+  test("die Drohne meidet die Ziele der Bewegungen und entfällt nur, wenn kein Slot der Lane frei ist", () => {
+    const board = new Board();
+    const carrier = place(board, "player", "strike", 2, "titan_carrier");
+    const strike = board.lane("player", "strike");
+    resolveDeployAbilities(board, [carrier], [strike.slots[1]!, strike.slots[3]!], Math.random, []);
+    expect(strike.slots[0]!.card?.id).toBe("drone");
+
+    const full = new Board();
+    for (const index of [0, 1, 3]) place(full, "player", "strike", index, "horizon_cruiser");
+    place(full, "player", "strike", 4, "drone");
+    const second = place(full, "player", "strike", 2, "titan_carrier");
+    const events: RoundEvent[] = [];
+    resolveDeployAbilities(full, [second], [full.lane("player", "strike").slots[5]!], Math.random, events);
+    expect(events).toEqual([]);
+  });
+
+  test("die Drohne startet auch in eine Lane mit 4 Schiffen bei voller Flotte und zählt zu keiner Grenze", () => {
+    const board = new Board();
+    for (const index of [0, 1]) place(board, "player", "command", index, "horizon_cruiser");
+    for (const index of [0, 1, 3]) place(board, "player", "strike", index, "horizon_cruiser");
+    const carrier = place(board, "player", "strike", 2, "titan_carrier");
+    resolveDeployAbilities(board, [carrier], [], Math.random, []);
+    const strike = board.lane("player", "strike");
+    expect(strike.slots[4]!.card?.id).toBe("drone");
+    expect(strike.shipCount).toBe(4);
+    expect(board.shipCount("player")).toBe(6);
+
+    const command = board.lane("player", "command");
+    command.slots[0]!.clear();
+    expect(board.canPlace(strike, 5)).toBe(false);
+    strike.slots[0]!.clear();
+    expect(board.canPlace(strike, 5)).toBe(true);
+    expect(board.canMove(strike.slots[4]!, { lane: "command", slotIndex: 0 })).toBe(true);
+  });
+
+  test("die Plasma Frigate trifft ein zufälliges gegnerisches Schiff der gleichnamigen Lane, auch gedeckt", () => {
+    const board = new Board();
+    const frigate = place(board, "player", "command", 0, "plasma_frigate");
+    place(board, "enemy", "strike", 1, "horizon_cruiser");
+    place(board, "enemy", "command", 1, "horizon_cruiser");
+    const covered = place(board, "enemy", "command", 4, "signal_booster");
+    const events: RoundEvent[] = [];
+    resolveDeployAbilities(board, [frigate], [], () => 0.99, events);
+    expect(covered.hp).toBe(hp("signal_booster") - 3);
+    expect(events).toMatchObject([{ kind: "ability", source: { cardId: "plasma_frigate" }, ship: { cardId: "signal_booster" }, effect: { type: "damage", amount: 3 } }]);
+  });
+
+  test("die Plasma Frigate kann die frische Drohne abschießen, ohne Gegner in der Lane bleibt sie still", () => {
+    const board = new Board();
+    const frigate = place(board, "player", "strike", 0, "plasma_frigate");
+    const idle = place(board, "player", "command", 0, "plasma_frigate");
+    const carrier = place(board, "enemy", "strike", 0, "titan_carrier");
+    const events: RoundEvent[] = [];
+    resolveDeployAbilities(board, [frigate, idle, carrier], [], () => 0.99, events);
+    expect(events.map((event) => event.kind)).toEqual(["spawn", "ability", "destroyed"]);
+    expect(board.shipCount("enemy")).toBe(1);
+  });
+});
+
+describe("Scrap Raider", () => {
+  test("bekommt dauerhaft +1 ATK für jeden Gegner, der in der gleichnamigen Lane zerstört wird", () => {
+    const board = new Board();
+    const raider = place(board, "player", "strike", 0, "scrap_raider");
+    const bystander = place(board, "player", "command", 2, "scrap_raider");
+    place(board, "enemy", "strike", 0, "repair_drone").hp = 1;
+    place(board, "enemy", "strike", 1, "repair_drone").hp = 1;
+    const events = round(board, [play("player", "volley_fire")]);
+    expect(raider.scrapBonus).toBe(2);
+    expect(raider.attack).toBe(shipById("scrap_raider").atk + 2);
+    expect(bystander.scrapBonus).toBe(0);
+    expect(events.filter((event) => event.kind === "ability")).toMatchObject([
+      { source: { cardId: "scrap_raider", slotIndex: 0 }, ship: { cardId: "scrap_raider", slotIndex: 0 }, effect: { type: "attack", delta: 2 } },
+    ]);
+  });
+
+  test("der Bonus bleibt über die Runde hinaus, folgt dem Schiff und steht im Snapshot", () => {
+    const board = new Board();
+    const raider = place(board, "player", "strike", 0, "scrap_raider");
+    raider.scrapBonus = 1;
+    round(board);
+    const to = board.lane("player", "command").slots[3]!;
+    resolveManeuver(raider, to, []);
+    expect(to.scrapBonus).toBe(1);
+    const copy = new Board();
+    copy.load(board.snapshot());
+    expect(copy.lane("player", "command").slots[3]!.attack).toBe(shipById("scrap_raider").atk + 1);
+  });
+
+  test("ein Raider, der selbst fällt, bekommt nichts", () => {
+    const board = new Board();
+    const raider = place(board, "player", "strike", 0, "scrap_raider");
+    raider.hp = 1;
+    place(board, "enemy", "strike", 0, "repair_drone").hp = 1;
+    const events = round(board, [play("player", "volley_fire"), play("enemy", "volley_fire")]);
+    expect(events.some((event) => event.kind === "ability")).toBe(false);
+  });
+});
 
 describe("Manöver", () => {
   test("das manövrierte Schiff feuert nicht, wird aber beschossen", () => {

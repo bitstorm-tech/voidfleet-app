@@ -3,7 +3,7 @@
 // `t.rules.sections`; jedes Kapitel bekommt hier seine Illustration (`rulesFigures.ts`),
 // Screenshots aus `assets/images/rules/` oder die Galerie aller Karten (`cardView.ts`).
 
-import { COMMAND_ORDER, COMMANDS, deckCopies, SHIPS, type Card, type CommandType } from "../../../shared/cards.ts";
+import { COMMAND_ORDER, COMMANDS, deckCopies, SHIPS, TOKENS, type Card, type CommandType } from "../../../shared/cards.ts";
 import deployScreenshot from "../../assets/images/rules/deploy.jpg";
 import maneuverScreenshot from "../../assets/images/rules/maneuver.jpg";
 import type { Messages, RulesSection } from "../i18n/en.ts";
@@ -86,10 +86,10 @@ function screenshot(url: string): HTMLImageElement {
   return Object.assign(document.createElement("img"), { src: url, alt: "", loading: "lazy" });
 }
 
-/** Alle Schiffe als Karte mit Werten, Klasse und ihrem Zielverhalten. */
+/** Alle Schiffe als Karte mit Werten, Klasse und ihrem Zielverhalten, zuletzt die Tokens wie die Drohne. */
 function shipGallery(): HTMLElement {
   return gallery(
-    SHIPS.map((card) => ({
+    [...SHIPS, ...TOKENS].map((card) => ({
       card,
       meta: t.shipClasses[card.shipClass],
       lines: [
@@ -126,7 +126,7 @@ function gallery(entries: readonly { card: Card; meta: string; lines: readonly s
     const description = Object.assign(document.createElement("div"), { className: "description" });
     description.append(
       Object.assign(document.createElement("b"), { textContent: cardText(card).name }),
-      Object.assign(document.createElement("span"), { className: "meta", textContent: [meta, t.rules.copies(deckCopies(card))].filter(Boolean).join(" · ") }),
+      Object.assign(document.createElement("span"), { className: "meta", textContent: [meta, deckCopies(card) > 0 && t.rules.copies(deckCopies(card))].filter(Boolean).join(" · ") }),
       ...lines.map((line) => Object.assign(document.createElement("span"), { textContent: line })),
     );
     entry.append(createCard(card), description);
