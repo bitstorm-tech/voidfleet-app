@@ -16,7 +16,7 @@ import { destroyShip } from "./scene/destruction.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
-import { easeInOutSine, setAnimationScope, skipAnimations, tween, wait } from "./scene/tween.ts";
+import { setAnimationScope, skipAnimations, tween, wait } from "./scene/tween.ts";
 import type { FloatingTexts, FloatTone } from "./ui/floatingText.ts";
 import type { Hud } from "./ui/hud.ts";
 import { describeEvent } from "./ui/roundLog.ts";
@@ -194,16 +194,13 @@ export class RoundPlayback {
     await destroyShip(this.padOf(ref).detachShip(), this.view);
   }
 
-  /** Das Schiff gleitet in den neuen Slot; der Anker übernimmt es sofort, die Position folgt. */
+  /** Der Anker übernimmt das Schiff sofort, es fliegt von seiner alten Stelle aus in den neuen Slot. */
   private async move(from: SlotPad, to: SlotPad): Promise<void> {
     const ship = from.detachShip();
     const start = ship.root.getAbsolutePosition().clone();
     to.attachShip(ship);
     ship.root.setAbsolutePosition(start);
-    const offset = ship.root.position.clone();
-    await tween(this.view.scene, 650, (progress) => {
-      offset.scaleToRef(1 - easeInOutSine(progress), ship.root.position);
-    });
+    await ship.maneuver();
   }
 
   /** Buffs und Debuffs: farbiger Impuls plus Text über dem Schiff. */

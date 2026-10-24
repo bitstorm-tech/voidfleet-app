@@ -24,6 +24,7 @@ import type { ShipCard } from "../../../shared/cards.ts";
 import { color3 } from "../data/palette.ts";
 import { shipModel, wreckModel } from "../data/shipModels.ts";
 import { randomInCone } from "./effects.ts";
+import { Maneuver } from "./maneuver.ts";
 import { easeInOutSine, easeOutCubic, tween } from "./tween.ts";
 
 /** Schiffe sind für den Hangar modelliert und auf dem Brett zu groß. */
@@ -175,6 +176,23 @@ export class ShipView {
       this.modelRoot.rotation.x = DESCENT_PITCH * Math.sin(Math.PI * altitude);
     });
     this.statusBars.setEnabled(true);
+  }
+
+  /**
+   * Lane-Wechsel: Das Schiff hängt schon am neuen Anker und steht noch an seiner alten Stelle;
+   * es fliegt von dort auf der Bahn aus `maneuver.ts` in den Slot, mit Kurs, Steigung und Schräglage.
+   */
+  async maneuver(): Promise<void> {
+    const flight = new Maneuver(this.root.position, this.card.shipClass);
+    await tween(this.scene, flight.duration, (progress) => {
+      const pose = flight.pose(progress);
+      this.root.position.set(pose.x, pose.y, pose.z);
+      this.root.rotation.y = pose.yaw;
+      this.modelRoot.rotation.set(pose.pitch, 0, pose.roll);
+    });
+    this.root.position.setAll(0);
+    this.root.rotation.setAll(0);
+    this.modelRoot.rotation.setAll(0);
   }
 
   /** Treffer: die Hülle blitzt hell auf; der Einschlag selbst kommt aus `BoardEffects.hit`. */
