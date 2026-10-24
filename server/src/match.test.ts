@@ -49,6 +49,84 @@ test("Verlegende Befehle brauchen einen freien Ziel-Slot in der anderen Lane, au
   expect(match.submit(0, intercept(5, 4))).toBeNull();
 });
 
+test("Befehle dürfen das Schiff treffen, das in derselben Runde gelegt wird", () => {
+  const match = startedMatch();
+  const player = match.players[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("overcharge"));
+  const overcharge = (lane: "strike" | "command", slotIndex: number): TurnPlan => ({
+    ship: { handIndex: 0, target: { lane: "strike", slotIndex: 2 } },
+    command: { handIndex: 0, target: { lane, slotIndex }, destination: null },
+  });
+  expect(match.submit(0, overcharge("strike", 3))).toBe("target_not_own_ship");
+  expect(match.submit(0, { ...overcharge("strike", 2), ship: null })).toBe("target_not_own_ship");
+  expect(match.submit(0, overcharge("strike", 2))).toBeNull();
+});
+
+test("Das gelegte Schiff darf sofort die Lane wechseln, die Lane-Grenze gilt dabei weiter", () => {
+  const match = startedMatch();
+  const player = match.players[0]!;
+  const ship = player.shipHand[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("intercept"), commandById("recall"));
+  /** Legt ein Schiff in `lane` auf Slot `deployTo` und verlegt es mit Intercept (aus Command) bzw. Recall (aus Strike). */
+  const deployAndMove = (lane: "strike" | "command", deployTo: number, destination: number): TurnPlan => ({
+    ship: { handIndex: 0, target: { lane, slotIndex: deployTo } },
+    command: { handIndex: lane === "command" ? 0 : 1, target: { lane, slotIndex: deployTo }, destination },
+  });
+  // Intercept auf ein frisch in die Command-Lane gelegtes Schiff, auch in den Strike-Slot direkt davor.
+  expect(match.submit(0, deployAndMove("command", 1, 1))).toBeNull();
+  player.plan = null;
+
+  // Strike voll: Das gelegte Schiff kommt nicht hinein, mit einem freien Platz schon.
+  for (const index of [0, 1, 2, 3]) match.board.place(match.board.lane("player", "strike"), index, ship);
+  expect(match.submit(0, deployAndMove("command", 1, 4))).toBe("destination_unavailable");
+  match.board.lane("player", "strike").slots[3]!.clear();
+  expect(match.submit(0, deployAndMove("command", 1, 4))).toBeNull();
+  player.plan = null;
+
+  // Recall vom gelegten Schiff zurück in die Command-Lane, aber nicht in einen belegten Slot.
+  match.board.place(match.board.lane("player", "command"), 5, ship);
+  expect(match.submit(0, deployAndMove("strike", 3, 5))).toBe("destination_unavailable");
+  expect(match.submit(0, deployAndMove("strike", 3, 4))).toBeNull();
+});
+
+test("Ein anderes Schiff darf nicht in den Deploy-Slot wechseln und füllt die Lane des Deploys nicht über die Grenze", () => {
+  const match = startedMatch();
+  const player = match.players[0]!;
+  const ship = player.shipHand[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("recall"));
+  match.board.place(match.board.lane("player", "strike"), 0, ship);
+  const recall = (deployTo: number, destination: number): TurnPlan => ({
+    ship: { handIndex: 0, target: { lane: "command", slotIndex: deployTo } },
+    command: { handIndex: 0, target: { lane: "strike", slotIndex: 0 }, destination },
+  });
+  expect(match.submit(0, recall(2, 2))).toBe("destination_unavailable");
+  for (const index of [3, 4]) match.board.place(match.board.lane("player", "command"), index, ship);
+  // Command: 2 Schiffe + Deploy = 3, der Wechsel macht 4.
+  expect(match.submit(0, recall(2, 1))).toBeNull();
+  player.plan = null;
+  match.board.place(match.board.lane("player", "command"), 5, ship);
+  // Command: 3 Schiffe + Deploy = 4, kein Platz mehr für den Wechsel.
+  expect(match.submit(0, recall(2, 1))).toBe("destination_unavailable");
+});
+
+test("Ein Befehl auf das gelegte Schiff wirkt in derselben Runde", () => {
+  const match = startedMatch();
+  for (const player of match.players) {
+    player.shipHand.splice(0, player.shipHand.length, { ...interceptor, hp: 10 });
+    player.commandHand.splice(0, player.commandHand.length, commandById("emergency_shields"), commandById("intercept"));
+  }
+  const shielded: TurnPlan = { ...deploy, command: { handIndex: 0, target: { lane: "strike", slotIndex: 0 }, destination: null } };
+  const intercepted: TurnPlan = {
+    ship: { handIndex: 0, target: { lane: "command", slotIndex: 2 } },
+    command: { handIndex: 1, target: { lane: "command", slotIndex: 2 }, destination: 4 },
+  };
+  playRound(match, [shielded, intercepted]);
+  // Schild 3 fängt den Treffer des Interceptors (3 + 2 ATK durch Intercept) bis auf 2 ab.
+  expect(match.board.lane("player", "strike").slots[0]!.state).toEqual({ cardId: "void_interceptor", hp: 8, shield: 0 });
+  expect(match.board.lane("enemy", "command").slots[2]!.isOccupied).toBe(false);
+  expect(match.board.lane("enemy", "strike").slots[4]!.state).toEqual({ cardId: "void_interceptor", hp: 7, shield: 0 });
+});
+
 test("Die Starthand hat genau 1 Support- und 2 Kampfschiffe", () => {
   for (let i = 0; i < 50; i++) {
     for (const player of startedMatch().players) {

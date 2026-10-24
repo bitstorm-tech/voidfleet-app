@@ -7,7 +7,7 @@
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
 import { canTargetLane, needsTarget, type CommandCard, type ShipCard } from "../../shared/cards.ts";
-import { Board, opposite, otherLane, type BoardSnapshot, type Side } from "../../shared/board.ts";
+import { Board, isSameSlot, opposite, otherLane, type BoardSnapshot, type Side } from "../../shared/board.ts";
 import type { ErrorCode, MatchResult, PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
 import { planBotTurn } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
@@ -151,17 +151,16 @@ export class Match {
       if (card === undefined) return "command_not_in_hand";
       if (needsTarget(card) && target === null) return "target_required";
       if (!needsTarget(card) && target !== null) return "target_not_allowed";
-      if (target && !this.board.lane(player.side, target.lane).slots[target.slotIndex]?.isOccupied) {
-        return "target_not_own_ship";
-      }
+      // Das Schiff, das in dieser Runde gelegt wird, landet vor den Befehlen und ist schon ein gültiges Ziel.
+      const deploy = plan.ship?.target ?? null;
+      const slot = target && this.board.lane(player.side, target.lane).slots[target.slotIndex];
+      if (target && !slot?.isOccupied && !(deploy && isSameSlot(target, deploy))) return "target_not_own_ship";
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
       const { destination } = plan.command;
       if (card.moves && destination === null) return "destination_required";
       if (!card.moves && destination !== null) return "destination_not_allowed";
-      if (target && destination !== null) {
-        const from = this.board.lane(player.side, target.lane).slots[target.slotIndex]!;
-        if (!this.board.canMove(from, destination, plan.ship?.target ?? null)) return "destination_unavailable";
-      }
+      // Bewegt sich das gelegte Schiff, ist `from` sein noch leerer Slot; `canMove` zählt den Deploy nur in der Ziel-Lane.
+      if (slot && destination !== null && !this.board.canMove(slot, destination, deploy)) return "destination_unavailable";
     }
     return null;
   }

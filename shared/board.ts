@@ -26,6 +26,10 @@ export function otherLane(type: LaneType): LaneType {
   return type === "strike" ? "command" : "strike";
 }
 
+export function isSameSlot(a: SlotTarget, b: SlotTarget): boolean {
+  return a.lane === b.lane && a.slotIndex === b.slotIndex;
+}
+
 export const SLOT_COUNT = 6;
 export const MAX_SHIPS_PER_LANE = 4;
 export const MAX_SHIPS_PER_SIDE = 8;

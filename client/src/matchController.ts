@@ -1,7 +1,8 @@
 // Verbindet Server, Spielzustand, 3D-Szene und DOM-UI zur Zugplanung:
 // Der Spieler stellt seinen Zug zusammen (1 Schiff + 1 Befehl), das gewählte
 // Schiff steht als Geist auf dem Slot, der gewählte Befehl bleibt markiert.
-// Beim Platzieren folgt der Geist dem Zeiger über die freien Slots. Befehle, die
+// Beim Platzieren folgt der Geist dem Zeiger über die freien Slots. Der Geist des geplanten
+// Schiffs ist für Befehle ein Ziel wie jedes andere eigene Schiff. Befehle, die
 // ein Schiff in die andere Lane verlegen, brauchen zwei Klicks: Schiff, dann Ziel-Slot;
 // dort steht das verlegte Schiff ebenfalls als Geist, ein Bogenpfeil zeigt den Weg.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
@@ -150,8 +151,10 @@ export class MatchController {
   private onShipCardClick(index: number): void {
     if (!this.canPlan) return playUiSound("denied");
     if (this.match.plan.ship?.handIndex === index) {
-      // Erneutes Antippen der geplanten Karte nimmt den Zug zurück.
-      this.match.plan.ship = null;
+      // Erneutes Antippen der geplanten Karte nimmt den Zug zurück, samt Befehl auf dieses Schiff;
+      // ein angefangener Lane-Wechsel des Schiffs bricht ab.
+      if (this.moveSource !== null && this.match.isPlannedDeploy(this.moveSource)) this.moveSource = null;
+      this.match.planShip(null);
       this.selectShip(null);
       playUiSound("cancel");
     } else if (this.selectedShipIndex === index) {
@@ -187,7 +190,10 @@ export class MatchController {
   /** Schiffs- und Befehlskarte sind nie gleichzeitig gewählt. */
   private selectShip(index: number | null): void {
     this.selectedShipIndex = index;
-    if (index !== null) this.selectedCommandIndex = null;
+    if (index !== null) {
+      this.selectedCommandIndex = null;
+      this.moveSource = null;
+    }
     this.refreshSelectionVisuals();
   }
 
@@ -231,8 +237,8 @@ export class MatchController {
   /**
    * Einzige Gültigkeitsregel für Highlight und Klick: gewähltes Schiff -> freie
    * eigene Slots, die einem eingeplanten Lane-Wechsel nicht im Weg stehen; gewählter Befehl ->
-   * eigene Schiffe in einer erlaubten Lane, bei verlegenden Befehlen nur mit freiem Ziel-Slot,
-   * danach die freien Slots der anderen Lane. Ohne Auswahl leuchten nur das bereits gewählte
+   * eigene Schiffe in einer erlaubten Lane, auch das eingeplante, bei verlegenden Befehlen nur mit
+   * freiem Ziel-Slot, danach die freien Slots der anderen Lane. Ohne Auswahl leuchten nur das bereits gewählte
    * Befehlsziel und sein Ziel-Slot weiter, bis die Runde aufgelöst wird. Die Gegnerseite ist nie Ziel.
    */
   private isValidTarget(pad: SlotPad): boolean {
@@ -241,16 +247,18 @@ export class MatchController {
     const board = this.match.board;
     if (lane.side === "enemy" || this.isResolving) return false;
     if (this.selectedShipIndex !== null) {
+      // Verlegt der Befehl das bisher geplante Schiff, fällt er beim Umplanen ohnehin weg (`planShip`).
       const move = this.match.plannedMove;
       const deploy = { lane: lane.type, slotIndex: slot.index };
-      return board.canPlace(lane, slot.index) && (move === null || board.canMove(move.from, move.to.index, deploy));
+      const keepsMove = move !== null && !this.match.isPlannedDeploy(move.from);
+      return board.canPlace(lane, slot.index) && (!keepsMove || board.canMove(move.from, move.to.index, deploy));
     }
     if (this.selectedCommandIndex !== null) {
       if (this.moveSource !== null) {
         return lane !== this.moveSource.lane && board.canMove(this.moveSource, slot.index, this.plannedDeploy);
       }
       const card = this.match.commandHand[this.selectedCommandIndex]!;
-      if (!slot.isOccupied || !canTargetLane(card, lane.type)) return false;
+      if (this.match.shipAt(slot) === null || !canTargetLane(card, lane.type)) return false;
       return !card.moves || board.moveDestinations(slot, this.plannedDeploy).length > 0;
     }
     const target = this.match.plan.command?.target;
@@ -264,10 +272,10 @@ export class MatchController {
 
   /** Plant das Schiff auf den Slot; bis zur Auflösung steht es dort nur als Geist. */
   private stageShipOn(pad: SlotPad): void {
-    this.match.plan.ship = {
+    this.match.planShip({
       handIndex: this.selectedShipIndex!,
       target: { lane: pad.slot.lane.type, slotIndex: pad.slot.index },
-    };
+    });
     this.selectShip(null);
     playUiSound("place");
   }
@@ -325,7 +333,7 @@ export class MatchController {
       ghosts.push({ pad: this.view.pad("player", ship.target.lane, ship.target.slotIndex), card: this.match.shipHand[ship.handIndex]! });
     }
     const move = this.moveArrowTarget();
-    if (move !== null) ghosts.push({ pad: move.to, card: move.from.slot.card! });
+    if (move !== null) ghosts.push({ pad: move.to, card: this.match.shipAt(move.from.slot)! });
     return ghosts;
   }
 
@@ -434,7 +442,7 @@ export class MatchController {
     }
     if (this.selectedCommandIndex !== null) {
       const name = cardText(this.match.commandHand[this.selectedCommandIndex]!).name;
-      if (this.moveSource !== null) return t.status.chooseDestination(name, cardText(this.moveSource.card!).name);
+      if (this.moveSource !== null) return t.status.chooseDestination(name, cardText(this.match.shipAt(this.moveSource)!).name);
       if (this.validTargetCount === 0) return t.status.noCommandTarget(name);
       return t.status.chooseCommandTarget(name);
     }

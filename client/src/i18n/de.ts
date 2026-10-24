@@ -31,7 +31,7 @@ export const de: Messages = {
       },
       {
         heading: "Dein Zug",
-        text: "Jede Runde wählst du bis zu ein Schiff und einen Befehl aus deiner Hand und beendest den Zug. Dein Gegner tut gleichzeitig dasselbe, ohne deine Wahl zu sehen. Es gibt keine Kosten und kein Zeitlimit.",
+        text: "Jede Runde wählst du bis zu ein Schiff und einen Befehl aus deiner Hand und beendest den Zug. Dein Gegner tut gleichzeitig dasselbe, ohne deine Wahl zu sehen. Es gibt keine Kosten und kein Zeitlimit. Ein Befehl darf auch das Schiff treffen, das du in dieser Runde legst, etwa um es zu überladen oder gleich in die andere Lane zu verlegen.",
       },
       {
         heading: "Das Brett",

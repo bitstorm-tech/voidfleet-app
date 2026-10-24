@@ -3,7 +3,7 @@
 // übernimmt seine Sicht, geplant wird lokal bis zum Submit.
 
 import { commandById, shipById, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
-import { Board, otherLane, type Slot } from "../../../shared/board.ts";
+import { Board, isSameSlot, otherLane, type Slot } from "../../../shared/board.ts";
 import type { MatchResult, PlayerView, TurnPlan } from "../../../shared/protocol.ts";
 
 export class Match {
@@ -27,7 +27,33 @@ export class Match {
     return this.plan.command ? (this.commandHand[this.plan.command.handIndex] ?? null) : null;
   }
 
-  /** Der eingeplante Lane-Wechsel: das Schiff und der freie Slot, in den es geht. */
+  /** Ob das eingeplante Schiff auf diesem Slot landet; auf dem Brett ist er bis zur Auflösung leer. */
+  isPlannedDeploy(slot: Slot): boolean {
+    const target = this.plan.ship?.target;
+    return slot.lane.side === "player" && target !== undefined && isSameSlot(target, { lane: slot.lane.type, slotIndex: slot.index });
+  }
+
+  /** Das Schiff auf einem Slot, wie es für Befehle zählt: auch das eingeplante, das vor den Befehlen landet. */
+  shipAt(slot: Slot): ShipCard | null {
+    return this.isPlannedDeploy(slot) ? this.plannedShip : slot.card;
+  }
+
+  /**
+   * Plant das Schiff oder nimmt es mit null zurück. Ein Befehl auf das bisher eingeplante Schiff
+   * fällt mit weg, sobald auf dessen Slot nichts mehr landet.
+   */
+  planShip(ship: TurnPlan["ship"]): void {
+    const previous = this.plan.ship?.target;
+    const target = this.plan.command?.target;
+    const keepsSlot = ship !== null && previous !== undefined && isSameSlot(ship.target, previous);
+    if (previous && target && isSameSlot(target, previous) && !keepsSlot) this.plan.command = null;
+    this.plan.ship = ship;
+  }
+
+  /**
+   * Der eingeplante Lane-Wechsel: der Slot des Schiffs und der freie Slot, in den es geht. `from` kann
+   * der Slot des eingeplanten Schiffs sein, der auf dem Brett noch leer ist (siehe `shipAt`).
+   */
   get plannedMove(): { from: Slot; to: Slot } | null {
     const command = this.plan.command;
     if (!command?.target || command.destination === null) return null;

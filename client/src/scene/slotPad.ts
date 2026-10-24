@@ -143,8 +143,9 @@ export class SlotPad {
   private updateVisuals(): void {
     this.baseMesh.isVisible = this.isGridVisible;
     this.validGlow.isVisible = this.isValidTarget;
-    // Steht hier der Geist des Schiffs, das gerade platziert wird, zeigt er den Slot schon an.
-    this.hoverGlow.isVisible = this.isValidTarget && this.isHovered && !this.ship?.isGhost;
+    // Beim Platzieren (Gitter sichtbar) zeigt der Geist unter dem Zeiger den Slot schon an. Der Geist
+    // des geplanten Schiffs als Befehlsziel wird markiert wie ein echtes Schiff.
+    this.hoverGlow.isVisible = this.isValidTarget && this.isHovered && !(this.isGridVisible && this.ship?.isGhost);
   }
 }
 

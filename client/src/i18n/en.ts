@@ -43,7 +43,7 @@ export const en = {
       },
       {
         heading: "Your turn",
-        text: "Each round, pick up to one ship and one command from your hand, then end your turn. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit.",
+        text: "Each round, pick up to one ship and one command from your hand, then end your turn. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit. A command may also target the ship you deploy this round, for example to overcharge it or move it straight to the other lane.",
       },
       {
         heading: "The board",
