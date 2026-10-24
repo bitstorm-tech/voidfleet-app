@@ -1,6 +1,6 @@
 // Ergebnis-Overlay nach Matchende: Sieg, Niederlage oder Unentschieden groß
 // in der Bildmitte. „Brett ansehen“ blendet es aus und lässt ein Abzeichen in der
-// Kopfzeile stehen, über das es wieder aufgeht; „Neues Match“ legt ein neues an.
+// Kopfzeile stehen, über das es wieder aufgeht; „Neues Match“ legt ein neues an, ohne die Seite neu zu laden.
 // Solange das Match entschieden ist, trägt der UI-Container die Klasse `match-over`.
 // Beim Erscheinen erklingt eine Fanfare, bei Niederlage und Unentschieden eine düstere.
 
@@ -16,7 +16,10 @@ export class ResultScreen {
   private readonly badge: HTMLButtonElement;
   private result: MatchResult | null = null;
 
-  constructor(private readonly container: HTMLElement) {
+  constructor(
+    private readonly container: HTMLElement,
+    onNewMatch: () => void,
+  ) {
     container.insertAdjacentHTML(
       "beforeend",
       `<div class="result-overlay" hidden>
@@ -43,7 +46,7 @@ export class ResultScreen {
     newButton.textContent = t.result.newMatch;
     boardButton.addEventListener("click", () => this.setOpen(false));
     this.badge.addEventListener("click", () => this.setOpen(true));
-    newButton.addEventListener("click", () => startNewMatch());
+    newButton.addEventListener("click", onNewMatch);
   }
 
   /** Öffnet das Overlay, sobald ein Ergebnis feststeht; bleibt danach in der Hand des Spielers. */
@@ -73,9 +76,3 @@ export class ResultScreen {
   }
 }
 
-/** Ohne `?match=` legt die Verbindung beim Laden ein neues Match an; die Sprache bleibt erhalten. */
-function startNewMatch(): void {
-  const url = new URL(location.href);
-  url.searchParams.delete("match");
-  location.href = url.href;
-}

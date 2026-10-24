@@ -6,6 +6,7 @@
 // dort steht das verlegte Schiff ebenfalls als Geist, ein Bogenpfeil zeigt den Weg.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
+// „Neues Match“ wechselt nur die Verbindung; Szene und geladene Assets bleiben.
 // Die Musik folgt der Phase: ruhig beim Planen, angespannt während die Runde abläuft, still nach Spielende.
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
@@ -37,7 +38,7 @@ export class MatchController {
   private readonly hand: HandView;
   private readonly playback: RoundPlayback;
   private readonly resultScreen: ResultScreen;
-  private readonly connection: ServerConnection;
+  private connection: ServerConnection;
   private isConnected = true;
   /**
    * Server-Nachrichten werden der Reihe nach verarbeitet; eine Runde wartet, bis ihre Animation fertig ist.
@@ -59,7 +60,7 @@ export class MatchController {
     const floats = new FloatingTexts(ui);
     this.hud = new Hud(ui);
     this.playback = new RoundPlayback(this.view, this.hud, floats);
-    this.resultScreen = new ResultScreen(ui);
+    this.resultScreen = new ResultScreen(ui, () => this.startNewMatch());
     new SettingsDialog(ui);
     new RulesDialog(ui);
     this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton, this.hud.botButton], {
@@ -80,16 +81,30 @@ export class MatchController {
     this.hud.botButton.addEventListener("click", () => this.connection.send({ type: "addBot" }));
     this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
 
-    this.connection = new ServerConnection({
-      onMessage: (message) => {
-        this.inbox = this.inbox.then(() => this.onServerMessage(message));
-      },
-      onClose: () => {
-        this.isConnected = false;
-        this.refreshSelectionVisuals();
-      },
-    });
+    this.connection = this.connect(false);
     this.refreshSelectionVisuals();
+  }
+
+  private connect(newMatch: boolean): ServerConnection {
+    return new ServerConnection(
+      {
+        onMessage: (message) => {
+          this.inbox = this.inbox.then(() => this.onServerMessage(message));
+        },
+        onClose: () => {
+          this.isConnected = false;
+          this.refreshSelectionVisuals();
+        },
+      },
+      newMatch,
+    );
+  }
+
+  /** Der erste Zustand des neuen Matches überschreibt Brett, Hände und Ergebnis. */
+  private startNewMatch(): void {
+    this.connection.close();
+    this.isConnected = true;
+    this.connection = this.connect(true);
   }
 
   /** Geplant wird, solange der Zug dieser Runde noch nicht abgegeben und das Match nicht entschieden ist. */
