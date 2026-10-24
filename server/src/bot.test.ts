@@ -12,15 +12,27 @@ function hands(ships: ShipId[], commands: CommandId[]): BotHands {
   return { side: "player", shipHand: ships.map(shipById), commandHand: commands.map(commandById) };
 }
 
-/** Ein Zug ab Runde 2, mit einem Schiff. */
-function planTurn(board: Board, bot: BotHands) {
-  return planBotTurn(board, bot, 2);
+/** Ein Zug ab Runde 2, mit einem Schiff; `random` steuert die seltenen Überraschungen (1: nie, 0: immer). */
+function planTurn(board: Board, bot: BotHands, random = () => 1) {
+  return planBotTurn(board, bot, 2, random);
 }
 
-test("Bot gegen Bot: jeder Zug gilt und jede Partie endet", () => {
+/** Ein Match in Runde 2, in dem Seat 0 nur die angegebenen Karten auf der Hand hat. */
+function matchWith(ships: ShipId[], commands: CommandId[]): Match {
+  const match = new Match("bot");
+  match.join("a");
+  match.join("b");
+  match.round = 2;
+  const player = match.players[0]!;
+  player.shipHand.splice(0, player.shipHand.length, ...ships.map(shipById));
+  player.commandHand.splice(0, player.commandHand.length, ...commands.map(commandById));
+  return match;
+}
+
+test("Bot gegen Bot: über 300 Partien gilt jeder Zug und jede Partie endet", () => {
   // Der Overdrive lässt den Schaden steigen, bis Repair Drones nicht mehr mithalten.
   let stalemates = 0;
-  for (let game = 0; game < 200; game++) {
+  for (let game = 0; game < 300; game++) {
     const match = new Match("bots");
     match.join("a");
     match.join("b");
@@ -156,4 +168,100 @@ test("Der Torpedo zielt auf den Slot des Gegners, der am meisten verliert, auch 
   place(board, "enemy", "strike", 1, "titan_carrier");
   place(board, "enemy", "command", 1, "plasma_frigate").hp = 5;
   expect(planTurn(board, hands([], ["torpedo"])).command).toEqual({ handIndex: 0, target: { lane: "command", slotIndex: 1 }, destination: null });
+});
+
+test("Ein angeschlagenes Strike-Schiff, das sonst fällt, zieht sich hinter ein anderes zurück", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "plasma_frigate").hp = 2;
+  place(board, "player", "strike", 3, "iron_dreadnought");
+  const enemy = place(board, "enemy", "strike", 2, "void_interceptor");
+  expect(planTurn(board, hands([], [])).maneuver).toEqual({ ship: { lane: "strike", slotIndex: 2 }, destination: 3 });
+  // Zerstört sein Schuss den Gegner, ist er mehr wert als die 2 HP: Die Fregatte bleibt und tauscht.
+  enemy.hp = 3;
+  expect(planTurn(board, hands([], [])).maneuver).toBeNull();
+});
+
+test("Das einzige angriffsfähige Schiff manövriert nicht", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "plasma_frigate").hp = 2;
+  place(board, "player", "strike", 3, "repair_drone");
+  place(board, "enemy", "strike", 2, "void_interceptor");
+  // Rückzug nur, wenn vorne ein Angreifer bleibt; die Drohne zählt nicht.
+  expect(planTurn(board, hands([], [])).maneuver).toBeNull();
+
+  const alone = new Board();
+  place(alone, "player", "strike", 2, "plasma_frigate");
+  place(alone, "enemy", "strike", 2, "void_interceptor");
+  // Auch dem vermuteten Torpedo weicht es nicht aus, wenn sonst niemand feuert.
+  expect(planTurn(alone, hands([], []), () => 0).maneuver).toBeNull();
+});
+
+test("Manöver und Bewegungsbefehl verlegen verschiedene Schiffe in verschiedene Slots, und der Zug gilt", () => {
+  const match = matchWith([], ["recall"]);
+  const { board } = match;
+  place(board, "player", "strike", 1, "plasma_frigate").hp = 2;
+  place(board, "player", "strike", 2, "plasma_frigate").hp = 2;
+  place(board, "player", "strike", 3, "iron_dreadnought");
+  place(board, "enemy", "strike", 1, "void_interceptor");
+  place(board, "enemy", "strike", 2, "void_interceptor");
+  const plan = planBotTurn(board, match.players[0]!, match.round, () => 1);
+  // Recall holt die erste Fregatte hinter die zweite; die zieht sich hinter den Dreadnought zurück,
+  // weil Command-Slot 2 schon vergeben und Slot 1 nach dem Recall ungedeckt ist.
+  expect(plan.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 1 }, destination: 2 });
+  expect(plan.maneuver).toEqual({ ship: { lane: "strike", slotIndex: 2 }, destination: 3 });
+  expect(match.submit(0, plan)).toBeNull();
+});
+
+test("Der Torpedo zielt auf ein Schiff, das wohl stehen bleibt, selten auf den Slot, in den ein Gegner ausweicht", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  place(board, "player", "strike", 3, "void_interceptor");
+  place(board, "enemy", "strike", 2, "plasma_frigate").hp = 3;
+  place(board, "enemy", "strike", 3, "horizon_cruiser");
+  // Die angeschlagene Fregatte fällt sonst im Kampf und weicht eher aus; der unbeschädigte Kreuzer bleibt.
+  expect(planTurn(board, hands([], ["torpedo"])).command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 3 }, destination: null });
+  // Ab und zu zielt er auf den gedeckten Slot hinter dem Kreuzer, in den sich die Fregatte zurückziehen würde.
+  expect(planTurn(board, hands([], ["torpedo"]), () => 0).command).toEqual({
+    handIndex: 0,
+    target: { lane: "command", slotIndex: 3 },
+    destination: null,
+  });
+});
+
+test("Sperrfeuer lohnt sich, wenn ein angeschlagener Gegner sonst fällt und eher ausweicht", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  const enemy = place(board, "enemy", "strike", 2, "plasma_frigate");
+  // Gegen ein unbeschädigtes Schiff hat es nur einen kleinen Grundwert; Nachziehen ist mehr wert.
+  expect(planTurn(board, hands([], ["scavenge", "barrage"])).command?.handIndex).toBe(0);
+  enemy.hp = 2;
+  expect(planTurn(board, hands([], ["scavenge", "barrage"])).command?.handIndex).toBe(1);
+});
+
+test("Overcharge und Schild gehen auch an ein Kampfschiff, das gerade vorne landet", () => {
+  const board = new Board();
+  place(board, "player", "command", 2, "void_interceptor");
+  place(board, "enemy", "strike", 2, "plasma_frigate");
+  // Der Dreadnought deckt den Jäger und übersteht Overcharge samt Treffer.
+  const overcharge = planTurn(board, hands(["iron_dreadnought"], ["overcharge"]));
+  expect(overcharge.ships).toEqual([{ handIndex: 0, target: { lane: "strike", slotIndex: 2 } }]);
+  expect(overcharge.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 2 }, destination: null });
+
+  const empty = new Board();
+  place(empty, "enemy", "strike", 2, "plasma_frigate");
+  expect(planTurn(empty, hands(["horizon_cruiser"], ["emergency_shields"])).command).toEqual({
+    handIndex: 0,
+    target: { lane: "strike", slotIndex: 2 },
+    destination: null,
+  });
+});
+
+test("Intercept holt einen frisch in die Command-Lane gelegten Jäger sofort nach vorne, und der Zug gilt", () => {
+  const match = matchWith(["void_interceptor"], ["intercept"]);
+  place(match.board, "player", "strike", 2, "iron_dreadnought");
+  place(match.board, "enemy", "strike", 2, "horizon_cruiser");
+  const plan = planBotTurn(match.board, match.players[0]!, match.round, () => 1);
+  expect(plan.ships).toEqual([{ handIndex: 0, target: { lane: "command", slotIndex: 2 } }]);
+  expect(plan.command).toEqual({ handIndex: 0, target: { lane: "command", slotIndex: 2 }, destination: 1 });
+  expect(match.submit(0, plan)).toBeNull();
 });
