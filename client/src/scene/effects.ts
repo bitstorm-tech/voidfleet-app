@@ -266,7 +266,7 @@ export class BoardEffects {
 
   /** Sekundärexplosion auf der Hülle: bricht in Richtung `outward` auf; `size` 1 passt zu einem Jäger. */
   pop(position: Vector3, outward: Vector3, size: number): void {
-    playSound("explosion_small", { x: position.x, volume: 0.5, rate: 1.2 - 0.1 * size });
+    playSound("explosion_small", { x: position.x, volume: 0.5, rate: 1.05 - 0.1 * size });
     for (const burst of POP) this.burst("pop", position, outward, burst, FIRE_FLASH, size);
     void this.flash(position, FIRE_FLASH, 1.1 * size, 160);
     void this.flashLight(position, 6 * size, 220);
@@ -277,7 +277,7 @@ export class BoardEffects {
    * dazu die Schwärme des Stils und das Blitzlicht. Endet, sobald der Kern verglüht ist; der Rest läuft weiter.
    */
   async detonate(position: Vector3, energy: Color3, size: number, style: BlastStyle): Promise<void> {
-    playSound(size >= LARGE_BLAST ? "explosion_large" : "explosion_small", { x: position.x, rate: 1.2 - 0.15 * size });
+    playSound(size >= LARGE_BLAST ? "explosion_large" : "explosion_small", { x: position.x, rate: 1 - 0.1 * size });
     if (style === "energy") playSound("reactor_breach", { x: position.x });
     for (const burst of BLAST[style]) this.burst(`blast-${style}`, position, Vector3.Up(), burst, energy, size);
     void this.flash(position, Color3.Lerp(energy, Color3.White(), 0.6), 2.2 * size, 180);

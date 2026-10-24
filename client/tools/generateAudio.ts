@@ -72,12 +72,16 @@ const SOUNDS: Record<string, SoundJob> = {
     variants: 2,
   },
   explosion_small: {
-    prompt: fx("A small spaceship exploding: a short, sharp blast with a burst of flying debris."),
+    prompt: fx(
+      "A small spaceship exploding: a deep, bass-heavy boom with a punchy low thump, a short rumble and a burst of debris.",
+    ),
     seconds: 1.5,
     variants: 3,
   },
   explosion_large: {
-    prompt: fx("A massive starship exploding: a huge, deep blast followed by a long rolling rumble and scattering metal debris."),
+    prompt: fx(
+      "A massive starship exploding: an enormous, deep, bass-heavy detonation followed by a long rolling rumble like thunder and scattering metal debris.",
+    ),
     seconds: 4,
     variants: 2,
   },
