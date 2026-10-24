@@ -283,8 +283,60 @@ body {
   font-size: 15px;
 }
 
+/* --- Regel-Dialog: Kapitelnavigation links, scrollender Text mit Illustrationen rechts --- */
+
 .rules-dialog {
-  width: 520px;
+  width: min(1080px, 94vw);
+  height: min(900px, 92vh);
+  padding: 20px 24px;
+}
+
+.rules-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.rules-dialog h2 {
+  margin-bottom: 14px;
+}
+
+.rules-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+
+.rules-nav {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 190px;
+  padding-top: 2px;
+}
+
+#ui .rules-nav button {
+  padding: 7px 10px;
+  font-size: 14px;
+  text-align: left;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+}
+
+#ui .rules-nav button:hover {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.04);
+}
+
+#ui .rules-nav button.active {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.05);
+  border-left-color: var(--accent);
 }
 
 .surrender-text {
@@ -317,26 +369,316 @@ body {
 }
 
 .rules-body {
-  max-height: 60vh;
-  margin-bottom: 18px;
+  flex: 1;
+  min-width: 0;
+  padding-right: 14px;
   overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
-.rules-body h3 {
-  margin: 0 0 4px;
-  font-size: 15px;
+.rules-section + .rules-section {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.rules-section h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
   font-weight: 600;
 }
 
-.rules-body p {
-  margin: 0 0 14px;
+.rules-section h4 {
+  margin: 18px 0 8px;
   font-size: 14px;
-  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rules-section p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.55;
   color: var(--text-dim);
 }
 
-.rules-body p:last-child {
-  margin-bottom: 0;
+.rules-figure {
+  margin: 6px 0 16px;
+}
+
+.rules-figure img,
+.rules-figure .rules-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 3px;
+}
+
+.rules-figure img {
+  border: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.rules-figure figcaption {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: rgb(199 219 250 / 0.7);
+}
+
+/* Inline-SVG der Illustrationen: Farben aus der Palette, Schrift wie das UI. */
+.rules-svg {
+  font-family: var(--font);
+  font-size: 12px;
+}
+
+.rules-svg text {
+  fill: var(--text-dim);
+}
+
+.rules-svg .side-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rules-svg .side-label.player {
+  fill: rgb(var(--player));
+}
+
+.rules-svg .side-label.enemy {
+  fill: rgb(var(--enemy));
+}
+
+.rules-svg .lane-label,
+.rules-svg .class-label {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--text);
+}
+
+.rules-svg .slot-label,
+.rules-svg .stat,
+.rules-svg .note {
+  font-size: 10px;
+  fill: rgb(199 219 250 / 0.6);
+}
+
+.rules-svg .badge {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rules-svg .badge.covered {
+  fill: rgb(var(--heal));
+}
+
+.rules-svg .badge.exposed {
+  fill: rgb(var(--damage));
+}
+
+.rules-svg .slot {
+  fill: rgb(255 255 255 / 0.03);
+  stroke: rgb(255 255 255 / 0.18);
+}
+
+.rules-svg .slot.player {
+  stroke: rgb(var(--player) / 0.5);
+}
+
+.rules-svg .slot.enemy {
+  stroke: rgb(var(--enemy) / 0.45);
+}
+
+.rules-svg .slot.covered {
+  fill: rgb(var(--heal) / 0.16);
+  stroke: rgb(var(--heal) / 0.8);
+}
+
+.rules-svg .slot.exposed {
+  fill: rgb(var(--damage) / 0.16);
+  stroke: rgb(var(--damage) / 0.8);
+}
+
+.rules-svg path.player {
+  fill: rgb(var(--player));
+}
+
+.rules-svg path.enemy {
+  fill: rgb(var(--enemy));
+}
+
+.rules-svg path.muted {
+  opacity: 0.35;
+}
+
+.rules-svg .divider {
+  stroke: rgb(255 255 255 / 0.12);
+  stroke-dasharray: 4 4;
+}
+
+.rules-svg .shot {
+  fill: none;
+  stroke: rgb(var(--damage));
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.rules-svg .shot.blocked {
+  opacity: 0.45;
+}
+
+.rules-svg .move {
+  fill: none;
+  stroke: rgb(var(--select));
+  stroke-width: 2.5;
+}
+
+.rules-svg .arrowhead {
+  fill: context-stroke;
+}
+
+/* Phasen als nummerierte Kette. */
+.rules-phases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: phase;
+}
+
+.rules-phases li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 10px 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  background: rgb(255 255 255 / 0.04);
+  border-top: 2px solid rgb(var(--player) / 0.6);
+  border-radius: 3px;
+  counter-increment: phase;
+}
+
+.rules-phases b {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.rules-phases b::before {
+  content: counter(phase) " · ";
+  color: rgb(var(--player));
+}
+
+/* Overdrive-Zeitleiste: Abschnitte nach Rundenzahl breit, mit steigender Stufe kräftiger. */
+.rules-overdrive {
+  display: flex;
+  gap: 3px;
+}
+
+.rules-overdrive .segment {
+  flex: var(--span);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgb(var(--buff) / calc(0.06 + var(--level) * 0.14));
+  border-top: 2px solid rgb(var(--buff) / calc(0.25 + var(--level) * 0.25));
+  border-radius: 3px;
+}
+
+.rules-overdrive b {
+  font-size: 14px;
+  color: var(--text);
+}
+
+/* Die Teile eines Zugs: verkleinerte Karten und das Manöver-Symbol, mit Plus dazwischen. */
+.rules-turn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rules-turn .part {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.rules-turn .frame {
+  width: 98px;
+  height: 137px;
+}
+
+.rules-turn .frame > * {
+  transform-origin: top left;
+  scale: 0.7;
+}
+
+.rules-turn .frame .rules-svg {
+  width: 140px;
+  height: 196px;
+  background: rgb(255 255 255 / 0.03);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 3px;
+}
+
+.rules-turn .plus {
+  font-size: 26px;
+  color: var(--text-dim);
+}
+
+.rules-turn .note {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+/* Kartengalerie: Karte in Originalgröße, daneben Name, Werte und Effekt lesbar. */
+.rules-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 14px;
+}
+
+.rules-card {
+  display: flex;
+  gap: 14px;
+  padding: 10px;
+  background: rgb(255 255 255 / 0.03);
+  border-radius: 3px;
+}
+
+.rules-card .card {
+  flex: none;
+  pointer-events: none;
+}
+
+.rules-card .description {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.rules-card .description b {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.rules-card .meta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(199 219 250 / 0.6);
 }
 
 .hand-bar {

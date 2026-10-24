@@ -65,6 +65,13 @@ const COMMAND_STATS = {
 export type ShipId = keyof typeof SHIP_STATS;
 export type CommandId = keyof typeof COMMAND_STATS;
 
+/**
+ * Befehle wirken gleichzeitig. Damit kein Spieler im Vorteil ist, laufen sie nach
+ * Typ statt nach Spieler: erst Positionen, dann Verstärkung, dann Schwächung, zuletzt
+ * Schaden. Zwei Befehle gleichen Typs betreffen nie dieselben Schiffe.
+ */
+export const COMMAND_ORDER: readonly CommandType[] = ["reposition", "tactic", "buff", "special", "debuff", "attack"];
+
 export interface ShipCard extends ShipStats {
   kind: "ship";
   id: ShipId;
@@ -113,4 +120,9 @@ export function targetsEnemySlot(card: CommandCard): boolean {
 /** Ob ein Ziel in dieser Lane für den Befehl gültig ist. */
 export function canTargetLane(card: CommandCard, lane: LaneType): boolean {
   return needsTarget(card) && (card.targetLane === undefined || card.targetLane === lane);
+}
+
+/** Kopien je Karte im Nachziehstapel: jedes Schiff zweimal, die Konter Torpedo und Sperrfeuer auch, jeder andere Befehl einmal. */
+export function deckCopies(card: Card): number {
+  return card.kind === "ship" || card.id === "torpedo" || card.id === "barrage" ? 2 : 1;
 }

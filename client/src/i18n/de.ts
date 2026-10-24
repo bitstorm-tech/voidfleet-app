@@ -26,28 +26,135 @@ export const de: Messages = {
   },
   rules: {
     title: "Spielregeln",
-    sections: [
-      {
-        heading: "Ziel",
-        text: "Vernichte die gegnerische Flotte. Wer nach einer Runde kein Kampfschiff mehr hat, weder auf dem Brett noch auf der Hand, verliert — Support-Schiffe zählen nicht. Trifft es beide, endet das Spiel unentschieden. Damit sich keine Partie endlos hinzieht, beginnt ab Runde 8 der Overdrive: Alle Kampfschiffe beider Seiten bekommen +1 ATK, alle 4 Runden einen mehr (Runde 12, 16 …).",
+    sections: {
+      goal: {
+        heading: "Ziel des Spiels",
+        paragraphs: [
+          "Voidfleet ist ein Duell zweier Flotten. Du gewinnst, indem du alle Kampfschiffe deines Gegners vernichtest: Wer am Ende einer Runde kein Kampfschiff mehr hat — weder auf dem Brett noch auf der Hand —, verliert. Support-Schiffe (Reparaturdrohne, Signalverstärker) zählen nicht; eine Flotte nur aus Support-Schiffen ist geschlagen.",
+          "Geprüft wird ganz am Ende der Runde, nachdem beide Spieler nachgezogen haben. Wer sein letztes Schiff verliert, bleibt also im Spiel, solange er noch ein Kampfschiff zum Legen auf der Hand hält. Sind beide Flotten in derselben Runde geschlagen, endet das Match unentschieden.",
+          "Beide Spieler planen ihren Zug gleichzeitig, ohne die Wahl des anderen zu sehen, und ohne Zeitlimit: Ein Zug darf beliebig lange dauern. Es gibt keine Energie und kein Mana — jede Karte auf deiner Hand ist sofort spielbar.",
+          "Damit sich keine Partie endlos hinzieht, beginnt ab Runde 8 der Overdrive: Alle Kampfschiffe beider Seiten bekommen +1 ATK, und der Bonus wächst alle 4 Runden um eins (Runde 12, 16, …). Dagegen kommen Reparaturen auf Dauer nicht an.",
+        ],
+        caption: "Der Overdrive gibt allen Kampfschiffen beider Seiten Angriff dazu, je länger das Match dauert.",
       },
-      {
+      turn: {
         heading: "Dein Zug",
-        text: "Jede Runde wählst du bis zu ein Schiff und einen Befehl aus deiner Hand und beendest den Zug. In Runde 1 stellst du deine Flotte auf: bis zu zwei Schiffe und ein Befehl. Dein Gegner tut gleichzeitig dasselbe, ohne deine Wahl zu sehen. Es gibt keine Kosten und kein Zeitlimit. Ein Befehl darf auch ein Schiff treffen, das du in dieser Runde legst, etwa um es zu überladen oder gleich in die andere Lane zu verlegen. Zusätzlich darfst du eines deiner Schiffe, das schon auf dem Brett steht, in einen freien Slot manövrieren, in der anderen oder derselben Lane — Schiff antippen, dann den Slot. Der Preis: Dieses Schiff feuert in dieser Runde nicht. Ein Befehl auf das Schiff folgt ihm in den neuen Slot.",
+        paragraphs: [
+          "Jede Runde planst du bis zu drei Dinge und klickst dann auf „Zug beenden“: ein Schiff aus deiner Hand auf einen freien Slot deiner Seite, einen Befehl aus deiner Hand und ein Manöver eines Schiffs, das schon auf dem Brett steht, in einen anderen freien Slot. Alle drei sind freiwillig — du kannst auch mit leerem Zug passen.",
+          "In Runde 1 stellst du deine Flotte auf: bis zu zwei Schiffe statt einem, dazu ein Befehl. Ab Runde 2 ist es ein Schiff pro Runde.",
+          "Ein Befehl darf auch ein Schiff treffen, das du in derselben Runde legst, etwa um es sofort zu überladen oder abzuschirmen. Geplante Schiffe stehen als durchscheinende Geister auf dem Brett; ein Befehl auf einen Geist wird so aufgelöst, als stünde das Schiff schon dort.",
+          "Nichts ist endgültig, bis du den Zug beendest: Ein Klick auf eine gewählte Karte, einen Geist oder das manövrierende Schiff nimmt die Planung zurück. Dein Gegner sieht deinen Zug erst, wenn beide abgegeben haben.",
+        ],
+        caption: "Schiff legen: Karte antippen, dann einen der leuchtenden Slots auf deiner Seite.",
       },
-      {
+      board: {
         heading: "Das Brett",
-        text: "Jede Seite hat zwei Lanes: Strike vorne, Command dahinter. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 6. Ein Schiff in der Command-Lane ist gedeckt, solange im Strike-Slot direkt davor ein Schiff steht; sonst kann es angegriffen werden. Mit dem Manöver deines Zugs setzt du ein Schiff in einen beliebigen freien Slot, in der anderen Lane oder in derselben, etwa um eine Reparaturdrohne hinter ein Strike-Schiff in Deckung zu bringen. Die Lane wechseln Schiffe auch über Befehle wie Flanking Maneuver, Intercept und Recall, in einen freien Slot der anderen Lane; diese kosten das Schiff nicht seinen Angriff. Manöver und Befehl können nicht dasselbe Schiff verlegen und nicht im selben Slot landen, und ein in dieser Runde geräumter Slot wird erst in der nächsten frei. Bewegung hat ein Risiko: Sperrfeuer trifft jedes gegnerische Schiff, das in dieser Runde seinen Slot gewechselt hat.",
+        paragraphs: [
+          "Jede Seite hat zwei Lanes mit je 6 Slots: vorne, dem Gegner zugewandt, die Strike-Lane, dahinter die Command-Lane. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 6; mindestens zwei Slots je Lane bleiben also frei.",
+          "Die Command-Lane bietet Deckung: Ein Schiff dort ist gedeckt, solange im Strike-Slot direkt davor (gleiche Slot-Nummer) ein Schiff steht. Gedeckte Schiffe können im Kampf nicht beschossen werden. Ohne Schiff davor ist ein Command-Schiff genauso ungedeckt wie eines in der Strike-Lane.",
+          "Die Deckung wird einmal zu Beginn des Kampfs bestimmt und gilt für den ganzen Kampf: Wird das deckende Schiff von einem Schuss desselben Kampfs zerstört, bleibt das Schiff dahinter bis zur nächsten Runde gedeckt. Schaden durch Befehle ignoriert die Deckung: Orbitalschlag, Salvenfeuer, Torpedo und Sperrfeuer treffen auch gedeckte Schiffe.",
+          "Schiffe feuern in beiden Lanes mit voller Stärke; die Lane zählt nur für die Deckung, für Befehle auf eine bestimmte Lane (Energiestoß, Zielstörer, Abfangen, Rückruf) und für den Signalverstärker, der die Schiffe seiner eigenen Lane verstärkt.",
+        ],
+        caption: "Jede Seite: Strike vorne, Command dahinter. Ein Command-Schiff ist durch den Strike-Slot direkt davor gedeckt.",
       },
-      {
-        heading: "Auflösung",
-        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Manöver (Schiffe wechseln den Slot), Effects (Befehle wirken, Angriffe zuletzt: Ein Torpedo zielt auf einen Slot, nicht auf ein Schiff, und trifft, wer nach allen Bewegungen dort steht — auch ein gedecktes Schiff —, sonst verpufft er im leeren Slot), Combat (alle Schiffe feuern gleichzeitig, kein Schuss geht auf ein schon zerstörtes Ziel), Cleanup (Rundeneffekte enden, Reparaturdrohnen reparieren). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand); erst dann wird geprüft, ob eine Flotte geschlagen ist.",
+      movement: {
+        heading: "Schiffe bewegen",
+        paragraphs: [
+          "Einmal pro Runde darfst du eines deiner Schiffe, das schon auf dem Brett steht, in einen beliebigen freien Slot deiner Seite manövrieren, in der anderen Lane oder in derselben: Schiff antippen, dann einen leuchtenden Slot. Innerhalb der Lane bringst du so etwa eine Reparaturdrohne hinter ein Strike-Schiff in Deckung. Der Preis: Ein manövrierendes Schiff feuert in dieser Runde nicht. Es kann weiterhin beschossen werden, deckt und ist gedeckt schon von seinem neuen Platz aus, und ein Befehl auf das Schiff folgt ihm in den neuen Slot.",
+          "Auch Befehle verlegen Schiffe: Flankenmanöver wechselt ein Schiff in die andere Lane, Abfangen holt ein Command-Schiff mit +2 ATK nach vorne in die Strike-Lane, Rückruf zieht ein Strike-Schiff in die Command-Lane zurück und repariert 2 HP. Per Befehl verlegte Schiffe feuern weiter.",
+          "Befehle verlegen immer in die andere Lane. Manöver und Bewegungsbefehl können nicht dasselbe Schiff verlegen und nicht im selben Slot landen. Der Slot, den ein Schiff verlässt, bleibt für den Rest der Runde blockiert — er wird erst in der nächsten Runde frei, auch für Schiffe, die du legst. Gelegte Schiffe und beide Ziele zählen zusammen zur Grenze von 4 Schiffen je Lane.",
+          "Bewegung hat ein Risiko: Sperrfeuer macht 3 Schaden an jedem gegnerischen Schiff, das in dieser Runde seinen Slot gewechselt hat, egal wie. Und ein Torpedo zielt auf einen Slot, nicht auf ein Schiff: Er trifft, wer nach allen Bewegungen dort steht — ihm auszuweichen oder hineinzulaufen gehört zum Spiel.",
+        ],
+        caption: "Ein geplantes Manöver: Der Schrott-Raider zieht sich aus der Strike-Lane in die Command-Lane zurück und feuert diese Runde nicht. Ein Manöver darf auch in der Lane bleiben.",
       },
-      {
+      resolution: {
+        heading: "Die Rundenauflösung",
+        paragraphs: [
+          "Sobald beide Spieler ihren Zug beendet haben, werden beide Züge aufgedeckt und in festen Phasen aufgelöst. Innerhalb einer Phase handeln beide Seiten gleichzeitig; keine Seite ist je zuerst dran.",
+        ],
+        caption: "Befehle wirken in der Effects-Phase nach Typ, nicht nach Spieler: erst Umgruppierung, dann Taktik, Verstärkung, Spezial, Schwächung und zuletzt Schaden.",
+      },
+      combat: {
+        heading: "Kampf",
+        paragraphs: [
+          "Jedes Schiff mit Angriff über 0 feuert einmal pro Runde, außer es hat in dieser Runde manövriert oder wurde vom EMP-Stoß gelähmt. Das Ziel wählen die Schiffe automatisch nach Klasse unter den ungedeckten Gegnern: Jäger beschießen das Schiff mit den wenigsten HP, Schlachtschiffe das mit dem höchsten ATK, Kreuzer das gegenüberliegende (gleiche Slot-Nummer, sonst das nächstgelegene). Bei Gleichstand trifft es das Schiff mit der niedrigeren Slot-Nummer.",
+          "Alle Schüsse fallen gleichzeitig: Ein Schiff, das in diesem Kampf zerstört wird, feuert trotzdem noch. Die Schiffe einer Seite zielen nacheinander in Slot-Reihenfolge (Strike vor Command) und überspringen Ziele, die ihre eigenen früheren Schüsse schon zerstört haben; so verpufft kein Schuss. Bleibt kein Ziel mehr, verfallen die übrigen Schüsse dieser Seite.",
+          "Schaden trifft zuerst den Schild und erst dann den Rumpf. Der eigene Schild eines Schiffs (Eisen-Dreadnought: 2) regeneriert nicht; der Zusatzschild der Notschilde gilt nur für die Runde. Ein Schiff mit 0 HP ist zerstört und verlässt das Brett — nach der Effects-Phase, nach dem Kampf und nach dem Eigenschaden im Cleanup.",
+          "Der Angriffswert, der auf dem Brett steht, enthält schon alles: Rundenboni aus Befehlen, die Aura des Signalverstärkers und den Overdrive. Support-Schiffe greifen nie an, egal mit welchem Bonus.",
+        ],
+        caption: "Zielwahl nach Klasse: Jäger nehmen die wenigsten HP, Schlachtschiffe den höchsten ATK, Kreuzer das gegenüberliegende Schiff.",
+      },
+      ships: {
         heading: "Schiffe",
-        text: "Schiffe haben Rumpf (HP), Angriff (ATK) und Schild; Schaden trifft zuerst den Schild. Jäger greifen das Schiff mit den wenigsten HP an, Schlachtschiffe das mit dem höchsten ATK, Kreuzer das gegenüberliegende. Support-Schiffe greifen nie an.",
+        paragraphs: [
+          "Schiffe haben Rumpfpunkte (HP), Angriff (ATK) und manchmal einen Schild. Es gibt vier Klassen; die Klasse entscheidet, wie das Schiff im Kampf sein Ziel wählt. Dein Schiffsdeck enthält jedes Schiff zweimal.",
+          "Noch in Arbeit: Die auf den Karten gedruckten Fähigkeiten von Plasma-Fregatte, Schrott-Raider und Titan-Träger sind noch nicht aktiv.",
+        ],
       },
-    ],
+      commands: {
+        heading: "Befehle",
+        paragraphs: [
+          "Befehle werden einmal gespielt und in der Effects-Phase aufgelöst, vor dem Kampf. Manche brauchen beim Planen ein Ziel (ein eigenes Schiff, beim Torpedo ein Slot der Gegnerseite), die übrigen wählen ihr Ziel automatisch. Rundeneffekte wie ATK-Boni, Zusatzschild und EMP enden im Cleanup.",
+          "Befehle wirken nach Typ, in dieser Reihenfolge. Dein Befehlsdeck enthält jeden Befehl einmal, nur Torpedo und Sperrfeuer zweimal. Sensorscan hat noch keine Wirkung.",
+        ],
+      },
+      hand: {
+        heading: "Hand und Decks",
+        paragraphs: [
+          "Du beginnst mit 4 Schiffen — immer 1 Support- und 3 Kampfschiffe — und 3 Befehlen. Am Ende jeder Runde ziehst du 1 Schiff und 1 Befehl nach. Jede Hand fasst höchstens 6 Karten: Mit voller Hand ziehst du nichts, also spiel deine Karten. Plündern zieht sofort 1 Schiff und 1 Befehl zusätzlich, wieder bis zum Handlimit.",
+          "Dein Schiffsdeck hat 16 Karten (jedes Schiff zweimal), dein Befehlsdeck ebenfalls 16 (Torpedo und Sperrfeuer zweimal, jeder andere Befehl einmal). Ist ein Deck leer, ziehst du daraus einfach nichts mehr.",
+        ],
+      },
+      controls: {
+        heading: "Bedienung",
+        paragraphs: [
+          "Tippe eine Karte auf deiner Hand an, dann einen leuchtenden Slot oder ein Schiff auf dem Brett; die Statuszeile oben sagt dir, was die gewählte Karte braucht. Nochmal auf die Karte tippen nimmt sie zurück, ebenso ein Klick auf einen Geist. Zum Manövrieren tippst du ohne gewählte Karte eines deiner Schiffe auf dem Brett an, dann den Ziel-Slot; nochmal auf das Schiff oder Escape bricht ab.",
+          "„Zug beenden“ schickt deinen Plan ab. Während die Runde aufgelöst wird, kannst du die Animation überspringen; der Log-Knopf oben rechts listet jedes Ereignis des Matches. Mit dem Mausrad zoomst du ins Brett, herangezoomt verschiebst du es durch Ziehen. Ton, Animationstempo und Sprache findest du in den Einstellungen neben diesem Dialog; die Fahne daneben gibt das Match nach Rückfrage auf, der Gegner gewinnt sofort.",
+        ],
+      },
+    },
+    phases: {
+      deploy: { name: "Deploy", text: "Die neuen Schiffe beider Spieler landen auf ihren Slots." },
+      maneuver: { name: "Manöver", text: "Manövrierende Schiffe wechseln den Slot und halten das Feuer." },
+      effects: { name: "Effects", text: "Befehle wirken, nach Typ; Schaden zuletzt. Zerstörte Schiffe verschwinden." },
+      combat: { name: "Combat", text: "Alle Schiffe feuern gleichzeitig auf ungedeckte Ziele; Zerstörte verschwinden." },
+      cleanup: { name: "Cleanup", text: "Eigenschaden der Überladung, Reparaturdrohnen reparieren, Rundeneffekte enden." },
+      draw: { name: "Nachziehen", text: "Jeder zieht ein Schiff und einen Befehl (Handlimit 6)." },
+      check: { name: "Prüfung", text: "Wer weder auf dem Brett noch auf der Hand ein Kampfschiff hat, verliert." },
+    },
+    figures: {
+      you: "Du",
+      enemy: "Gegner",
+      slot: (index) => `Slot ${index}`,
+      covered: "gedeckt",
+      exposed: "ungedeckt",
+      laneLimit: "max. 4 Schiffe je Lane, 6 je Seite",
+      lowestHp: "wenigste HP",
+      highestAtk: "höchster ATK",
+      opposite: "gleicher Slot",
+      stat: (hp, atk) => `${hp} HP · ${atk} ATK`,
+      round: (round) => `Runde ${round}`,
+      overdrive: (bonus) => (bonus === 0 ? "kein Overdrive" : `+${bonus} ATK`),
+      rounds: (from, to) => (to === null ? `ab Runde ${from}` : `Runde ${from}–${to}`),
+      maneuver: "Manöver",
+      turnParts: ["1 Schiff", "1 Befehl", "1 Manöver"],
+      roundOne: "Runde 1: 2 Schiffe",
+    },
+    classes: {
+      fighter: "beschießt das ungedeckte Gegnerschiff mit den wenigsten HP.",
+      cruiser: "beschießt das ungedeckte Gegnerschiff mit derselben Slot-Nummer, sonst das nächstgelegene.",
+      battleship: "beschießt das ungedeckte Gegnerschiff mit dem höchsten ATK.",
+      support: "greift nie an (0 ATK) und zählt nicht als Kampfschiff.",
+    },
+    commandTypes: {
+      reposition: "Umgruppierung",
+      tactic: "Taktik",
+      buff: "Verstärkung",
+      special: "Spezial",
+      debuff: "Schwächung",
+      attack: "Angriff",
+    },
+    copies: (count) => `${count}× im Deck`,
   },
   dialog: {
     close: "Schließen",
@@ -175,7 +282,7 @@ export const de: Messages = {
   },
   ships: {
     horizon_cruiser: { name: "Horizon-Kreuzer", effect: "Solide Werte, zuverlässig." },
-    iron_dreadnought: { name: "Eisen-Dreadnought", effect: "Schild 2: Absorbiert jede Runde die ersten 2 Schaden." },
+    iron_dreadnought: { name: "Eisen-Dreadnought", effect: "Schild 2: Absorbiert die ersten 2 Schaden vor dem Rumpf." },
     plasma_frigate: { name: "Plasma-Fregatte", effect: "Beim Deploy: 1 Schaden an ein zufälliges gegnerisches Schiff in derselben Lane." },
     repair_drone: { name: "Reparaturdrohne", effect: "Am Ende jeder Runde: Repariert 2 HP beim beschädigten verbündeten Kampfschiff mit den wenigsten HP." },
     scrap_raider: { name: "Schrott-Raider", effect: "Wird ein gegnerisches Schiff in derselben Lane zerstört: dauerhaft +1 ATK." },

@@ -3,17 +3,10 @@
 // von Seat 0 und hängt ihre Ereignisse an `events` an.
 
 import { nearest, opposite, slotTarget, type Board, type Side, type Slot } from "../../shared/board.ts";
-import type { CommandCard, CommandType } from "../../shared/cards.ts";
+import { COMMAND_ORDER, type CommandCard } from "../../shared/cards.ts";
 import type { CommandEffect, RoundEvent, ShipRef, ShipStats } from "../../shared/protocol.ts";
 
 const SIDES: readonly Side[] = ["player", "enemy"];
-
-/**
- * Befehle wirken gleichzeitig. Damit kein Seat im Vorteil ist, laufen sie nach
- * Typ statt nach Seat: erst Positionen, dann Verstärkung, dann Schwächung, zuletzt
- * Schaden. Zwei Befehle gleichen Typs betreffen nie dieselben Schiffe.
- */
-const COMMAND_ORDER: readonly CommandType[] = ["reposition", "tactic", "buff", "special", "debuff", "attack"];
 
 export interface Commander {
   readonly side: Side;
