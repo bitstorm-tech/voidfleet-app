@@ -4,6 +4,7 @@
 
 import { Board } from "../../shared/board.ts";
 import { SHIPS, type ShipCard } from "../../shared/cards.ts";
+import { loadSounds } from "../src/audio/sounds.ts";
 import { destroyShip } from "../src/scene/destruction.ts";
 import { MatchScene } from "../src/scene/matchScene.ts";
 import { loadShipModels, ShipView } from "../src/scene/ship.ts";
@@ -22,7 +23,7 @@ declare global {
 
 const canvas = document.getElementById("render-canvas") as HTMLCanvasElement;
 const view = new MatchScene(canvas, new Board());
-await Promise.all(loadShipModels(view.scene));
+await Promise.all([...loadShipModels(view.scene), ...loadSounds()]);
 const params = new URLSearchParams(location.search);
 const slow = Number(params.get("slow") ?? 1);
 const only = SHIPS.find((ship) => ship.id === params.get("ship"));

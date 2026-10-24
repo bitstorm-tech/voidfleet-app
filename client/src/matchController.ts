@@ -6,11 +6,14 @@
 // dort steht das verlegte Schiff ebenfalls als Geist, ein Bogenpfeil zeigt den Weg.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
+// Die Musik folgt der Phase: ruhig beim Planen, angespannt während die Runde abläuft, still nach Spielende.
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { canTargetLane, needsTarget, type ShipCard } from "../../shared/cards.ts";
 import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, type Lane, type Slot } from "../../shared/board.ts";
 import type { ServerMessage, SlotTarget } from "../../shared/protocol.ts";
+import { setMusicMood } from "./audio/music.ts";
+import { playUiSound } from "./audio/uiSounds.ts";
 import { Match } from "./game/match.ts";
 import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
@@ -102,6 +105,7 @@ export class MatchController {
         // Runde 1 versteht sich von selbst, ebenso der erste Zustand nach dem Laden der Seite.
         const isNewRound = this.match.round > 0 && message.view.round > this.match.round && message.view.result === null;
         this.match.apply(message.view);
+        setMusicMood(this.match.result === null ? "calm" : null);
         this.selectedShipIndex = null;
         this.selectedCommandIndex = null;
         this.syncBoard();
@@ -114,6 +118,7 @@ export class MatchController {
         // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
         this.isResolving = true;
         this.refreshSelectionVisuals();
+        setMusicMood("battle");
         await this.playback.play(message.round, message.events);
         this.isResolving = false;
         this.updateHud();
@@ -127,32 +132,39 @@ export class MatchController {
   // --- Hand ---
 
   private onShipCardClick(index: number): void {
-    if (!this.canPlan) return;
+    if (!this.canPlan) return playUiSound("denied");
     if (this.match.plan.ship?.handIndex === index) {
       // Erneutes Antippen der geplanten Karte nimmt den Zug zurück.
       this.match.plan.ship = null;
       this.selectShip(null);
+      playUiSound("cancel");
     } else if (this.selectedShipIndex === index) {
       this.selectShip(null);
+      playUiSound("cancel");
     } else {
       this.selectShip(index);
+      playUiSound("select");
     }
   }
 
   /** Befehle ohne Zielwahl sind mit einem Klick eingeplant, sonst folgt der Klick auf ein eigenes Schiff. */
   private onCommandCardClick(index: number): void {
-    if (!this.canPlan) return;
+    if (!this.canPlan) return playUiSound("denied");
     const card = this.match.commandHand[index]!;
     if (this.match.plan.command?.handIndex === index) {
       this.match.plan.command = null;
       this.selectCommand(null);
+      playUiSound("cancel");
     } else if (this.selectedCommandIndex === index) {
       this.selectCommand(null);
+      playUiSound("cancel");
     } else if (needsTarget(card)) {
       this.selectCommand(index);
+      playUiSound("select");
     } else {
       this.match.plan.command = { handIndex: index, target: null, destination: null };
       this.selectCommand(null);
+      playUiSound("place");
     }
   }
 
@@ -189,9 +201,9 @@ export class MatchController {
     if (pad === null) {
       this.selectShip(null);
       this.selectCommand(null);
-      return;
+      return playUiSound("cancel");
     }
-    if (!this.isValidTarget(pad)) return;
+    if (!this.isValidTarget(pad)) return playUiSound("denied");
 
     if (this.selectedShipIndex !== null) {
       this.stageShipOn(pad);
@@ -241,6 +253,7 @@ export class MatchController {
       target: { lane: pad.slot.lane.type, slotIndex: pad.slot.index },
     };
     this.selectShip(null);
+    playUiSound("place");
   }
 
   /** Verlegende Befehle merken sich erst das Schiff und werden mit dem Ziel-Slot eingeplant. */
@@ -249,7 +262,7 @@ export class MatchController {
     if (card.moves && this.moveSource === null) {
       this.moveSource = pad.slot;
       this.refreshSelectionVisuals();
-      return;
+      return playUiSound("select");
     }
     const target = this.moveSource ?? pad.slot;
     this.match.plan.command = {
@@ -258,6 +271,7 @@ export class MatchController {
       destination: this.moveSource && pad.slot.index,
     };
     this.selectCommand(null);
+    playUiSound("place");
   }
 
   /**
@@ -322,6 +336,7 @@ export class MatchController {
   private submit(): void {
     if (!this.canPlan || !this.match.opponent.joined) return;
     this.connection.send({ type: "submit", plan: this.match.plan });
+    playUiSound("confirm");
   }
 
   /** Szene an den neuen Zustand angleichen (auch Schiffe, die die Lane gewechselt haben); der Geist kommt zuletzt. */

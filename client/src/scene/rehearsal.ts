@@ -2,9 +2,11 @@
 // Mal gezeichnet wird, und das Bild stockt dabei. Deshalb wird beim Laden alles einmal gezeigt, was im
 // Spiel vorkommt — Schiffe mit Treffer-Blitz, Geister, glühende Wracks und alle Effekte — und danach
 // wieder entsorgt. Die Shader bleiben übersetzt, weil `Effect.PersistentMode` sie nie freigibt (`matchScene.ts`).
+// Die Effekte bleiben dabei stumm, auch wenn ein Klick auf den Ladebildschirm den Ton schon freigegeben hat.
 
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { SHIPS } from "../../../shared/cards.ts";
+import { muteSounds } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
 import { HIT_NAMES } from "./effects.ts";
 import type { MatchScene } from "./matchScene.ts";
@@ -16,6 +18,7 @@ const STAGE = new Vector3(0, 0.5, 2.5);
 export async function rehearse(view: MatchScene): Promise<void> {
   const { scene, effects } = view;
   const color = color3("player");
+  muteSounds(true);
   const ships: ShipView[] = [];
   for (const card of SHIPS) {
     const ship = new ShipView(scene, card, false);
@@ -49,4 +52,5 @@ export async function rehearse(view: MatchScene): Promise<void> {
       resolve();
     });
   });
+  muteSounds(false);
 }

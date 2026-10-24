@@ -1,12 +1,13 @@
 // Einstellungen: Zahnrad-Knopf oben rechts neben dem Log-Knopf öffnet einen modalen Dialog
-// mit je einer Geschwindigkeitswahl für Angriffe, Schiffsbewegungen und die übrigen Animationen sowie
-// der Sprache. Jede Auswahl wird gespeichert (`settings.ts`); die Geschwindigkeiten
-// gelten sofort, ein Sprachwechsel lädt die Seite neu.
+// mit Reglern für die Lautstärke von Musik und Effekten, je einer Geschwindigkeitswahl für Angriffe,
+// Schiffsbewegungen und die übrigen Animationen sowie der Sprache. Jede Auswahl wird gespeichert
+// (`settings.ts`); Lautstärken und Geschwindigkeiten gelten sofort, ein Sprachwechsel lädt die Seite neu.
 
 import { locale, LOCALE_NAMES, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { iconDialog } from "./iconDialog.ts";
 
+type VolumeSetting = "musicVolume" | "effectsVolume";
 type SpeedSetting = "attackSpeed" | "movementSpeed" | "animationSpeed";
 
 const ICON = `<circle cx="12" cy="12" r="3" />
@@ -16,12 +17,22 @@ export class SettingsDialog {
   constructor(container: HTMLElement) {
     const dialog = iconDialog(container, "settings", t.settings.title, ICON);
     dialog.querySelector(".dialog-close")!.before(
+      volumeSlider("musicVolume"),
+      volumeSlider("effectsVolume"),
       speedChoice("attackSpeed"),
       speedChoice("movementSpeed"),
       speedChoice("animationSpeed"),
       choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
     );
   }
+}
+
+function volumeSlider(setting: VolumeSetting): HTMLLabelElement {
+  const label = Object.assign(document.createElement("label"), { className: "settings-volume" });
+  const input = Object.assign(document.createElement("input"), { type: "range", min: "0", max: "1", step: "0.05", value: String(settings[setting]) });
+  input.addEventListener("input", () => updateSettings({ [setting]: Number(input.value) }));
+  label.append(Object.assign(document.createElement("span"), { textContent: t.settings[setting] }), input);
+  return label;
 }
 
 function speedChoice(setting: SpeedSetting): HTMLFieldSetElement {

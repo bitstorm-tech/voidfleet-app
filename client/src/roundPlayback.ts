@@ -8,9 +8,12 @@
 import type { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Side } from "../../shared/board.ts";
-import { shipById, type ShipId } from "../../shared/cards.ts";
+import { shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
 import type { RoundEvent, ShipRef, ShipStats, SlotTarget } from "../../shared/protocol.ts";
+import { playSound, stopSounds } from "./audio/sounds.ts";
+import { playUiSound } from "./audio/uiSounds.ts";
 import { color3 } from "./data/palette.ts";
+import type { SoundId } from "./data/sounds.ts";
 import { t } from "./i18n/index.ts";
 import { destroyShip } from "./scene/destruction.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
@@ -32,6 +35,35 @@ const TONE_COLORS: Record<FloatTone, Color3> = {
   buff: color3("buff"),
   debuff: color3("debuff"),
 };
+
+/** Waffe je Schiff. */
+const SHOT_SOUNDS: Record<ShipId, SoundId> = {
+  void_interceptor: "laser_light",
+  scrap_raider: "laser_light",
+  horizon_cruiser: "laser_medium",
+  plasma_frigate: "plasma_shot",
+  iron_dreadnought: "cannon_heavy",
+  titan_carrier: "laser_medium",
+  repair_drone: "laser_light",
+  signal_booster: "laser_light",
+};
+/** Was man von einem Befehl hört, sobald er wirkt; Lane-Wechsel hört man an den Triebwerken, Treffer an den Einschlägen. */
+const COMMAND_SOUNDS: Record<CommandId, SoundId | null> = {
+  emergency_shields: "shield_up",
+  emp_blast: "emp",
+  flanking_maneuver: null,
+  intercept: "power_up",
+  orbital_strike: "orbital_strike",
+  overcharge: "power_up",
+  power_surge: "power_up",
+  recall: "repair",
+  scavenge: "scavenge",
+  sensor_sweep: null,
+  targeting_jammer: "jammer",
+  volley_fire: "missile_volley",
+};
+/** Mitte einer Brettseite (Welt-x), für Sounds ohne Schiff. */
+const SIDE_X: Record<Side, number> = { player: -4.5, enemy: 4.5 };
 
 /** Pause zwischen zwei Schritten, damit man sie auseinanderhalten kann. */
 const STEP_PAUSE = 280;
@@ -101,6 +133,7 @@ export class RoundPlayback {
   skip(): void {
     this.isSkipped = true;
     skipAnimations(true);
+    stopSounds();
     this.floats.clear();
     this.hud.hideBanner();
   }
@@ -110,6 +143,7 @@ export class RoundPlayback {
     if (first.kind === "effect" || first.kind === "draw" || first.kind === "noEffect") {
       this.announceCommand(first);
       await wait(this.view.scene, BANNER_LEAD);
+      this.commandSound(first);
     } else if (first.kind === "ability") {
       this.hud.showBanner(t.banner.command(t.log.who[first.source.side], t.ships[first.source.cardId].name), null, first.source.side);
       await wait(this.view.scene, BANNER_LEAD);
@@ -124,6 +158,13 @@ export class RoundPlayback {
     this.hud.showBanner(title, subtitle, event.side);
   }
 
+  /** Einmal je Befehl, auch wenn er mehrere Schiffe trifft; ohne Wirkung verpufft er hörbar. */
+  private commandSound(event: Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" }>): void {
+    const sound = COMMAND_SOUNDS[event.cardId];
+    if (event.kind === "noEffect") playUiSound("denied");
+    else if (sound) playSound(sound, { x: event.kind === "effect" ? this.centerOf(this.padOf(event.ship)).x : SIDE_X[event.side] });
+  }
+
   private async playEvent(event: RoundEvent): Promise<void> {
     switch (event.kind) {
       case "deploy":
@@ -135,7 +176,7 @@ export class RoundPlayback {
       case "attack": {
         const color = SIDE_COLORS[event.attacker.side];
         const origin = this.centerOf(this.padOf(event.attacker));
-        await this.shoot(origin, this.padOf(event.target), color);
+        await this.shoot(origin, this.padOf(event.target), color, SHOT_SOUNDS[event.attacker.cardId]);
         return this.damage(event.target, event.amount, event.after, origin, color);
       }
       case "selfDamage":
@@ -184,13 +225,16 @@ export class RoundPlayback {
   /** Erst ein Impuls an der Quelle, dann die Reparatur am Ziel. */
   private async ability(event: Extract<RoundEvent, { kind: "ability" }>): Promise<void> {
     const pad = this.padOf(event.ship);
-    await this.view.effects.pulse(this.centerOf(this.padOf(event.source)), SIDE_COLORS[event.source.side], 1.2, 350);
+    const source = this.centerOf(this.padOf(event.source));
+    playSound("repair", { x: source.x });
+    await this.view.effects.pulse(source, SIDE_COLORS[event.source.side], 1.2, 350);
     pad.ship!.setStats(event.after.hp, event.after.shield);
     return this.mark(pad, t.float.heal(event.effect.amount), "heal");
   }
 
-  /** Mündungsblitz bei `origin`, dann fliegt der Bolzen bis auf die Hülle des Ziels. */
-  private async shoot(origin: Vector3, to: SlotPad, color: Color3): Promise<void> {
+  /** Mündungsblitz und Schuss bei `origin`, dann fliegt der Bolzen bis auf die Hülle des Ziels. */
+  private async shoot(origin: Vector3, to: SlotPad, color: Color3, sound: SoundId): Promise<void> {
+    playSound(sound, { x: origin.x });
     void this.view.effects.pulse(origin, color, 0.7, 180);
     await this.view.effects.bolt(origin, this.impactFrom(to, origin), color);
   }

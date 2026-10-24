@@ -42,6 +42,11 @@ export function skipAnimations(skip: boolean): void {
   if (skip) for (const finish of [...running]) finish();
 }
 
+/** Ob gerade übersprungen wird; Soundeffekte bleiben dann stumm. */
+export function animationsSkipped(): boolean {
+  return isSkipping;
+}
+
 /**
  * Ruft `update` jeden Frame mit dem Fortschritt 0..1 auf und endet nach `duration` ms vor der Streckung
  * durch `tweenScope` (sonst den beim Start geltenden Regler); eine Umstellung der Einstellung wirkt auch auf laufende Tweens.

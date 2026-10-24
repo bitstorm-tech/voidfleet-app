@@ -13,6 +13,9 @@ export const ANIMATION_SPEEDS = { slow: 3, normal: 2, fast: 1.2, veryFast: 0.6 }
 export type AnimationSpeed = keyof typeof ANIMATION_SPEEDS;
 
 export interface Settings {
+  /** Lautstärke von Musik und Effekten, jeweils 0..1. */
+  musicVolume: number;
+  effectsVolume: number;
   /** Schüsse im Kampf. */
   attackSpeed: AnimationSpeed;
   /** Flüge der Schiffe: Deploy-Einflug und Lane-Wechsel. */
@@ -24,7 +27,13 @@ export interface Settings {
 }
 
 const STORAGE_KEY = "voidfleet.settings";
-const DEFAULTS: Settings = { attackSpeed: "normal", movementSpeed: "normal", animationSpeed: "normal" };
+const DEFAULTS: Settings = {
+  musicVolume: 0.6,
+  effectsVolume: 0.8,
+  attackSpeed: "normal",
+  movementSpeed: "normal",
+  animationSpeed: "normal",
+};
 
 export const settings: Settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") };
 

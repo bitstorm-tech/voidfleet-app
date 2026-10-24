@@ -14,6 +14,8 @@ export const de: Messages = {
   },
   settings: {
     title: "Einstellungen",
+    musicVolume: "Musik",
+    effectsVolume: "Soundeffekte",
     attackSpeed: "Geschwindigkeit der Angriffe",
     movementSpeed: "Geschwindigkeit der Bewegungen",
     animationSpeed: "Übrige Animationen",

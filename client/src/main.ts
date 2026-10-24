@@ -1,3 +1,4 @@
+import { installUiSounds } from "./audio/uiSounds.ts";
 import { installPalette } from "./data/palette.ts";
 import { locale } from "./i18n/index.ts";
 import { MatchController } from "./matchController.ts";
@@ -9,4 +10,5 @@ const ui = document.getElementById("ui") as HTMLElement;
 document.documentElement.lang = locale;
 installPalette();
 installCursor();
+installUiSounds(ui);
 new MatchController(canvas, ui);

@@ -2,8 +2,10 @@
 // in der Bildmitte. „Brett ansehen“ blendet es aus und lässt ein Abzeichen in der
 // Kopfzeile stehen, über das es wieder aufgeht; „Neues Match“ legt ein neues an.
 // Solange das Match entschieden ist, trägt der UI-Container die Klasse `match-over`.
+// Beim Erscheinen erklingt eine Fanfare, bei Niederlage und Unentschieden eine düstere.
 
 import type { MatchResult } from "../../../shared/protocol.ts";
+import { playSound } from "../audio/sounds.ts";
 import { t } from "../i18n/index.ts";
 
 export class ResultScreen {
@@ -62,6 +64,7 @@ export class ResultScreen {
     this.rounds.textContent = t.result.rounds(round);
     this.badge.textContent = text.title;
     this.setOpen(true);
+    playSound(result === "won" ? "victory" : "defeat");
   }
 
   private setOpen(open: boolean): void {

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Voidfleet – Sound-Vorschau</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px 32px 48px;
+        background: #04050a;
+        color: #f2f7ff;
+        font: 14px "Open Sans", "Segoe UI", system-ui, sans-serif;
+      }
+      h1,
+      h2 {
+        color: #78c2ff;
+        font-weight: 600;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 22px;
+      }
+      h2 {
+        margin: 28px 0 8px;
+        font-size: 16px;
+      }
+      p {
+        margin: 0;
+        color: #c7dbfa;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 150px auto 1fr;
+        gap: 16px;
+        align-items: center;
+        padding: 5px 0;
+        border-bottom: 1px solid rgb(255 255 255 / 0.06);
+      }
+      .buttons {
+        display: flex;
+        gap: 6px;
+      }
+      .stats {
+        color: #8fa3c0;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        white-space: pre;
+      }
+      button {
+        padding: 4px 12px;
+        font: inherit;
+        color: inherit;
+        background: #1c2028;
+        border: 1px solid rgb(255 255 255 / 0.12);
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #2c323e;
+      }
+      input[type="range"] {
+        width: 240px;
+        accent-color: #78c2ff;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sound-Vorschau</h1>
+    <p>Einmal irgendwo klicken: Browser geben Ton erst nach einer Geste frei. Alles klingt so wie im Spiel.</p>
+    <main id="sounds"></main>
+    <script type="module" src="./sounds.ts"></script>
+  </body>
+</html>

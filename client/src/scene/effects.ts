@@ -19,6 +19,8 @@ import type { Scene } from "@babylonjs/core/scene";
 // Die Partikel-Shader kommen mit ins Bundle, sonst lädt Babylon sie beim ersten Einschlag nach.
 import "@babylonjs/core/Shaders/particles.fragment";
 import "@babylonjs/core/Shaders/particles.vertex";
+import { playSound } from "../audio/sounds.ts";
+import type { SoundId } from "../data/sounds.ts";
 import { animationTimeScale, easeInCubic, easeOutCubic, tween, wait } from "./tween.ts";
 
 /** Welteinheiten pro Sekunde. */
@@ -151,6 +153,15 @@ const HITS: Record<HitName, Hit> = {
 };
 export const HIT_NAMES = Object.keys(HITS) as HitName[];
 
+/** Wie ein Einschlag klingt: Metall, Feuer oder Entladung. */
+const HIT_SOUNDS: Record<HitName, SoundId> = {
+  sparks: "impact_metal",
+  pierce: "impact_metal",
+  fireball: "impact_fire",
+  fire: "impact_fire",
+  discharge: "impact_energy",
+};
+
 /** Sekundärexplosion: ein Riss in der Hülle, aus dem Feuer, Funken und ein Rauchpilz brechen. */
 const POP: readonly Burst[] = [
   { count: 24, cone: Tools.ToRadians(75), speed: [1.5, 4], lifeTime: [0.4, 0.8], size: [0.22, 0.4], grow: 0.5, stretch: 1.2, gravity: 0.6, colors: FIRE },
@@ -159,6 +170,9 @@ const POP: readonly Burst[] = [
 ];
 
 export type BlastStyle = "fire" | "energy";
+
+/** Ab dieser Größe (Kreuzer) klingt die Detonation nach großer Explosion; je größer, desto tiefer. */
+const LARGE_BLAST = 1.4;
 
 const SPHERE = Math.PI;
 /** Detonation: Feuerball, Funkenregen, Glut und Ruß nach allen Seiten (Größen und Geschwindigkeiten mal `size`). */
@@ -241,6 +255,7 @@ export class BoardEffects {
    */
   async hit(position: Vector3, origin: Vector3, color: Color3, name: HitName = this.pickHit()): Promise<void> {
     const { flash, ring, bursts } = HITS[name];
+    playSound(HIT_SOUNDS[name], { x: position.x });
     const normal = origin.subtract(position).normalize();
     for (const burst of bursts) this.burst(name, position, burst.through ? normal.negate() : normal, burst, color);
     await Promise.all([
@@ -251,6 +266,7 @@ export class BoardEffects {
 
   /** Sekundärexplosion auf der Hülle: bricht in Richtung `outward` auf; `size` 1 passt zu einem Jäger. */
   pop(position: Vector3, outward: Vector3, size: number): void {
+    playSound("explosion_small", { x: position.x, volume: 0.5, rate: 1.2 - 0.1 * size });
     for (const burst of POP) this.burst("pop", position, outward, burst, FIRE_FLASH, size);
     void this.flash(position, FIRE_FLASH, 1.1 * size, 160);
     void this.flashLight(position, 6 * size, 220);
@@ -261,6 +277,8 @@ export class BoardEffects {
    * dazu die Schwärme des Stils und das Blitzlicht. Endet, sobald der Kern verglüht ist; der Rest läuft weiter.
    */
   async detonate(position: Vector3, energy: Color3, size: number, style: BlastStyle): Promise<void> {
+    playSound(size >= LARGE_BLAST ? "explosion_large" : "explosion_small", { x: position.x, rate: 1.2 - 0.15 * size });
+    if (style === "energy") playSound("reactor_breach", { x: position.x });
     for (const burst of BLAST[style]) this.burst(`blast-${style}`, position, Vector3.Up(), burst, energy, size);
     void this.flash(position, Color3.Lerp(energy, Color3.White(), 0.6), 2.2 * size, 180);
     void this.shockwave(position, energy, 5 * size, 700, true);

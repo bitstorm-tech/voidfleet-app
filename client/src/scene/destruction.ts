@@ -10,6 +10,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { ShipId } from "../../../shared/cards.ts";
+import { playSound } from "../audio/sounds.ts";
 import { randomBetween, randomInCone, type BlastStyle } from "./effects.ts";
 import type { MatchScene } from "./matchScene.ts";
 import type { ShipView, Wreck } from "./ship.ts";
@@ -102,9 +103,13 @@ export async function destroyShip(ship: ShipView, view: MatchScene): Promise<voi
   await view.effects.detonate(center, profile.energy, profile.size, profile.style);
 }
 
-/** Todeskampf: das Schiff zittert und krängt, dabei brechen Risse in der Hülle auf, gegen Ende immer dichter. */
+/**
+ * Todeskampf: das Schiff zittert und krängt, dabei brechen Risse in der Hülle auf, gegen Ende immer dichter.
+ * Die Hülle ächzt umso lauter, je länger der Todeskampf dauert; die Detonation schneidet es ab.
+ */
 async function agony(ship: ShipView, profile: DestructionProfile, view: MatchScene): Promise<void> {
   const center = ship.center;
+  const groan = playSound("hull_stress", { x: center.x, volume: Math.min(profile.agony / 1600, 1) });
   const points = ship.surfacePoints(profile.pops);
   const schedule = points.map(() => 0.12 + 0.8 * Math.random() ** 0.7).sort((a, b) => a - b);
   let next = 0;
@@ -117,6 +122,7 @@ async function agony(ship: ShipView, profile: DestructionProfile, view: MatchSce
       void ship.flash(POP_FLASH);
     }
   });
+  groan.stop(0.3);
 }
 
 /**

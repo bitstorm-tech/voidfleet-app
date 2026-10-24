@@ -20,9 +20,11 @@ import { Tools } from "@babylonjs/core/Misc/tools";
 import type { Scene } from "@babylonjs/core/scene";
 // Registriert `renderOverlay` auf Mesh: zeichnet das Modell in einer Farbe darüber (Treffer-Blitz).
 import "@babylonjs/core/Rendering/outlineRenderer";
-import { SHIPS, type ShipCard } from "../../../shared/cards.ts";
+import { SHIPS, type ShipCard, type ShipClass } from "../../../shared/cards.ts";
+import { loopSound } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
 import { shipModel, wreckModel } from "../data/shipModels.ts";
+import type { SoundId } from "../data/sounds.ts";
 import { randomInCone } from "./effects.ts";
 import { Maneuver } from "./maneuver.ts";
 import { easeInOutSine, easeOutCubic, tween } from "./tween.ts";
@@ -39,6 +41,14 @@ const ARRIVAL_DURATION = 1300;
 const OVERFLIGHT_HEIGHT = 1.7;
 const DESCENT_START = 0.9;
 const DESCENT_PITCH = Tools.ToRadians(12);
+/** Triebwerk je Schiffsklasse während eines Flugs; nach der Landung verklingt es in so vielen Sekunden. */
+const ENGINE_SOUNDS: Record<ShipClass, SoundId> = {
+  fighter: "engine_light",
+  support: "engine_medium",
+  cruiser: "engine_medium",
+  battleship: "engine_heavy",
+};
+const ENGINE_FADE = 0.5;
 /** Treffer: Die Hülle leuchtet kurz auf und klingt wieder ab. */
 const HIT_FLASH_COLOR = new Color3(1, 0.93, 0.8);
 const HIT_FLASH_ALPHA = 0.75;
@@ -160,7 +170,7 @@ export class ShipView {
   async arrive(distance: number, obstacle: number | null): Promise<void> {
     this.statusBars.setEnabled(false);
     const descentStart = obstacle === null ? 0 : -obstacle + DESCENT_START;
-    await tween(this.scene, ARRIVAL_DURATION, (progress) => {
+    await this.fly(ARRIVAL_DURATION, (progress) => {
       const z = -distance * (1 - easeOutCubic(progress));
       this.root.position.z = z;
       if (obstacle === null) return;
@@ -168,7 +178,7 @@ export class ShipView {
       const altitude = Math.min(z / descentStart, 1);
       this.root.position.y = OVERFLIGHT_HEIGHT * easeInOutSine(altitude);
       this.modelRoot.rotation.x = DESCENT_PITCH * Math.sin(Math.PI * altitude);
-    }, "movement");
+    });
     this.statusBars.setEnabled(true);
   }
 
@@ -178,15 +188,25 @@ export class ShipView {
    */
   async maneuver(): Promise<void> {
     const flight = new Maneuver(this.root.position, this.card.shipClass);
-    await tween(this.scene, flight.duration, (progress) => {
+    await this.fly(flight.duration, (progress) => {
       const pose = flight.pose(progress);
       this.root.position.set(pose.x, pose.y, pose.z);
       this.root.rotation.y = pose.yaw;
       this.modelRoot.rotation.set(pose.pitch, 0, pose.roll);
-    }, "movement");
+    });
     this.root.position.setAll(0);
     this.root.rotation.setAll(0);
     this.modelRoot.rotation.setAll(0);
+  }
+
+  /** Ein Flug im Takt der Bewegungen: Das Triebwerk folgt dem Schiff im Stereobild und verklingt nach der Landung. */
+  private async fly(duration: number, update: (progress: number) => void): Promise<void> {
+    const engine = loopSound(ENGINE_SOUNDS[this.card.shipClass], { x: this.root.getAbsolutePosition().x });
+    await tween(this.scene, duration, (progress) => {
+      update(progress);
+      engine.follow(this.root.getAbsolutePosition().x);
+    }, "movement");
+    engine.stop(ENGINE_FADE);
   }
 
   /** Treffer: die Hülle blitzt hell auf; der Einschlag selbst kommt aus `BoardEffects.hit`. */

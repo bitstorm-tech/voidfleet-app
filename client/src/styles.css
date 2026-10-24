@@ -232,6 +232,24 @@ body {
   outline: 2px solid rgb(var(--select));
 }
 
+.settings-volume {
+  display: block;
+  margin: 0 0 18px;
+}
+
+.settings-volume span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.settings-volume input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 #ui .dialog-close {
   display: block;
   margin: 6px 0 0 auto;

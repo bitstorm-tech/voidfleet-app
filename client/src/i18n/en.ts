@@ -26,6 +26,8 @@ export const en = {
   },
   settings: {
     title: "Settings",
+    musicVolume: "Music",
+    effectsVolume: "Sound effects",
     attackSpeed: "Attack speed",
     movementSpeed: "Movement speed",
     animationSpeed: "Other animations",

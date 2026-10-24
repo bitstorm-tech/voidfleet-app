@@ -2,9 +2,10 @@
 // Karten werden nur neu aufgebaut, wenn sich die Hand ändert (sonst würde die Karte
 // unter der Maus ihr Hover verlieren und neu aufzoomen); jede trägt ihre
 // Illustration (`cardArt`) als Hintergrund, das CSS legt Verläufe für den Text darüber.
-// Neu gezogene Karten fliegen nacheinander ein und leuchten kurz auf.
+// Neu gezogene Karten fliegen nacheinander ein, jede mit einem Wischen, und leuchten kurz auf.
 
 import type { CommandCard, ShipCard } from "../../../shared/cards.ts";
+import { playUiSound } from "../audio/uiSounds.ts";
 import { cardArt } from "../data/cardArt.ts";
 import { cardColor } from "../data/cardColors.ts";
 import { darkened, toCss, toCssChannels } from "../data/palette.ts";
@@ -141,6 +142,9 @@ function markDrawn(element: HTMLElement, order: number): void {
   if (order === -1) return;
   element.classList.add("drawn");
   element.style.setProperty("--draw-delay", `${order * 0.18}s`);
+  element.addEventListener("animationstart", (event) => {
+    if (event.animationName === "card-draw") playUiSound("draw");
+  });
   element.addEventListener("animationend", (event) => {
     if (event.pseudoElement === "::before") element.classList.remove("drawn");
   });

@@ -2,6 +2,7 @@
 // (Submit, Überspringen oder Computergegner, je nach Lage) als DOM-Overlay.
 
 import type { Side } from "../../../shared/board.ts";
+import { playUiSound } from "../audio/uiSounds.ts";
 import { t } from "../i18n/index.ts";
 
 export class Hud {
@@ -89,6 +90,7 @@ export class Hud {
       Object.assign(document.createElement("strong"), { textContent: t.hud.round(round) }),
     );
     restartAnimation(this.roundBanner);
+    playUiSound("round");
   }
 
   hideBanner(): void {
