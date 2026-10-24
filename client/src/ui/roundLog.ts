@@ -1,29 +1,28 @@
 // Formuliert die aufgedeckten Ereignisse einer Runde als Log-Zeilen.
 
-import type { Side } from "../../../shared/board.ts";
-import type { RoundEvent, ShipRef, SlotTarget } from "../../../shared/protocol.ts";
+import type { RoundEvent, ShipRef, SlotRef } from "../../../shared/protocol.ts";
 import { t } from "../i18n/index.ts";
 
-function slotLabel(side: Side, target: SlotTarget): string {
-  return t.log.slot(side, t.lanes[target.lane], target.slotIndex + 1);
+export function slotLabel(slot: SlotRef): string {
+  return t.log.slot(slot.side, t.lanes[slot.lane], slot.slotIndex + 1);
 }
 
 function shipLabel(ship: ShipRef): string {
-  return t.log.ship(t.ships[ship.cardId].name, slotLabel(ship.side, ship));
+  return t.log.ship(t.ships[ship.cardId].name, slotLabel(ship));
 }
 
 export function describeEvent(event: RoundEvent): string {
   switch (event.kind) {
     case "deploy":
-      return t.log.deploy(t.log.who[event.side], t.ships[event.cardId].name, slotLabel(event.side, event.target));
+      return t.log.deploy(t.log.who[event.side], t.ships[event.cardId].name, slotLabel({ side: event.side, ...event.target }));
     case "pass":
       return t.log.pass(t.log.who[event.side]);
     case "maneuver":
-      return t.log.maneuver(t.log.who[event.side], shipLabel(event.ship), slotLabel(event.side, event.to));
+      return t.log.maneuver(t.log.who[event.side], shipLabel(event.ship), slotLabel({ side: event.side, ...event.to }));
     case "command": {
       const who = t.log.who[event.side];
       const name = t.commands[event.cardId].name;
-      return event.target ? t.log.commandOn(who, name, slotLabel(event.side, event.target)) : t.log.command(who, name);
+      return event.target ? t.log.commandOn(who, name, slotLabel(event.target)) : t.log.command(who, name);
     }
     case "effect": {
       const name = t.commands[event.cardId].name;
@@ -41,7 +40,7 @@ export function describeEvent(event: RoundEvent): string {
         case "heal":
           return t.log.heal(name, ship, effect.amount);
         case "move":
-          return t.log.move(name, ship, slotLabel(event.ship.side, effect.to));
+          return t.log.move(name, ship, slotLabel({ side: event.ship.side, ...effect.to }));
       }
     }
     case "ability":
@@ -50,6 +49,8 @@ export function describeEvent(event: RoundEvent): string {
       return t.log.draw(t.commands[event.cardId].name, t.log.who[event.side], event.ships, event.commands);
     case "noEffect":
       return t.log.noEffect(t.commands[event.cardId].name, t.log.who[event.side]);
+    case "miss":
+      return t.log.miss(t.commands[event.cardId].name, slotLabel(event.target));
     case "attack":
       return t.log.attack(shipLabel(event.attacker), shipLabel(event.target), event.amount);
     case "selfDamage":

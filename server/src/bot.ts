@@ -170,6 +170,14 @@ class Situation {
       }
       case "volley_fire":
         return untargeted(enemies.reduce((total, slot) => total + damageValue(slot, 1), 0));
+      case "torpedo": {
+        // Der Torpedo zielt auf einen Slot: auf das Schiff, das dort am meisten verliert, falls es stehen bleibt.
+        const target = highest(enemies, (slot) => damageValue(slot, 5));
+        return target && on(target, damageValue(target, 5));
+      }
+      case "barrage":
+        // Ob sich ein Gegner bewegt, sieht der Bot nicht voraus; ein kleiner fester Wert.
+        return untargeted(enemies.length > 0 ? 1 : 0);
       case "emp_blast": {
         const target = highest(enemies, (slot) => slot.attack);
         return target && untargeted(target.attack);

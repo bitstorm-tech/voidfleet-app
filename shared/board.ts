@@ -50,6 +50,8 @@ export class Slot {
   disabled = false;
   /** Grundmanöver: Das Schiff hat diese Runde die Lane gewechselt und feuert dafür nicht. */
   maneuvered = false;
+  /** Hat diese Runde die Lane gewechselt, per Grundmanöver oder Befehl (Ziel des Sperrfeuers). */
+  moved = false;
   selfDamageAfterCombat = 0;
 
   constructor(
@@ -97,6 +99,7 @@ export class Slot {
     this.shieldBonus = 0;
     this.disabled = false;
     this.maneuvered = false;
+    this.moved = false;
     this.selfDamageAfterCombat = 0;
   }
 
@@ -125,10 +128,11 @@ export class Slot {
     this.shieldBonus = 0;
     this.disabled = false;
     this.maneuvered = false;
+    this.moved = false;
     this.selfDamageAfterCombat = 0;
   }
 
-  /** Übernimmt Schiff samt Live-Zustand eines anderen Slots und leert diesen. */
+  /** Übernimmt Schiff samt Live-Zustand eines anderen Slots und leert diesen; das Schiff gilt als bewegt. */
   takeFrom(other: Slot): void {
     this.card = other.card;
     this.hp = other.hp;
@@ -138,6 +142,7 @@ export class Slot {
     this.disabled = other.disabled;
     this.maneuvered = other.maneuvered;
     this.selfDamageAfterCombat = other.selfDamageAfterCombat;
+    this.moved = true;
     other.clear();
   }
 

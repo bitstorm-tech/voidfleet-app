@@ -254,6 +254,80 @@ describe("Befehle", () => {
   });
 });
 
+describe("Torpedo und Sperrfeuer", () => {
+  const slot = (board: Board, side: Side, lane: LaneType, index: number) => board.lane(side, lane).slots[index]!;
+
+  test("Torpedo trifft, wer nach dem Manöver im Slot steht, und verpufft im geräumten Slot", () => {
+    const board = new Board();
+    const dodger = place(board, "enemy", "strike", 3, "plasma_frigate");
+    const mover = place(board, "enemy", "strike", 4, "horizon_cruiser");
+    resolveManeuver(dodger, slot(board, "enemy", "command", 2), []);
+    resolveManeuver(mover, slot(board, "enemy", "command", 4), []);
+
+    const missed: RoundEvent[] = [];
+    resolveEffects(board, [play("player", "torpedo", slot(board, "enemy", "strike", 3))], missed);
+    expect(missed).toEqual([{ kind: "miss", side: "player", cardId: "torpedo", target: { side: "enemy", lane: "strike", slotIndex: 3 } }]);
+    expect(slot(board, "enemy", "command", 2).hp).toBe(hp("plasma_frigate"));
+
+    const hit: RoundEvent[] = [];
+    resolveEffects(board, [play("player", "torpedo", slot(board, "enemy", "command", 4))], hit);
+    expect(hit).toMatchObject([{ kind: "effect", effect: { type: "damage", amount: 5 }, ship: { side: "enemy", lane: "command", slotIndex: 4 } }]);
+    expect(slot(board, "enemy", "command", 4).hp).toBe(hp("horizon_cruiser") - 5);
+  });
+
+  test("Torpedo trifft auch ein gedecktes Command-Schiff, der Schild fängt zuerst ab", () => {
+    const board = new Board();
+    place(board, "enemy", "strike", 1, "titan_carrier");
+    const covered = place(board, "enemy", "command", 1, "iron_dreadnought");
+    resolveEffects(board, [play("player", "torpedo", covered)], []);
+    expect([covered.shield, covered.hp]).toEqual([0, hp("iron_dreadnought") - 3]);
+  });
+
+  test("Sperrfeuer trifft nur Schiffe, die per Manöver oder Bewegungsbefehl die Lane gewechselt haben, gedeckt oder nicht", () => {
+    const board = new Board();
+    const staying = place(board, "enemy", "strike", 0, "horizon_cruiser");
+    const maneuvering = place(board, "enemy", "strike", 2, "horizon_cruiser");
+    const flanking = place(board, "enemy", "command", 0, "horizon_cruiser");
+    const own = place(board, "player", "strike", 5, "horizon_cruiser");
+    resolveManeuver(maneuvering, slot(board, "enemy", "command", 2), []);
+    resolveManeuver(own, slot(board, "player", "command", 5), []);
+    place(board, "enemy", "strike", 2, "titan_carrier");
+    const events: RoundEvent[] = [];
+    resolveEffects(
+      board,
+      [play("player", "barrage"), play("enemy", "flanking_maneuver", flanking, slot(board, "enemy", "strike", 4))],
+      events,
+    );
+    const hits = events.flatMap((event) => (event.kind === "effect" && event.cardId === "barrage" ? [[event.ship.lane, event.ship.slotIndex]] : []));
+    expect(hits).toEqual([["strike", 4], ["command", 2]]);
+    expect(staying.hp).toBe(hp("horizon_cruiser"));
+    expect(slot(board, "enemy", "command", 2).hp).toBe(hp("horizon_cruiser") - 3);
+    expect(slot(board, "player", "command", 5).hp).toBe(hp("horizon_cruiser"));
+  });
+
+  test("Sperrfeuer ohne bewegten Gegner bleibt ohne Wirkung; das Flag gilt nur eine Runde", () => {
+    const board = new Board();
+    const enemy = place(board, "enemy", "command", 0, "horizon_cruiser");
+    resolveManeuver(enemy, slot(board, "enemy", "strike", 0), []);
+    round(board);
+    const events: RoundEvent[] = [];
+    resolveEffects(board, [play("player", "barrage")], events);
+    expect(events).toEqual([{ kind: "noEffect", side: "player", cardId: "barrage" }]);
+  });
+
+  test("ein Schiff, das gegen Sperrfeuer manövriert, wird getroffen und feuert nicht", () => {
+    const board = new Board();
+    const enemy = place(board, "enemy", "strike", 0, "plasma_frigate");
+    const own = place(board, "player", "strike", 0, "horizon_cruiser");
+    const to = slot(board, "enemy", "command", 0);
+    resolveManeuver(enemy, to, []);
+    const events = round(board, [play("player", "barrage")]);
+    expect(events.filter((event) => event.kind === "attack").map((event) => event.attacker.side)).toEqual(["player"]);
+    expect(to.hp).toBe(hp("plasma_frigate") - 3 - 2);
+    expect(own.hp).toBe(hp("horizon_cruiser"));
+  });
+});
+
 describe("Fähigkeiten", () => {
   test("Signal Booster gibt allen anderen eigenen Schiffen seiner Lane +1 ATK, solange er steht", () => {
     const board = new Board();

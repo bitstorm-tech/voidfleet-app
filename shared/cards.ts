@@ -13,8 +13,10 @@ export type TargetMode =
   | "auto_all"
   | "all_friendly_strike"
   | "all_enemy_strike"
+  | "auto_moved"
   | "choose_friendly"
-  | "choose_enemy";
+  | "choose_enemy"
+  | "choose_enemy_slot";
 
 interface ShipStats {
   shipClass: ShipClass;
@@ -26,7 +28,7 @@ interface ShipStats {
 interface CommandStats {
   commandType: CommandType;
   targetMode: TargetMode;
-  /** Bei Zielwahl: nur Schiffe dieser Lane sind gültige Ziele. */
+  /** Bei Zielwahl eines eigenen Schiffs: nur Schiffe dieser Lane sind gültige Ziele. */
   targetLane?: LaneType;
   /** Verlegt das Zielschiff in einen frei gewählten Slot der anderen Lane. */
   moves?: true;
@@ -56,6 +58,8 @@ const COMMAND_STATS = {
   sensor_sweep: { commandType: "special", targetMode: "none" },
   targeting_jammer: { commandType: "debuff", targetMode: "all_enemy_strike" },
   volley_fire: { commandType: "attack", targetMode: "auto_all" },
+  torpedo: { commandType: "attack", targetMode: "choose_enemy_slot" },
+  barrage: { commandType: "debuff", targetMode: "auto_moved" },
 } satisfies Record<string, CommandStats>;
 
 export type ShipId = keyof typeof SHIP_STATS;
@@ -96,11 +100,17 @@ export function commandById(id: CommandId): CommandCard {
   return COMMANDS_BY_ID.get(id)!;
 }
 
+/** Befehle mit Zielwahl: ein eigenes Schiff oder (`targetsEnemySlot`) ein Slot der Gegnerseite. */
 export function needsTarget(card: CommandCard): boolean {
-  return card.targetMode === "choose_friendly";
+  return card.targetMode === "choose_friendly" || targetsEnemySlot(card);
 }
 
-/** Ob ein eigenes Schiff in dieser Lane ein gültiges Ziel für den Befehl ist. */
+/** Torpedo: Ziel ist ein Slot der Gegnerseite, belegt oder leer; getroffen wird, wer nach allen Bewegungen dort steht. */
+export function targetsEnemySlot(card: CommandCard): boolean {
+  return card.targetMode === "choose_enemy_slot";
+}
+
+/** Ob ein Ziel in dieser Lane für den Befehl gültig ist. */
 export function canTargetLane(card: CommandCard, lane: LaneType): boolean {
   return needsTarget(card) && (card.targetLane === undefined || card.targetLane === lane);
 }

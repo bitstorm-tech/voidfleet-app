@@ -1,6 +1,6 @@
 // Ein gemischter Nachziehstapel, getrennt für Schiffe und Befehle.
 
-import { COMMANDS, SHIPS, type Card, type CommandCard, type ShipCard } from "../../shared/cards.ts";
+import { COMMANDS, SHIPS, type Card, type CommandCard, type CommandId, type ShipCard } from "../../shared/cards.ts";
 
 export class Deck<T extends Card> {
   private cards: T[];
@@ -48,9 +48,12 @@ export function buildDefaultShipDeck(): Deck<ShipCard> {
   return deck;
 }
 
-/** Eine Kopie je Befehl. */
+/** Die Konter auf den gegnerischen Plan liegen doppelt im Deck, damit man mit ihnen rechnen muss. */
+const DOUBLE_COMMANDS: readonly CommandId[] = ["torpedo", "barrage"];
+
+/** Eine Kopie je Befehl, zwei von `DOUBLE_COMMANDS`. */
 export function buildDefaultCommandDeck(): Deck<CommandCard> {
-  const deck = new Deck(COMMANDS);
+  const deck = new Deck(COMMANDS.flatMap((card) => (DOUBLE_COMMANDS.includes(card.id) ? [card, card] : [card])));
   deck.shuffle();
   return deck;
 }

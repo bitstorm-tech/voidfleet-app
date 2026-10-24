@@ -24,6 +24,7 @@ export interface Commander {
 export interface PlayedCommand {
   commander: Commander;
   card: CommandCard;
+  /** Das eigene Zielschiff, beim Torpedo der gewählte Slot der Gegnerseite (auch leer). */
   target: Slot | null;
   /** Bei Befehlen, die ihr Ziel verlegen: der freie Slot in der anderen Lane, geprüft beim Submit. */
   destination: Slot | null;
@@ -107,6 +108,22 @@ function applyCommand(board: Board, { commander, card, target, destination }: Pl
       return affectAll(enemyShips, (slot) => {
         slot.damage(1);
         return { type: "damage", amount: 1 };
+      });
+    case "torpedo":
+      // Trifft, wer nach allen Bewegungen im Slot steht, gedeckt oder nicht; sonst verpufft er sichtbar.
+      if (!target!.isOccupied) {
+        events.push({ kind: "miss", side, cardId: card.id, target: { side: target!.lane.side, ...slotTarget(target!) } });
+        return true;
+      }
+      return affectOne(target, (slot) => {
+        slot.damage(5);
+        return { type: "damage", amount: 5 };
+      });
+    case "barrage":
+      // Debuffs wirken nach allen Bewegungen; Deckung spielt keine Rolle.
+      return affectAll(enemyShips.filter((slot) => slot.moved), (slot) => {
+        slot.damage(3);
+        return { type: "damage", amount: 3 };
       });
     case "power_surge":
       return affectAll(board.lane(side, "strike").occupiedSlots, (slot) => {

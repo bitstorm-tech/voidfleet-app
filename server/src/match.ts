@@ -6,7 +6,7 @@
 // Intern sitzt Seat 0 auf der "player"-Seite des Bretts und Seat 1 auf der
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
-import { canTargetLane, needsTarget, type CommandCard, type ShipCard } from "../../shared/cards.ts";
+import { canTargetLane, needsTarget, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
 import { Board, isSameSlot, opposite, otherLane, type BoardSnapshot, type Side } from "../../shared/board.ts";
 import type { ErrorCode, MatchResult, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { planBotTurn } from "./bot.ts";
@@ -169,8 +169,11 @@ export class Match {
       if (card === undefined) return "command_not_in_hand";
       if (needsTarget(card) && target === null) return "target_required";
       if (!needsTarget(card) && target !== null) return "target_not_allowed";
-      const slot = target && this.board.lane(player.side, target.lane).slots[target.slotIndex];
-      if (target && !slot?.isOccupied && !(deploy && isSameSlot(target, deploy))) return "target_not_own_ship";
+      // Der Torpedo zielt auf einen Slot der Gegnerseite, auch einen leeren; alle übrigen auf ein eigenes Schiff.
+      const enemySlot = targetsEnemySlot(card);
+      const slot = target && this.board.lane(enemySlot ? opposite(player.side) : player.side, target.lane).slots[target.slotIndex];
+      if (target && enemySlot && !slot) return "target_not_enemy_slot";
+      if (target && !enemySlot && !slot?.isOccupied && !(deploy && isSameSlot(target, deploy))) return "target_not_own_ship";
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
       const { destination } = plan.command;
       if (card.moves && destination === null) return "destination_required";
@@ -219,14 +222,16 @@ export class Match {
       if (!command) continue;
       const [card] = player.commandHand.splice(command.handIndex, 1);
       const { destination } = command;
-      const target = command.target && this.afterManeuver(player, command.target);
+      // Ein Slot der Gegnerseite bleibt stehen, ein eigenes Ziel folgt dem Manöver.
+      const side = targetsEnemySlot(card!) ? opposite(player.side) : player.side;
+      const target = command.target && (side === player.side ? this.afterManeuver(player, command.target) : command.target);
       commands.push({
         commander: player,
         card: card!,
-        target: target && this.board.lane(player.side, target.lane).slots[target.slotIndex]!,
-        destination: target && destination !== null ? this.board.lane(player.side, otherLane(target.lane)).slots[destination]! : null,
+        target: target && this.board.lane(side, target.lane).slots[target.slotIndex]!,
+        destination: target && destination !== null ? this.board.lane(side, otherLane(target.lane)).slots[destination]! : null,
       });
-      events.push({ kind: "command", side: player.side, cardId: card!.id, target });
+      events.push({ kind: "command", side: player.side, cardId: card!.id, target: target && { side, ...target } });
     }
 
     resolveEffects(this.board, commands, events);

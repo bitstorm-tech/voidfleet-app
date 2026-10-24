@@ -5,18 +5,25 @@
 import type { BoardSnapshot, LaneType, Side } from "./board.ts";
 import type { CommandId, ShipId } from "./cards.ts";
 
-/** Ein Slot auf der eigenen Seite des Bretts. */
+/** Ein Slot auf einer Seite des Bretts, die sich aus dem Zusammenhang ergibt. */
 export interface SlotTarget {
   lane: LaneType;
   slotIndex: number;
 }
 
+/** Ein Slot samt Seite, wie ihn die Ereignisse melden. */
+export interface SlotRef extends SlotTarget {
+  side: Side;
+}
+
 /**
  * Der Zug einer Runde: bis zu 1 Schiff und 1 Befehl, jeweils per Hand-Index, dazu höchstens ein
- * Grundmanöver. Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane,
+ * Grundmanöver. Ziele liegen auf der eigenen Seite, nur das Ziel eines Befehls mit `choose_enemy_slot`
+ * (Torpedo) ist ein Slot der Gegnerseite, auch ein leerer. Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane,
  * sonst null. Das Manöver verlegt ein eigenes Schiff, das schon auf dem Brett steht, in den Slot
- * `destination` der anderen Lane; dafür feuert es in dieser Runde nicht. Ziele beziehen sich auf die
- * Stellung vor dem Manöver: Ein Befehl auf das manövrierte Schiff folgt ihm.
+ * `destination` der anderen Lane; dafür feuert es in dieser Runde nicht. Eigene Ziele beziehen sich auf
+ * die Stellung vor dem Manöver: Ein Befehl auf das manövrierte Schiff folgt ihm. Ein Slot der Gegnerseite
+ * bleibt, was er ist: Getroffen wird, wer nach allen Bewegungen dort steht.
  */
 export interface TurnPlan {
   ship: { handIndex: number; target: SlotTarget } | null;
@@ -25,10 +32,7 @@ export interface TurnPlan {
 }
 
 /** Ein Schiff an einer Stelle des Bretts; die Karte steht dabei, weil der Slot danach leer sein kann. */
-export interface ShipRef {
-  side: Side;
-  lane: LaneType;
-  slotIndex: number;
+export interface ShipRef extends SlotRef {
   cardId: ShipId;
 }
 
@@ -76,10 +80,13 @@ export type RoundEvent =
   | { kind: "pass"; side: Side }
   /** Grundmanöver nach dem Deploy: `ship` ist die Stelle davor; das Schiff feuert in dieser Runde nicht. */
   | { kind: "maneuver"; side: Side; ship: ShipRef; to: SlotTarget }
-  | { kind: "command"; side: Side; cardId: CommandId; target: SlotTarget | null }
+  /** `target` ist der Slot nach dem Manöver, beim Torpedo der gewählte Slot der Gegnerseite. */
+  | { kind: "command"; side: Side; cardId: CommandId; target: SlotRef | null }
   | { kind: "effect"; side: Side; cardId: CommandId; ship: ShipRef; effect: CommandEffect; after: ShipStats }
   | { kind: "draw"; side: Side; cardId: CommandId; ships: number; commands: number }
   | { kind: "noEffect"; side: Side; cardId: CommandId }
+  /** Torpedo in einen Slot, in dem nach allen Bewegungen kein Schiff steht. */
+  | { kind: "miss"; side: Side; cardId: CommandId; target: SlotRef }
   /** Fähigkeit eines Schiffs (`source`) an einem anderen, bisher nur die Reparatur der Repair Drone im Cleanup. */
   | { kind: "ability"; source: ShipRef; ship: ShipRef; effect: AbilityEffect; after: ShipStats }
   | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number; after: ShipStats }
@@ -105,6 +112,7 @@ export type ErrorCode =
   | "target_not_allowed"
   | "target_not_own_ship"
   | "target_wrong_lane"
+  | "target_not_enemy_slot"
   | "destination_required"
   | "destination_not_allowed"
   | "destination_unavailable"

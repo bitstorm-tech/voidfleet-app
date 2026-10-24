@@ -2,7 +2,7 @@
 // geplante Zug der laufenden Runde. Der Server ist autoritativ; `apply`
 // übernimmt seine Sicht, geplant wird lokal bis zum Submit.
 
-import { commandById, shipById, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
+import { commandById, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
 import { Board, isSameSlot, otherLane, slotTarget, type Slot } from "../../../shared/board.ts";
 import type { MatchResult, PlayerView, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
 
@@ -46,13 +46,19 @@ export class Match {
     return this.isPlannedDeploy(slot) ? this.plannedShip : slot.card;
   }
 
+  /** Der Zielslot eines eingeplanten Torpedos auf der Gegnerseite. */
+  get plannedEnemyTarget(): SlotTarget | null {
+    const card = this.plannedCommand;
+    return card && targetsEnemySlot(card) ? this.plan.command!.target : null;
+  }
+
   /**
    * Plant das Schiff oder nimmt es mit null zurück. Ein Befehl auf das bisher eingeplante Schiff
    * fällt mit weg, sobald auf dessen Slot nichts mehr landet.
    */
   planShip(ship: TurnPlan["ship"]): void {
     const previous = this.plan.ship?.target;
-    const target = this.plan.command?.target;
+    const target = this.plannedEnemyTarget ? null : this.plan.command?.target;
     const keepsSlot = ship !== null && previous !== undefined && isSameSlot(ship.target, previous);
     if (previous && target && isSameSlot(target, previous) && !keepsSlot) this.plan.command = null;
     this.plan.ship = ship;

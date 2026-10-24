@@ -8,13 +8,14 @@
 // Ist keine Karte gewählt, plant ein Klick auf ein eigenes Schiff das Grundmanöver ebenso
 // mit Ziel-Slot, Geist und Pfeil; das Schiff feuert dann nicht, seine Balken sind gedämpft.
 // Ein Klick auf das manövrierende Schiff oder Escape nimmt das Manöver zurück.
+// Der Torpedo zielt auf einen Slot der Gegnerseite, auch einen leeren; ein Fadenkreuz markiert ihn.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 // „Neues Match“ wechselt nur die Verbindung; Szene und geladene Assets bleiben.
 // Die Musik folgt der Phase: ruhig beim Planen, angespannt während die Runde abläuft, still nach Spielende.
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
-import { canTargetLane, needsTarget, type ShipCard } from "../../shared/cards.ts";
+import { canTargetLane, needsTarget, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
 import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, slotTarget, type Lane, type Slot } from "../../shared/board.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
 import { setMusicMood } from "./audio/music.ts";
@@ -235,6 +236,10 @@ export class MatchController {
     this.refreshSelectionVisuals();
   }
 
+  private get selectedCommand(): CommandCard | null {
+    return this.selectedCommandIndex === null ? null : this.match.commandHand[this.selectedCommandIndex]!;
+  }
+
   private get hasSelection(): boolean {
     return this.selectedShipIndex !== null || this.selectedCommandIndex !== null || this.maneuverSource !== null;
   }
@@ -308,13 +313,17 @@ export class MatchController {
    * eigene Slots, die den eingeplanten Lane-Wechseln nicht im Weg stehen; Manöver-Schiff -> seine
    * Ziel-Slots in der anderen Lane; gewählter Befehl -> eigene Schiffe in einer erlaubten Lane, auch
    * das eingeplante, bei verlegenden Befehlen nur mit freiem Ziel-Slot, danach die freien Slots der
-   * anderen Lane. Ohne Auswahl leuchten nur das bereits gewählte Befehlsziel, die Ziel-Slots und das
-   * manövrierende Schiff weiter, bis die Runde aufgelöst wird. Die Gegnerseite ist nie Ziel.
+   * anderen Lane; der Torpedo -> jeder Slot der Gegnerseite, sonst ist sie nie Ziel. Ohne Auswahl
+   * leuchten nur das bereits gewählte eigene Befehlsziel, die Ziel-Slots und das manövrierende Schiff
+   * weiter, bis die Runde aufgelöst wird; den Zielslot des Torpedos zeigt das Fadenkreuz.
    */
   private isValidTarget(pad: SlotPad): boolean {
     const { slot } = pad;
     const lane: Lane = slot.lane;
-    if (lane.side === "enemy" || this.isResolving) return false;
+    if (this.isResolving) return false;
+    const command = this.selectedCommand;
+    if (command && targetsEnemySlot(command)) return lane.side === "enemy";
+    if (lane.side === "enemy") return false;
     if (this.selectedShipIndex !== null) return this.match.canDeploy(slot);
     if (this.maneuverSource !== null) {
       return lane !== this.maneuverSource.lane && this.match.maneuverDestinations(this.maneuverSource).includes(slot.index);
@@ -323,11 +332,10 @@ export class MatchController {
       if (this.moveSource !== null) {
         return lane !== this.moveSource.lane && this.match.commandMoveDestinations(this.moveSource).includes(slot.index);
       }
-      const card = this.match.commandHand[this.selectedCommandIndex]!;
-      if (this.match.shipAt(slot) === null || !canTargetLane(card, lane.type)) return false;
-      return !card.moves || this.match.commandMoveDestinations(slot).length > 0;
+      if (this.match.shipAt(slot) === null || !canTargetLane(command!, lane.type)) return false;
+      return !command!.moves || this.match.commandMoveDestinations(slot).length > 0;
     }
-    const target = this.match.plan.command?.target;
+    const target = this.match.plannedEnemyTarget ? null : this.match.plan.command?.target;
     const isTarget = target?.lane === lane.type && target.slotIndex === slot.index;
     const maneuver = this.match.plannedManeuver;
     return isTarget || this.match.plannedCommandMove?.to === slot || maneuver?.from === slot || maneuver?.to === slot;
@@ -375,6 +383,7 @@ export class MatchController {
   private refreshGhosts(): void {
     showArrow(this.view.moveArrow, this.shownCommandMove());
     showArrow(this.view.maneuverArrow, this.shownManeuver());
+    this.view.reticle.show(this.shownEnemyTarget());
 
     const targets = this.ghostTargets();
     const unchanged =
@@ -405,6 +414,15 @@ export class MatchController {
       if (move !== null) ghosts.push({ pad: move.to, card: this.match.shipAt(move.from.slot)! });
     }
     return ghosts;
+  }
+
+  /** Das Fadenkreuz steht beim Wählen auf dem Slot unter dem Zeiger, sonst auf dem eingeplanten Zielslot des Torpedos. */
+  private shownEnemyTarget(): SlotPad | null {
+    if (this.isResolving) return null;
+    const command = this.selectedCommand;
+    if (command && targetsEnemySlot(command)) return this.hoveredPad !== null && this.isValidTarget(this.hoveredPad) ? this.hoveredPad : null;
+    const target = this.match.plannedEnemyTarget;
+    return target && this.view.pad("enemy", target.lane, target.slotIndex);
   }
 
   private shownCommandMove(): { from: SlotPad; to: SlotPad } | null {
@@ -529,8 +547,10 @@ export class MatchController {
       if (this.validTargetCount === 0) return t.status.noFreeSlot(name, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE);
       return t.status.placeShip(name);
     }
-    if (this.selectedCommandIndex !== null) {
-      const name = cardText(this.match.commandHand[this.selectedCommandIndex]!).name;
+    const command = this.selectedCommand;
+    if (command !== null) {
+      const name = cardText(command).name;
+      if (targetsEnemySlot(command)) return t.status.chooseEnemySlot(name);
       if (this.moveSource !== null) return t.status.chooseDestination(name, cardText(this.match.shipAt(this.moveSource)!).name);
       if (this.validTargetCount === 0) return t.status.noCommandTarget(name);
       return t.status.chooseCommandTarget(name);

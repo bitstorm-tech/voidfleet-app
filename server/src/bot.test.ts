@@ -135,3 +135,11 @@ test("Befehle ohne Nutzen bleiben auf der Hand", () => {
   // Power Surge ohne Schiff vorne, Jammer ohne gegnerische Strike-Schiffe, EMP gegen ein Schiff ohne ATK.
   expect(planBotTurn(board, hands([], ["power_surge", "targeting_jammer", "emp_blast"])).command).toBeNull();
 });
+
+test("Der Torpedo zielt auf den Slot des Gegners, der am meisten verliert, auch hinter Deckung", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  place(board, "enemy", "strike", 1, "titan_carrier");
+  place(board, "enemy", "command", 1, "plasma_frigate").hp = 5;
+  expect(planBotTurn(board, hands([], ["torpedo"])).command).toEqual({ handIndex: 0, target: { lane: "command", slotIndex: 1 }, destination: null });
+});

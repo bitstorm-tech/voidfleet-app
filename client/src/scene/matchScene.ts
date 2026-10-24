@@ -32,6 +32,7 @@ import { LaneLabel } from "./laneLabel.ts";
 import { MoveArrow } from "./moveArrow.ts";
 import type { ShipView } from "./ship.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";
+import { TargetReticle } from "./targetReticle.ts";
 import { animationTimeScale } from "./tween.ts";
 
 const CAMERA_RIG_POSITION = new Vector3(0, 14.7, -15.7);
@@ -94,6 +95,8 @@ export class MatchScene {
   /** Pfeile der beiden möglichen Lane-Wechsel eines Zugs: Bewegungsbefehl und Grundmanöver. */
   readonly moveArrow: MoveArrow;
   readonly maneuverArrow: MoveArrow;
+  /** Zielslot des Torpedos auf der Gegnerseite. */
+  readonly reticle: TargetReticle;
   private readonly camera: TargetCamera;
   private readonly cameraRig: TransformNode;
   private readonly glow: GlowLayer;
@@ -146,6 +149,7 @@ export class MatchScene {
     this.effects = new BoardEffects(this.scene, this.glow);
     this.moveArrow = new MoveArrow(this.scene, this.glow);
     this.maneuverArrow = new MoveArrow(this.scene, this.glow);
+    this.reticle = new TargetReticle(this.scene, this.glow);
 
     this.createBoard(board);
 

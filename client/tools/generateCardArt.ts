@@ -81,6 +81,10 @@ const SUBJECTS: Record<Card["id"], string> = {
     "A radar sweep beam rotating out from a scanner ship, revealing the glowing holographic outlines of hidden enemy ships",
   overcharge:
     "A warship with its reactor core overloading, glowing cracks spreading across the hull, energy venting from every seam",
+  torpedo:
+    "A single heavy torpedo with a glowing warhead diving steeply from above toward a holographic targeting reticle locked onto an empty patch of space, a long bright exhaust trail behind it",
+  barrage:
+    "A wall of flak bursts and tracer fire filling a corridor of space, a warship caught mid-turn as it swerves through the curtain of explosions, its engine trail bending",
 };
 
 function prompt(card: Card): string {

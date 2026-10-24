@@ -21,6 +21,8 @@ import scavenge from "../../assets/images/cards/scavenge.jpg";
 import sensor_sweep from "../../assets/images/cards/sensor_sweep.jpg";
 import targeting_jammer from "../../assets/images/cards/targeting_jammer.jpg";
 import volley_fire from "../../assets/images/cards/volley_fire.jpg";
+import torpedo from "../../assets/images/cards/torpedo.jpg";
+import barrage from "../../assets/images/cards/barrage.jpg";
 
 const ART: Record<Card["id"], string> = {
   horizon_cruiser,
@@ -43,6 +45,8 @@ const ART: Record<Card["id"], string> = {
   sensor_sweep,
   targeting_jammer,
   volley_fire,
+  torpedo,
+  barrage,
 };
 
 /** URL der Illustration einer Karte. */

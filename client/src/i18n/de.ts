@@ -35,11 +35,11 @@ export const de: Messages = {
       },
       {
         heading: "Das Brett",
-        text: "Jede Seite hat zwei Lanes: Strike vorne, Command dahinter. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 8. Ein Schiff in der Command-Lane ist gedeckt, solange im Strike-Slot direkt davor ein Schiff steht; sonst kann es angegriffen werden. Die Lane wechseln Schiffe über das Manöver deines Zugs oder über Befehle wie Flanking Maneuver, Intercept und Recall; diese kosten das Schiff nicht seinen Angriff. In beiden Fällen wählst du einen beliebigen freien Slot der anderen Lane. Manöver und Befehl können nicht dasselbe Schiff verlegen und nicht im selben Slot landen, und ein in dieser Runde geräumter Slot wird erst in der nächsten frei.",
+        text: "Jede Seite hat zwei Lanes: Strike vorne, Command dahinter. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 8. Ein Schiff in der Command-Lane ist gedeckt, solange im Strike-Slot direkt davor ein Schiff steht; sonst kann es angegriffen werden. Die Lane wechseln Schiffe über das Manöver deines Zugs oder über Befehle wie Flanking Maneuver, Intercept und Recall; diese kosten das Schiff nicht seinen Angriff. In beiden Fällen wählst du einen beliebigen freien Slot der anderen Lane. Manöver und Befehl können nicht dasselbe Schiff verlegen und nicht im selben Slot landen, und ein in dieser Runde geräumter Slot wird erst in der nächsten frei. Bewegung hat ein Risiko: Sperrfeuer trifft jedes gegnerische Schiff, das in dieser Runde die Lane gewechselt hat.",
       },
       {
         heading: "Auflösung",
-        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Manöver (Schiffe wechseln die Lane), Effects (Befehle wirken), Combat (alle Schiffe feuern gleichzeitig, kein Schuss geht auf ein schon zerstörtes Ziel), Cleanup (Rundeneffekte enden, Reparaturdrohnen reparieren). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand).",
+        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Manöver (Schiffe wechseln die Lane), Effects (Befehle wirken, Angriffe zuletzt: Ein Torpedo zielt auf einen Slot, nicht auf ein Schiff, und trifft, wer nach allen Bewegungen dort steht — auch ein gedecktes Schiff —, sonst verpufft er im leeren Slot), Combat (alle Schiffe feuern gleichzeitig, kein Schuss geht auf ein schon zerstörtes Ziel), Cleanup (Rundeneffekte enden, Reparaturdrohnen reparieren). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand).",
       },
       {
         heading: "Schiffe",
@@ -65,6 +65,8 @@ export const de: Messages = {
     placeShip: (ship) => `${ship}: leuchtenden Slot antippen. Nochmal auf die Karte klicken nimmt zurück.`,
     noCommandTarget: (command) => `kein eigenes Schiff als Ziel für ${command}.`,
     chooseCommandTarget: (command) => `${command}: eigenes Schiff antippen. Nochmal auf die Karte klicken nimmt zurück.`,
+    chooseEnemySlot: (command) =>
+      `${command}: Slot auf der Gegnerseite antippen, auch einen leeren — getroffen wird, wer nach allen Bewegungen dort steht. Nochmal auf die Karte klicken nimmt zurück.`,
     chooseDestination: (command, ship) => `${command}: leuchtenden Slot für ${ship} antippen. Nochmal auf die Karte klicken nimmt zurück.`,
     chooseManeuver: (ship) => `Manöver: leuchtenden Slot für ${ship} antippen; es feuert diese Runde nicht. Nochmal auf das Schiff oder Esc bricht ab.`,
     maneuver: (ship) => `Manöver von ${ship}`,
@@ -100,6 +102,7 @@ export const de: Messages = {
     repair: (source, ship, amount) => `Cleanup: ${source} repariert ${ship} um ${amount}`,
     draw: (command, who, ships, commands) => `Wirkung: ${command} — ${who} +${ships} Schiff, +${commands} Befehl`,
     noEffect: (command, who) => `Wirkung: ${command} (${who}) bleibt ohne Wirkung`,
+    miss: (command, slot) => `Wirkung: ${command} verpufft auf ${slot}`,
     attack: (attacker, target, amount) => `Kampf: ${attacker} feuert auf ${target} (${amount})`,
     selfDamage: (ship, amount) => `Cleanup: ${ship} nimmt ${amount} Eigenschaden`,
     destroyed: (ship) => `Zerstört: ${ship}`,
@@ -107,6 +110,7 @@ export const de: Messages = {
   banner: {
     command: (who, command) => `${who}: ${command}`,
     noEffect: "ohne Wirkung",
+    miss: (slot) => `verpufft auf ${slot}`,
     draw: (ships, commands) => `+${ships} Schiff, +${commands} Befehl`,
   },
   float: {
@@ -116,6 +120,7 @@ export const de: Messages = {
     attack: (delta) => `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ATK`,
     disabled: "Lahmgelegt",
     holdFire: "Feuert nicht",
+    miss: "Daneben",
   },
   errors: {
     match_full: "Dieses Match ist bereits voll.",
@@ -129,6 +134,7 @@ export const de: Messages = {
     target_not_allowed: "Dieser Befehl braucht kein Ziel.",
     target_not_own_ship: "Das Befehlsziel ist kein eigenes Schiff.",
     target_wrong_lane: "Dieser Befehl kann kein Schiff in dieser Lane zum Ziel haben.",
+    target_not_enemy_slot: "Das Befehlsziel ist kein Slot auf der Gegnerseite.",
     destination_required: "Dieser Befehl braucht einen Slot, in den das Schiff wechselt.",
     destination_not_allowed: "Dieser Befehl verlegt kein Schiff.",
     destination_unavailable: "In diesen Slot kann das Schiff nicht wechseln.",
@@ -149,10 +155,12 @@ export const de: Messages = {
     auto_highest_hp: "Gegner mit den meisten HP",
     auto_highest_atk: "Gegner mit der höchsten ATK",
     auto_all: "Alle Ziele",
+    auto_moved: "Bewegte Gegner",
     all_friendly_strike: "Alle Verbündeten",
     all_enemy_strike: "Alle Gegner",
     choose_friendly: "Verbündeten wählen",
     choose_enemy: "Gegner wählen",
+    choose_enemy_slot: "Gegner-Slot wählen",
   },
   ships: {
     horizon_cruiser: { name: "Horizon-Kreuzer", effect: "Solide Werte, zuverlässig." },
@@ -177,5 +185,7 @@ export const de: Messages = {
     sensor_sweep: { name: "Sensorscan", effect: "Deckt in der nächsten Runde alle Karten auf der gegnerischen Hand auf." },
     targeting_jammer: { name: "Zielstörer", effect: "Alle gegnerischen Schiffe in der Strike Line erhalten diese Runde -1 ATK (min. 0)." },
     volley_fire: { name: "Salvenfeuer", effect: "1 Schaden an ALLE gegnerischen Schiffe." },
+    torpedo: { name: "Torpedo", effect: "Wähle einen gegnerischen Slot. Nach allen Bewegungen 5 Schaden an das Schiff dort, auch wenn es gedeckt ist. Leerer Slot: verpufft." },
+    barrage: { name: "Sperrfeuer", effect: "3 Schaden an jedes gegnerische Schiff, das in dieser Runde die Lane gewechselt hat." },
   },
 };

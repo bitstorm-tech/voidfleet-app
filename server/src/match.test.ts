@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { SlotTarget, TurnPlan } from "../../shared/protocol.ts";
+import type { RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { commandById, SHIPS, shipById } from "../../shared/cards.ts";
 import { Match } from "./match.ts";
 
@@ -295,4 +295,52 @@ test("Der Computergegner nimmt den freien Platz und zieht, sobald der Spieler ab
   expect(match.board.shipCount("enemy")).toBe(1);
   expect(match.winner).toBeNull();
   expect(match.round).toBe(2);
+});
+
+test("Der Torpedo zielt auf einen Slot der Gegnerseite, auch einen leeren, und verlegt nichts", () => {
+  const match = startedMatch();
+  const player = match.players[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("torpedo"));
+  const torpedo = (target: SlotTarget | null, destination: number | null = null): TurnPlan => ({
+    ship: null,
+    command: { handIndex: 0, target, destination },
+    maneuver: null,
+  });
+  expect(match.submit(0, torpedo(null))).toBe("target_required");
+  expect(match.submit(0, torpedo(strike(6)))).toBe("target_not_enemy_slot");
+  expect(match.submit(0, torpedo(strike(2), 2))).toBe("destination_not_allowed");
+  expect(match.submit(0, torpedo(command(4)))).toBeNull();
+});
+
+test("Seat 1 schießt einen Torpedo: Er trifft den gespiegelten Brett-Slot, nach einem Manöver verpufft er", () => {
+  const match = startedMatch();
+  const [first, second] = match.players;
+  first!.shipHand.splice(0, first!.shipHand.length, { ...interceptor, hp: 20 });
+  second!.shipHand.splice(0, second!.shipHand.length, { ...interceptor, hp: 20 });
+  second!.commandHand.splice(0, second!.commandHand.length, commandById("torpedo"), commandById("torpedo"));
+  const deployTo = (slotIndex: number): TurnPlan => ({ ship: { handIndex: 0, target: strike(slotIndex) }, command: null, maneuver: null });
+  playRound(match, [deployTo(2), deployTo(0)]);
+  const torpedo: TurnPlan = { ship: null, command: { handIndex: 0, target: strike(2), destination: null }, maneuver: null };
+
+  match.submit(0, pass);
+  match.submit(1, torpedo);
+  const hit = match.resolveRound();
+  // Brett: Seat 1 sitzt auf "enemy", sein Ziel liegt auf "player". 20 − 3 (Kampf in Runde 1) − 5.
+  expect(hit.find((event) => event.kind === "effect")).toMatchObject({ ship: { side: "player", lane: "strike", slotIndex: 2 }, after: { hp: 12 } });
+  const commandEvent: RoundEvent = { kind: "command", side: "enemy", cardId: "torpedo", target: { side: "player", ...strike(2) } };
+  expect(hit).toContainEqual(commandEvent);
+  expect(match.eventsFor(1, hit)).toContainEqual({ ...commandEvent, side: "player", target: { side: "enemy", ...strike(2) } });
+  expect(match.eventsFor(1, hit).find((event) => event.kind === "effect")).toMatchObject({
+    side: "player",
+    ship: { side: "enemy", lane: "strike", slotIndex: 2 },
+    effect: { type: "damage", amount: 5 },
+  });
+
+  match.submit(0, { ship: null, command: null, maneuver: { ship: strike(2), destination: 3 } });
+  match.submit(1, torpedo);
+  const missed = match.resolveRound();
+  const miss: RoundEvent = { kind: "miss", side: "enemy", cardId: "torpedo", target: { side: "player", ...strike(2) } };
+  expect(missed).toContainEqual(miss);
+  expect(match.eventsFor(1, missed)).toContainEqual({ ...miss, side: "player", target: { side: "enemy", ...strike(2) } });
+  expect(match.board.lane("player", "command").slots[3]!.card?.id).toBe("void_interceptor");
 });

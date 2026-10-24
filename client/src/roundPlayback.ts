@@ -10,7 +10,7 @@ import type { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Side } from "../../shared/board.ts";
 import { shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
-import type { RoundEvent, ShipRef, ShipStats, SlotTarget } from "../../shared/protocol.ts";
+import type { RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget } from "../../shared/protocol.ts";
 import { playSound, stopSounds } from "./audio/sounds.ts";
 import { playUiSound } from "./audio/uiSounds.ts";
 import { color3 } from "./data/palette.ts";
@@ -24,7 +24,7 @@ import type { SlotPad } from "./scene/slotPad.ts";
 import { setAnimationScope, skipAnimations, tween, wait } from "./scene/tween.ts";
 import type { FloatingTexts, FloatTone } from "./ui/floatingText.ts";
 import type { Hud } from "./ui/hud.ts";
-import { describeEvent } from "./ui/roundLog.ts";
+import { describeEvent, slotLabel } from "./ui/roundLog.ts";
 
 const SIDE_COLORS: Record<Side, Color3> = {
   player: color3("player"),
@@ -63,6 +63,8 @@ const COMMAND_SOUNDS: Record<CommandId, SoundId | null> = {
   sensor_sweep: null,
   targeting_jammer: "jammer",
   volley_fire: "missile_volley",
+  torpedo: "orbital_strike",
+  barrage: "missile_volley",
 };
 /** Mitte einer Brettseite (Welt-x), für Sounds ohne Schiff. */
 const SIDE_X: Record<Side, number> = { player: -4.5, enemy: 4.5 };
@@ -82,6 +84,27 @@ const ORBIT_OFFSET = new Vector3(0, 9, 0);
 /** Schüsse enden nicht im Mittelpunkt, sondern so weit davor auf der Hülle. */
 const HULL_RADIUS = 0.45;
 
+/** Was ein Befehl bewirkt hat; danach richten sich Banner und Klang. */
+type CommandOutcome = Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" | "miss" }>;
+
+function bannerSubtitle(event: CommandOutcome): string | null {
+  switch (event.kind) {
+    case "noEffect":
+      return t.banner.noEffect;
+    case "draw":
+      return t.banner.draw(event.ships, event.commands);
+    case "miss":
+      return t.banner.miss(slotLabel(event.target));
+    case "effect":
+      return null;
+  }
+}
+
+/** Der Slot, an dem ein Befehl wirkt: das getroffene Schiff oder beim Fehlschuss der leere Slot. */
+function eventSlot(event: Extract<CommandOutcome, { kind: "effect" | "miss" }>): SlotRef {
+  return event.kind === "effect" ? event.ship : event.target;
+}
+
 /** Ereignisse mit gleichem Schlüssel stehen hintereinander und laufen gemeinsam ab. */
 function stepKey(event: RoundEvent): string {
   switch (event.kind) {
@@ -91,6 +114,7 @@ function stepKey(event: RoundEvent): string {
     case "effect":
     case "draw":
     case "noEffect":
+    case "miss":
       return `command-${event.side}-${event.cardId}`;
     case "ability":
       return `ability-${event.source.side}-${event.source.lane}-${event.source.slotIndex}`;
@@ -148,7 +172,7 @@ export class RoundPlayback {
     const first = step[0]!;
     if (first.kind === "attack") return this.salvo(step as Extract<RoundEvent, { kind: "attack" }>[]);
     this.hud.appendLog(step.map(describeEvent));
-    if (first.kind === "effect" || first.kind === "draw" || first.kind === "noEffect") {
+    if (first.kind === "effect" || first.kind === "draw" || first.kind === "noEffect" || first.kind === "miss") {
       this.announceCommand(first);
       await wait(this.view.scene, BANNER_LEAD);
       this.commandSound(first);
@@ -182,18 +206,18 @@ export class RoundPlayback {
     );
   }
 
-  private announceCommand(event: Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" }>): void {
+  private announceCommand(event: CommandOutcome): void {
     const title = t.banner.command(t.log.who[event.side], t.commands[event.cardId].name);
-    const subtitle =
-      event.kind === "noEffect" ? t.banner.noEffect : event.kind === "draw" ? t.banner.draw(event.ships, event.commands) : null;
-    this.hud.showBanner(title, subtitle, event.side);
+    this.hud.showBanner(title, bannerSubtitle(event), event.side);
   }
 
-  /** Einmal je Befehl, auch wenn er mehrere Schiffe trifft; ohne Wirkung verpufft er hörbar. */
-  private commandSound(event: Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" }>): void {
+  /** Einmal je Befehl, auch wenn er mehrere Schiffe trifft; ohne Wirkung verpufft er hörbar, der Torpedo ins Leere am Slot. */
+  private commandSound(event: CommandOutcome): void {
     const sound = COMMAND_SOUNDS[event.cardId];
-    if (event.kind === "noEffect") playUiSound("denied");
-    else if (sound) playSound(sound, { x: event.kind === "effect" ? this.centerOf(this.padOf(event.ship)).x : SIDE_X[event.side] });
+    if (event.kind === "noEffect") return playUiSound("denied");
+    if (!sound) return;
+    const onSlot = event.kind === "effect" || event.kind === "miss";
+    playSound(sound, { x: onSlot ? this.centerOf(this.padOf(eventSlot(event))).x : SIDE_X[event.side] });
   }
 
   private async playEvent(event: RoundEvent): Promise<void> {
@@ -204,6 +228,8 @@ export class RoundPlayback {
         return this.maneuver(event);
       case "effect":
         return this.effect(event);
+      case "miss":
+        return this.miss(event);
       case "ability":
         return this.ability(event);
       case "attack": {
@@ -263,6 +289,17 @@ export class RoundPlayback {
     }
   }
 
+  /** Der Torpedo kommt von oben wie ein Orbitalschlag und schlägt im leeren Slot ein. */
+  private async miss(event: Extract<RoundEvent, { kind: "miss" }>): Promise<void> {
+    const pad = this.padOf(event.target);
+    const color = SIDE_COLORS[event.side];
+    const point = this.centerOf(pad);
+    const origin = point.add(ORBIT_OFFSET);
+    await this.view.effects.bolt(origin, point, color);
+    this.float(pad, t.float.miss, "debuff");
+    await this.view.effects.hit(point, origin, color);
+  }
+
   /** Erst ein Impuls an der Quelle, dann die Reparatur am Ziel. */
   private async ability(event: Extract<RoundEvent, { kind: "ability" }>): Promise<void> {
     const pad = this.padOf(event.ship);
@@ -311,7 +348,7 @@ export class RoundPlayback {
 
   // --- Hilfen ---
 
-  private padOf(ref: ShipRef): SlotPad {
+  private padOf(ref: SlotRef): SlotPad {
     return this.view.pad(ref.side, ref.lane, ref.slotIndex);
   }
 

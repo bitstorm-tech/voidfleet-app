@@ -47,11 +47,11 @@ export const en = {
       },
       {
         heading: "The board",
-        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. Ships change lanes through the maneuver of your turn or through commands like Flanking Maneuver, Intercept and Recall; these don't cost the ship its attack. Either way you pick any free slot in the other lane. Maneuver and command can't move the same ship or land on the same slot, and a slot vacated this round only frees up next round.",
+        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. Ships change lanes through the maneuver of your turn or through commands like Flanking Maneuver, Intercept and Recall; these don't cost the ship its attack. Either way you pick any free slot in the other lane. Maneuver and command can't move the same ship or land on the same slot, and a slot vacated this round only frees up next round. Moving has a risk: Barrage hits every enemy ship that changed lanes this round.",
       },
       {
         heading: "Resolution",
-        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Maneuvers (ships switch lanes), Effects (commands take effect), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand).",
+        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Maneuvers (ships switch lanes), Effects (commands take effect, attacks last: a Torpedo aims at a slot, not a ship, and hits whoever stands there after all moves — even a covered ship — or fizzles in the empty slot), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand).",
       },
       {
         heading: "Ships",
@@ -78,6 +78,8 @@ export const en = {
     placeShip: (ship: string) => `${ship}: tap a glowing slot. Click the card again to take it back.`,
     noCommandTarget: (command: string) => `no own ship to target with ${command}.`,
     chooseCommandTarget: (command: string) => `${command}: tap one of your ships. Click the card again to take it back.`,
+    chooseEnemySlot: (command: string) =>
+      `${command}: tap a slot on the enemy side, even an empty one — it hits whichever ship stands there after all moves. Click the card again to take it back.`,
     chooseDestination: (command: string, ship: string) =>
       `${command}: tap a glowing slot for ${ship}. Click the card again to take it back.`,
     chooseManeuver: (ship: string) => `Maneuver: tap a glowing slot for ${ship}; it won't fire this round. Tap the ship again or press Esc to cancel.`,
@@ -116,6 +118,7 @@ export const en = {
     draw: (command: string, who: string, ships: number, commands: number) =>
       `Effect: ${command} — ${who} +${ships} ship, +${commands} command`,
     noEffect: (command: string, who: string) => `Effect: ${command} (${who}) has no effect`,
+    miss: (command: string, slot: string) => `Effect: ${command} fizzles in ${slot}`,
     attack: (attacker: string, target: string, amount: number) => `Combat: ${attacker} fires at ${target} (${amount})`,
     selfDamage: (ship: string, amount: number) => `Cleanup: ${ship} takes ${amount} self-damage`,
     destroyed: (ship: string) => `Destroyed: ${ship}`,
@@ -123,6 +126,7 @@ export const en = {
   banner: {
     command: (who: string, command: string) => `${who}: ${command}`,
     noEffect: "no effect",
+    miss: (slot: string) => `fizzles in ${slot}`,
     draw: (ships: number, commands: number) => `+${ships} ship, +${commands} command`,
   },
   float: {
@@ -132,6 +136,7 @@ export const en = {
     attack: (delta: number) => `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ATK`,
     disabled: "Disabled",
     holdFire: "Holds fire",
+    miss: "Miss",
   },
   errors: {
     match_full: "This match is already full.",
@@ -145,6 +150,7 @@ export const en = {
     target_not_allowed: "This command takes no target.",
     target_not_own_ship: "The command target isn't one of your ships.",
     target_wrong_lane: "This command can't target a ship in that lane.",
+    target_not_enemy_slot: "The command target isn't a slot on the enemy side.",
     destination_required: "This command needs a slot to move the ship to.",
     destination_not_allowed: "This command doesn't move a ship.",
     destination_unavailable: "The ship can't move to this slot.",
@@ -165,10 +171,12 @@ export const en = {
     auto_highest_hp: "Highest-HP Enemy",
     auto_highest_atk: "Highest-ATK Enemy",
     auto_all: "All Targets",
+    auto_moved: "Moved Enemies",
     all_friendly_strike: "All Allies",
     all_enemy_strike: "All Enemies",
     choose_friendly: "Choose Ally",
     choose_enemy: "Choose Enemy",
+    choose_enemy_slot: "Choose Enemy Slot",
   } satisfies Record<TargetMode, string>,
   ships: {
     horizon_cruiser: { name: "Horizon Cruiser", effect: "Solid stats, reliable." },
@@ -193,6 +201,8 @@ export const en = {
     sensor_sweep: { name: "Sensor Sweep", effect: "Reveal all cards in the enemy hand for the next round." },
     targeting_jammer: { name: "Targeting Jammer", effect: "All enemy ships in the Strike Line get -1 ATK this round (min 0)." },
     volley_fire: { name: "Volley Fire", effect: "Deal 1 damage to ALL enemy ships." },
+    torpedo: { name: "Torpedo", effect: "Choose an enemy slot. After all moves, deal 5 damage to the ship there, even if covered. An empty slot: miss." },
+    barrage: { name: "Barrage", effect: "Deal 3 damage to every enemy ship that changed lanes this round." },
   } satisfies Record<CommandId, CardText>,
 };
 
