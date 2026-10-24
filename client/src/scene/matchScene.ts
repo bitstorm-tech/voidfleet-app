@@ -34,16 +34,16 @@ import { animationTimeScale } from "./tween.ts";
 
 const CAMERA_RIG_POSITION = new Vector3(0, 14.7, -15.7);
 const CAMERA_PITCH = Tools.ToRadians(42);
-const CAMERA_FOV = Tools.ToRadians(32);
+const CAMERA_FOV = Tools.ToRadians(33.5);
 const BOARD_Z = 2.5;
 const LANE_X: Record<Side, Record<Lane["type"], number>> = {
-  player: { command: -5.8, strike: -2.6 },
-  enemy: { strike: 2.6, command: 5.8 },
+  player: { command: -6.15, strike: -2.75 },
+  enemy: { strike: 2.75, command: 6.15 },
 };
 /** Neue Schiffe fliegen von hier aus ein, außerhalb des Bildes am Rand ihrer Seite (Welt-|x|). */
 const ARRIVAL_X = 19;
-/** Slot 0 liegt am hinteren Ende der Lane (weit von der Kamera). */
-const SLOT_Z = [4.75, 2.85, 0.95, -0.95, -2.85, -4.75];
+/** Slot 0 liegt am hinteren Ende der Lane (weit von der Kamera); zwischen den Pads bleibt eine Fuge. */
+const SLOT_Z = [5.5, 3.3, 1.1, -1.1, -3.3, -5.5];
 /** Die HDR-Umgebung (tools/ships/env.py) liefert Reflexionen und indirektes Licht der PBR-Schiffe. */
 const ENVIRONMENT_SIZE = 128;
 const ENVIRONMENT_INTENSITY = 0.8;
@@ -73,8 +73,8 @@ const ZOOM_FOLLOW_SPEED = 8;
 /** Ab dieser Zeigerbewegung in CSS-Pixeln wird aus einem Klick ein Verschieben der Kamera. */
 const PAN_THRESHOLD = 5;
 /** Brettbereich, auf den gezoomt und die Kamera ausgerichtet werden kann (Welt-x und -z). */
-const ZOOM_FOCUS_X = 7;
-const ZOOM_FOCUS_Z: [number, number] = [BOARD_Z - 6, BOARD_Z + 6];
+const ZOOM_FOCUS_X = 7.5;
+const ZOOM_FOCUS_Z: [number, number] = [BOARD_Z - 6.5, BOARD_Z + 6.5];
 
 const isPadHitbox = (mesh: AbstractMesh): boolean => mesh.metadata?.pad !== undefined;
 
