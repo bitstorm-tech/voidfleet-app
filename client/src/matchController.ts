@@ -1,8 +1,9 @@
 // Verbindet Server, Spielzustand, 3D-Szene und DOM-UI zur Zugplanung:
-// Der Spieler stellt seinen Zug zusammen (1 Schiff + 1 Befehl), das gewählte
-// Schiff steht als Geist auf dem Slot, der gewählte Befehl bleibt markiert.
-// Beim Platzieren folgt der Geist dem Zeiger über die freien Slots. Der Geist des geplanten
-// Schiffs ist für Befehle ein Ziel wie jedes andere eigene Schiff. Befehle, die
+// Der Spieler stellt seinen Zug zusammen (1 Schiff, in Runde 1 zwei, + 1 Befehl), die gewählten
+// Schiffe stehen als Geister auf ihren Slots, der gewählte Befehl bleibt markiert. Ein Klick auf
+// einen Geist oder seine Karte nimmt genau dieses Schiff zurück.
+// Beim Platzieren folgt der Geist dem Zeiger über die freien Slots. Die Geister der geplanten
+// Schiffe sind für Befehle Ziele wie jedes andere eigene Schiff. Befehle, die
 // ein Schiff in die andere Lane verlegen, brauchen zwei Klicks: Schiff, dann Ziel-Slot;
 // dort steht das verlegte Schiff ebenfalls als Geist, ein Bogenpfeil zeigt den Weg.
 // Ist keine Karte gewählt, plant ein Klick auf ein eigenes Schiff das Grundmanöver ebenso
@@ -16,7 +17,7 @@
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { canTargetLane, needsTarget, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
-import { MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, slotTarget, type Lane, type Slot } from "../../shared/board.ts";
+import { maxDeploys, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, overdriveBonus, slotTarget, type Lane, type Slot } from "../../shared/board.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
 import { setMusicMood } from "./audio/music.ts";
 import { playUiSound } from "./audio/uiSounds.ts";
@@ -160,13 +161,8 @@ export class MatchController {
 
   private onShipCardClick(index: number): void {
     if (!this.canPlan) return playUiSound("denied");
-    if (this.match.plan.ship?.handIndex === index) {
-      // Erneutes Antippen der geplanten Karte nimmt den Zug zurück, samt Befehl auf dieses Schiff;
-      // ein angefangener Lane-Wechsel des Schiffs bricht ab.
-      if (this.moveSource !== null && this.match.isPlannedDeploy(this.moveSource)) this.moveSource = null;
-      this.match.planShip(null);
-      this.selectShip(null);
-      playUiSound("cancel");
+    if (this.match.plan.ships.some((ship) => ship.handIndex === index)) {
+      this.unplanShip(index);
     } else if (this.selectedShipIndex === index) {
       this.selectShip(null);
       playUiSound("cancel");
@@ -244,6 +240,17 @@ export class MatchController {
     return this.selectedShipIndex !== null || this.selectedCommandIndex !== null || this.maneuverSource !== null;
   }
 
+  /**
+   * Nimmt ein eingeplantes Schiff zurück, samt Befehl auf dieses Schiff; ein angefangener Lane-Wechsel
+   * des Schiffs bricht ab.
+   */
+  private unplanShip(handIndex: number): void {
+    if (this.moveSource !== null && this.match.plannedDeployAt(this.moveSource)?.handIndex === handIndex) this.moveSource = null;
+    this.match.unplanShip(handIndex);
+    this.selectShip(null);
+    playUiSound("cancel");
+  }
+
   private cancelManeuver(): void {
     this.match.plan.maneuver = null;
     this.refreshSelectionVisuals();
@@ -296,12 +303,15 @@ export class MatchController {
 
   /**
    * Ohne gewählte Karte: Ein Klick auf ein eigenes Schiff beginnt das Grundmanöver, einer auf das
-   * manövrierende Schiff oder seinen Geist nimmt es zurück. Leere Slots und Geister reagieren nicht.
+   * manövrierende Schiff oder seinen Geist nimmt es zurück, einer auf den Geist eines eingeplanten
+   * Schiffs nimmt dieses zurück. Leere Slots und der Geist eines Bewegungsbefehls reagieren nicht.
    */
   private onShipClick(pad: SlotPad | null): void {
     if (pad === null || pad.slot.lane.side === "enemy") return;
     const maneuver = this.match.plannedManeuver;
     if (maneuver !== null && (pad.slot === maneuver.from || pad.slot === maneuver.to)) return this.cancelManeuver();
+    const deploy = this.match.plannedDeployAt(pad.slot);
+    if (deploy !== null) return this.unplanShip(deploy.handIndex);
     if (!pad.slot.isOccupied) return;
     if (this.match.maneuverDestinations(pad.slot).length === 0) return playUiSound("denied");
     this.selectManeuver(pad.slot);
@@ -324,7 +334,7 @@ export class MatchController {
     const command = this.selectedCommand;
     if (command && targetsEnemySlot(command)) return lane.side === "enemy";
     if (lane.side === "enemy") return false;
-    if (this.selectedShipIndex !== null) return this.match.canDeploy(slot);
+    if (this.selectedShipIndex !== null) return this.match.canDeploy(slot, this.selectedShipIndex);
     if (this.maneuverSource !== null) {
       return lane !== this.maneuverSource.lane && this.match.maneuverDestinations(this.maneuverSource).includes(slot.index);
     }
@@ -404,12 +414,11 @@ export class MatchController {
     if (this.isResolving) return [];
     const ghosts: { pad: SlotPad; card: ShipCard }[] = [];
     const hovered = this.hoveredPad !== null && this.isValidTarget(this.hoveredPad) ? this.hoveredPad : null;
-    const ship = this.match.plan.ship;
-    if (this.selectedShipIndex !== null && hovered !== null) {
-      ghosts.push({ pad: hovered, card: this.match.shipHand[this.selectedShipIndex]! });
-    } else if (ship !== null) {
+    const placing = this.selectedShipIndex !== null && hovered !== null;
+    for (const ship of placing ? this.match.keptDeploys(this.selectedShipIndex!) : this.match.plan.ships) {
       ghosts.push({ pad: this.view.pad("player", ship.target.lane, ship.target.slotIndex), card: this.match.shipHand[ship.handIndex]! });
     }
+    if (placing) ghosts.push({ pad: hovered!, card: this.match.shipHand[this.selectedShipIndex!]! });
     for (const move of [this.shownCommandMove(), this.shownManeuver()]) {
       if (move !== null) ghosts.push({ pad: move.to, card: this.match.shipAt(move.from.slot)! });
     }
@@ -488,7 +497,7 @@ export class MatchController {
   private refreshHand(): void {
     const shipMarks = new Set<number>();
     if (this.selectedShipIndex !== null) shipMarks.add(this.selectedShipIndex);
-    if (this.match.plan.ship) shipMarks.add(this.match.plan.ship.handIndex);
+    for (const ship of this.match.plan.ships) shipMarks.add(ship.handIndex);
     this.hand.renderShips(this.match.shipHand, shipMarks);
 
     const commandMarks = new Set<number>();
@@ -513,6 +522,7 @@ export class MatchController {
 
   private updateHud(): void {
     this.hud.setRound(this.match.round);
+    this.hud.setOverdrive(overdriveBonus(this.match.round));
     this.hud.setStatus(this.buildStatusText());
     // Solange kein Gegner da ist, bietet der Knopf den Computergegner an.
     const waitingForOpponent = this.isConnected && this.match.round > 0 && !this.match.opponent.joined;
@@ -529,8 +539,10 @@ export class MatchController {
     if (this.match.submitted) return t.status.submitted;
     if (!this.match.opponent.joined) return t.status.waitingForOpponent(this.shareLink());
     const fleet = t.status.fleet(this.match.board.shipCount("player"), MAX_SHIPS_PER_SIDE);
+    // Aufstellung: Solange mehr als ein Schiff erlaubt ist, steht dabei, wie viele noch gelegt werden dürfen.
+    const deploys = maxDeploys(this.match.round) > 1 ? ` · ${t.status.deploysLeft(this.match.deploysLeft)}` : "";
     const opponent = this.match.opponent.submitted ? ` ${t.status.opponentSubmitted}` : "";
-    return `${fleet} — ${this.buildPlanningText()}${opponent}`;
+    return `${fleet}${deploys} — ${this.buildPlanningText()}${opponent}`;
   }
 
   /** Der Match-Link ohne `?lang=`, damit der Gegner seine eigene Sprache bekommt. */
@@ -555,7 +567,7 @@ export class MatchController {
       if (this.validTargetCount === 0) return t.status.noCommandTarget(name);
       return t.status.chooseCommandTarget(name);
     }
-    const cards = [this.match.plannedShip, this.match.plannedCommand].filter((card) => card !== null);
+    const cards = [...this.match.plannedShips, this.match.plannedCommand].filter((card) => card !== null);
     const planned = cards.map((card) => cardText(card).name);
     const maneuver = this.match.plannedManeuver;
     if (maneuver !== null) planned.push(t.status.maneuver(cardText(maneuver.from.card!).name));

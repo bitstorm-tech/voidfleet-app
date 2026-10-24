@@ -23,6 +23,8 @@ export const en = {
     playComputer: "Play against computer",
     showLog: "Show log",
     hideLog: "Hide log",
+    overdrive: (bonus: number) => `Overdrive +${bonus}`,
+    overdriveHint: (bonus: number) => `Overdrive: all combat ships +${bonus} ATK`,
   },
   settings: {
     title: "Settings",
@@ -39,19 +41,19 @@ export const en = {
     sections: [
       {
         heading: "Goal",
-        text: "Destroy the enemy fleet. Whoever has no combat ship left on the board after a round loses — support ships don't count. If it hits both sides, the match is a draw.",
+        text: "Destroy the enemy fleet. Whoever has no combat ship left after a round — neither on the board nor in hand — loses; support ships don't count. If it hits both sides, the match is a draw. So no match drags on forever, Overdrive kicks in from round 8: every combat ship on both sides gets +1 ATK, one more every 4 rounds (round 12, 16 …).",
       },
       {
         heading: "Your turn",
-        text: "Each round, pick up to one ship and one command from your hand, then end your turn. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit. A command may also target the ship you deploy this round, for example to overcharge it or move it straight to the other lane. On top of that, you may maneuver one of your ships already on the board to a free slot in the other lane — tap it, then the slot. The price: that ship doesn't fire this round. A command on it follows it to its new slot.",
+        text: "Each round, pick up to one ship and one command from your hand, then end your turn. In round 1 you set up your fleet: up to two ships plus a command. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit. A command may also target a ship you deploy this round, for example to overcharge it or move it straight to the other lane. On top of that, you may maneuver one of your ships already on the board to a free slot in the other lane — tap it, then the slot. The price: that ship doesn't fire this round. A command on it follows it to its new slot.",
       },
       {
         heading: "The board",
-        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 8. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. Ships change lanes through the maneuver of your turn or through commands like Flanking Maneuver, Intercept and Recall; these don't cost the ship its attack. Either way you pick any free slot in the other lane. Maneuver and command can't move the same ship or land on the same slot, and a slot vacated this round only frees up next round. Moving has a risk: Barrage hits every enemy ship that changed lanes this round.",
+        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 6. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. Ships change lanes through the maneuver of your turn or through commands like Flanking Maneuver, Intercept and Recall; these don't cost the ship its attack. Either way you pick any free slot in the other lane. Maneuver and command can't move the same ship or land on the same slot, and a slot vacated this round only frees up next round. Moving has a risk: Barrage hits every enemy ship that changed lanes this round.",
       },
       {
         heading: "Resolution",
-        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Maneuvers (ships switch lanes), Effects (commands take effect, attacks last: a Torpedo aims at a slot, not a ship, and hits whoever stands there after all moves — even a covered ship — or fizzles in the empty slot), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand).",
+        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Maneuvers (ships switch lanes), Effects (commands take effect, attacks last: a Torpedo aims at a slot, not a ship, and hits whoever stands there after all moves — even a covered ship — or fizzles in the empty slot), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand); only after that is it checked whether a fleet is beaten.",
       },
       {
         heading: "Ships",
@@ -74,7 +76,8 @@ export const en = {
     opponentSubmitted: "The opponent has already ended their turn.",
     fleet: (count: number, max: number) => `Fleet ${count}/${max}`,
     noFreeSlot: (ship: string, perLane: number, perSide: number) =>
-      `no free slot for ${ship} (max. ${perLane} per lane, ${perSide} per side).`,
+      `no free slot for ${ship} (max. ${perLane} per lane, ${perSide} per side, planned ships included).`,
+    deploysLeft: (count: number) => (count === 0 ? "all ships planned" : `${count} ${count === 1 ? "ship" : "ships"} left to deploy`),
     placeShip: (ship: string) => `${ship}: tap a glowing slot. Click the card again to take it back.`,
     noCommandTarget: (command: string) => `no own ship to target with ${command}.`,
     chooseCommandTarget: (command: string) => `${command}: tap one of your ships. Click the card again to take it back.`,
@@ -84,7 +87,7 @@ export const en = {
       `${command}: tap a glowing slot for ${ship}. Click the card again to take it back.`,
     chooseManeuver: (ship: string) => `Maneuver: tap a glowing slot for ${ship}; it won't fire this round. Tap the ship again or press Esc to cancel.`,
     maneuver: (ship: string) => `maneuver of ${ship}`,
-    planned: (cards: string) => `${cards} ready. Click “End turn”, or tap a card or the maneuvering ship to take it back.`,
+    planned: (cards: string) => `${cards} ready. Click “End turn”, or tap a card, a ghost ship or the maneuvering ship to take it back.`,
     idle: "Tap a ship or command card, or one of your ships on the board to maneuver it. Click “End turn” without a card to pass.",
     resolving: "Both turns are revealed — resolving the round …",
     matchOver: "The match is over.",
@@ -144,6 +147,7 @@ export const en = {
     opponent_missing: "The opponent hasn't joined yet.",
     already_submitted: "You have already ended your turn this round.",
     ship_not_in_hand: "This ship card isn't in your hand.",
+    too_many_ships: "You can't deploy that many ships this round.",
     slot_unavailable: "No ship can land on this slot.",
     command_not_in_hand: "This command card isn't in your hand.",
     target_required: "This command needs a target.",

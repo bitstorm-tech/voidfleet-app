@@ -16,9 +16,15 @@ export interface SlotRef extends SlotTarget {
   side: Side;
 }
 
+/** Ein Schiff von der Hand, das auf einen eigenen Slot gelegt wird. */
+export interface Deploy {
+  handIndex: number;
+  target: SlotTarget;
+}
+
 /**
- * Der Zug einer Runde: bis zu 1 Schiff und 1 Befehl, jeweils per Hand-Index, dazu höchstens ein
- * Grundmanöver. Ziele liegen auf der eigenen Seite, nur das Ziel eines Befehls mit `choose_enemy_slot`
+ * Der Zug einer Runde: bis zu `maxDeploys` Schiffe (in Runde 1 zwei, sonst eines, in verschiedene
+ * Slots) und 1 Befehl, jeweils per Hand-Index, dazu höchstens ein Grundmanöver. Ziele liegen auf der eigenen Seite, nur das Ziel eines Befehls mit `choose_enemy_slot`
  * (Torpedo) ist ein Slot der Gegnerseite, auch ein leerer. Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane,
  * sonst null. Das Manöver verlegt ein eigenes Schiff, das schon auf dem Brett steht, in den Slot
  * `destination` der anderen Lane; dafür feuert es in dieser Runde nicht. Eigene Ziele beziehen sich auf
@@ -26,7 +32,7 @@ export interface SlotRef extends SlotTarget {
  * bleibt, was er ist: Getroffen wird, wer nach allen Bewegungen dort steht.
  */
 export interface TurnPlan {
-  ship: { handIndex: number; target: SlotTarget } | null;
+  ships: Deploy[];
   command: { handIndex: number; target: SlotTarget | null; destination: number | null } | null;
   maneuver: { ship: SlotTarget; destination: number } | null;
 }
@@ -106,6 +112,7 @@ export type ErrorCode =
   | "opponent_missing"
   | "already_submitted"
   | "ship_not_in_hand"
+  | "too_many_ships"
   | "slot_unavailable"
   | "command_not_in_hand"
   | "target_required"

@@ -7,7 +7,7 @@
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
 import { canTargetLane, needsTarget, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
-import { Board, isSameSlot, opposite, otherLane, type BoardSnapshot, type Side } from "../../shared/board.ts";
+import { Board, isSameSlot, maxDeploys, opposite, otherLane, overdriveBonus, type BoardSnapshot, type Side } from "../../shared/board.ts";
 import type { ErrorCode, MatchResult, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { planBotTurn } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
@@ -23,9 +23,9 @@ import {
 export type Seat = 0 | 1;
 
 const HAND_LIMIT = 6;
-/** Die Starthand bekommt immer 1 Support- und 2 Kampfschiffe, jeweils zufällig aus dem Deck. */
+/** Die Starthand bekommt immer 1 Support- und 3 Kampfschiffe, jeweils zufällig aus dem Deck. */
 const STARTING_SUPPORT_SHIPS = 1;
-const STARTING_COMBAT_SHIPS = 2;
+const STARTING_COMBAT_SHIPS = 3;
 const STARTING_COMMANDS = 3;
 
 const SEAT_SIDE: Record<Seat, Side> = { 0: "player", 1: "enemy" };
@@ -82,13 +82,14 @@ class Player implements Commander {
     };
   }
 
-  /** Kein angriffsfähiges Schiff (ATK > 0) mehr auf dem Feld; wer gar keines gelegt hat, zählt genauso. */
+  /** Kein Kampfschiff (ATK > 0) mehr, weder auf dem Feld noch auf der Hand. */
   isDefeated(board: Board): boolean {
-    return !board.ships(this.side).some((slot) => slot.card!.atk > 0);
+    return !board.ships(this.side).some((slot) => isCombat(slot.card!)) && !this.shipHand.some(isCombat);
   }
 }
 
 const isSupport = (card: ShipCard) => card.shipClass === "support";
+const isCombat = (card: ShipCard) => card.atk > 0;
 
 function drawManyWhere(deck: Deck<ShipCard>, count: number, predicate: (card: ShipCard) => boolean): ShipCard[] {
   return Array.from({ length: count }, () => deck.drawWhere(predicate)!);
@@ -141,27 +142,30 @@ export class Match {
     player.plan = plan;
     // Der Computergegner zieht, sobald der Mensch abgegeben hat; den fremden Plan kennt er nicht.
     for (const bot of this.players) {
-      if (bot.isBot && bot.plan === null) bot.plan = planBotTurn(this.board, bot);
+      if (bot.isBot && bot.plan === null) bot.plan = planBotTurn(this.board, bot, this.round);
     }
     return null;
   }
 
   private validate(player: Player, plan: TurnPlan): ErrorCode | null {
-    if (plan.ship) {
-      const { handIndex, target } = plan.ship;
-      if (player.shipHand[handIndex] === undefined) return "ship_not_in_hand";
-      if (!this.board.canPlace(this.board.lane(player.side, target.lane), target.slotIndex)) return "slot_unavailable";
+    if (plan.ships.length > maxDeploys(this.round)) return "too_many_ships";
+    // Die Schiffe, die in dieser Runde gelegt werden, landen vor Manöver und Befehlen und belegen ihre Slots;
+    // jeder Deploy zählt die vorigen zur Lane- und Flottengrenze.
+    const deploys = plan.ships.map((ship) => ship.target);
+    for (const [i, { handIndex, target }] of plan.ships.entries()) {
+      if (player.shipHand[handIndex] === undefined || plan.ships.slice(0, i).some((other) => other.handIndex === handIndex)) {
+        return "ship_not_in_hand";
+      }
+      if (!this.board.canPlace(this.board.lane(player.side, target.lane), target.slotIndex, deploys.slice(0, i))) return "slot_unavailable";
     }
-    // Das Schiff, das in dieser Runde gelegt wird, landet vor Manöver und Befehlen und belegt seinen Slot.
-    const deploy = plan.ship?.target ?? null;
-    // Manöver und Bewegungsbefehl dürfen nicht im selben Slot landen und zusammen mit dem Deploy die
-    // Lane-Grenze nicht überschreiten; `canMove` prüft das beim Befehl mit beiden Ankünften.
+    // Manöver und Bewegungsbefehl dürfen nicht im selben Slot landen und zusammen mit den Deploys die
+    // Lane-Grenze nicht überschreiten; `canMove` prüft das beim Befehl mit allen Ankünften.
     const maneuver = plan.maneuver && { lane: otherLane(plan.maneuver.ship.lane), slotIndex: plan.maneuver.destination };
     if (plan.maneuver) {
       const { ship, destination } = plan.maneuver;
       const slot = this.board.lane(player.side, ship.lane).slots[ship.slotIndex];
       if (!slot?.isOccupied) return "maneuver_not_own_ship";
-      if (!this.board.canMove(slot, destination, [deploy])) return "maneuver_destination_unavailable";
+      if (!this.board.canMove(slot, destination, deploys)) return "maneuver_destination_unavailable";
     }
     if (plan.command) {
       const { handIndex, target } = plan.command;
@@ -173,14 +177,14 @@ export class Match {
       const enemySlot = targetsEnemySlot(card);
       const slot = target && this.board.lane(enemySlot ? opposite(player.side) : player.side, target.lane).slots[target.slotIndex];
       if (target && enemySlot && !slot) return "target_not_enemy_slot";
-      if (target && !enemySlot && !slot?.isOccupied && !(deploy && isSameSlot(target, deploy))) return "target_not_own_ship";
+      if (target && !enemySlot && !slot?.isOccupied && !deploys.some((deploy) => isSameSlot(target, deploy))) return "target_not_own_ship";
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
       const { destination } = plan.command;
       if (card.moves && destination === null) return "destination_required";
       if (!card.moves && destination !== null) return "destination_not_allowed";
       if (card.moves && target && plan.maneuver && isSameSlot(target, plan.maneuver.ship)) return "maneuver_conflict";
-      // Bewegt sich das gelegte Schiff, ist `from` sein noch leerer Slot; `canMove` zählt den Deploy nur in der Ziel-Lane.
-      if (slot && destination !== null && !this.board.canMove(slot, destination, [deploy, maneuver])) return "destination_unavailable";
+      // Bewegt sich ein gelegtes Schiff, ist `from` sein noch leerer Slot; `canMove` zählt Deploys nur in der Ziel-Lane.
+      if (slot && destination !== null && !this.board.canMove(slot, destination, [...deploys, maneuver])) return "destination_unavailable";
     }
     return null;
   }
@@ -191,21 +195,22 @@ export class Match {
 
   /**
    * Deckt beide Züge auf und löst die Runde in Phasen auf: Deploy, Manöver, Effects,
-   * Combat, Cleanup. Danach wird geprüft, ob eine Flotte vernichtet ist; sonst
-   * ziehen beide nach. Gibt die Ereignisse aus Sicht von Seat 0 zurück.
+   * Combat, Cleanup. Danach ziehen beide nach, und es wird geprüft, ob eine Flotte
+   * vernichtet ist; sonst beginnt die nächste Runde. Gibt die Ereignisse aus Sicht von Seat 0 zurück.
    */
   resolveRound(): RoundEvent[] {
     const events: RoundEvent[] = [];
 
     for (const player of this.players) {
-      const ship = player.plan!.ship;
-      if (ship) {
-        const [card] = player.shipHand.splice(ship.handIndex, 1);
-        this.board.place(this.board.lane(player.side, ship.target.lane), ship.target.slotIndex, card!);
-        events.push({ kind: "deploy", side: player.side, cardId: card!.id, target: ship.target });
-      } else {
-        events.push({ kind: "pass", side: player.side });
+      const { ships } = player.plan!;
+      for (const { handIndex, target } of ships) {
+        const card = player.shipHand[handIndex]!;
+        this.board.place(this.board.lane(player.side, target.lane), target.slotIndex, card);
+        events.push({ kind: "deploy", side: player.side, cardId: card.id, target });
       }
+      // Von hinten entfernen, damit die übrigen Hand-Indizes gültig bleiben.
+      for (const index of ships.map((ship) => ship.handIndex).sort((a, b) => b - a)) player.shipHand.splice(index, 1);
+      if (ships.length === 0) events.push({ kind: "pass", side: player.side });
     }
 
     // Jede Seite bewegt nur eigene Schiffe, die Manöver kommen sich also nicht in die Quere.
@@ -238,11 +243,15 @@ export class Match {
     resolveCombat(this.board, events);
     resolveCleanup(this.board, events);
 
-    for (const player of this.players) player.plan = null;
+    for (const player of this.players) {
+      player.plan = null;
+      player.drawForRound();
+    }
     this.winner = this.decideWinner();
     if (this.winner === null) {
-      for (const player of this.players) player.drawForRound();
       this.round += 1;
+      // Gilt schon beim Planen der neuen Runde, damit der Computergegner mit denselben Werten rechnet.
+      this.board.overdrive = overdriveBonus(this.round);
     }
     return events;
   }

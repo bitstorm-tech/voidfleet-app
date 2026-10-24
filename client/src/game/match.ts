@@ -3,8 +3,8 @@
 // übernimmt seine Sicht, geplant wird lokal bis zum Submit.
 
 import { commandById, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
-import { Board, isSameSlot, otherLane, slotTarget, type Slot } from "../../../shared/board.ts";
-import type { MatchResult, PlayerView, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
+import { Board, isSameSlot, maxDeploys, otherLane, overdriveBonus, slotTarget, type Slot } from "../../../shared/board.ts";
+import type { Deploy, MatchResult, PlayerView, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
 
 /** Ein eingeplanter Lane-Wechsel: der Slot des Schiffs und der freie Slot der anderen Lane, in den es geht. */
 export interface PlannedMove {
@@ -12,7 +12,7 @@ export interface PlannedMove {
   to: Slot;
 }
 
-const emptyPlan = (): TurnPlan => ({ ship: null, command: null, maneuver: null });
+const emptyPlan = (): TurnPlan => ({ ships: [], command: null, maneuver: null });
 
 export class Match {
   readonly board = new Board();
@@ -27,23 +27,29 @@ export class Match {
   opponent = { joined: false, submitted: false };
   result: MatchResult | null = null;
 
-  get plannedShip(): ShipCard | null {
-    return this.plan.ship ? (this.shipHand[this.plan.ship.handIndex] ?? null) : null;
+  get plannedShips(): ShipCard[] {
+    return this.plan.ships.map((ship) => this.shipHand[ship.handIndex]!);
+  }
+
+  /** Wie viele Schiffe in dieser Runde noch gelegt werden dürfen (`maxDeploys`). */
+  get deploysLeft(): number {
+    return maxDeploys(this.round) - this.plan.ships.length;
   }
 
   get plannedCommand(): CommandCard | null {
     return this.plan.command ? (this.commandHand[this.plan.command.handIndex] ?? null) : null;
   }
 
-  /** Ob das eingeplante Schiff auf diesem Slot landet; auf dem Brett ist er bis zur Auflösung leer. */
-  isPlannedDeploy(slot: Slot): boolean {
-    const target = this.plan.ship?.target;
-    return slot.lane.side === "player" && target !== undefined && isSameSlot(target, { lane: slot.lane.type, slotIndex: slot.index });
+  /** Das eingeplante Schiff, das auf diesem Slot landet; auf dem Brett ist er bis zur Auflösung leer. */
+  plannedDeployAt(slot: Slot): Deploy | null {
+    if (slot.lane.side !== "player") return null;
+    return this.plan.ships.find((ship) => isSameSlot(ship.target, slotTarget(slot))) ?? null;
   }
 
-  /** Das Schiff auf einem Slot, wie es für Befehle zählt: auch das eingeplante, das vor den Befehlen landet. */
+  /** Das Schiff auf einem Slot, wie es für Befehle zählt: auch ein eingeplantes, das vor den Befehlen landet. */
   shipAt(slot: Slot): ShipCard | null {
-    return this.isPlannedDeploy(slot) ? this.plannedShip : slot.card;
+    const deploy = this.plannedDeployAt(slot);
+    return deploy ? this.shipHand[deploy.handIndex]! : slot.card;
   }
 
   /** Der Zielslot eines eingeplanten Torpedos auf der Gegnerseite. */
@@ -53,15 +59,29 @@ export class Match {
   }
 
   /**
-   * Plant das Schiff oder nimmt es mit null zurück. Ein Befehl auf das bisher eingeplante Schiff
-   * fällt mit weg, sobald auf dessen Slot nichts mehr landet.
+   * Die eingeplanten Schiffe, die bleiben, wenn die Karte `handIndex` (neu) geplant wird: Sie selbst
+   * zieht um, und sind schon alle Deploys vergeben, weicht das zuerst geplante Schiff.
    */
-  planShip(ship: TurnPlan["ship"]): void {
-    const previous = this.plan.ship?.target;
+  keptDeploys(handIndex: number): Deploy[] {
+    const others = this.plan.ships.filter((ship) => ship.handIndex !== handIndex);
+    return others.slice(Math.max(0, others.length - maxDeploys(this.round) + 1));
+  }
+
+  /** Plant ein Schiff (siehe `keptDeploys`). */
+  planShip(ship: Deploy): void {
+    this.setShips([...this.keptDeploys(ship.handIndex), ship]);
+  }
+
+  /** Nimmt das eingeplante Schiff von der Hand-Karte `handIndex` zurück. */
+  unplanShip(handIndex: number): void {
+    this.setShips(this.plan.ships.filter((ship) => ship.handIndex !== handIndex));
+  }
+
+  /** Ein Befehl auf ein eingeplantes Schiff fällt mit weg, sobald auf dessen Slot nichts mehr landet. */
+  private setShips(ships: Deploy[]): void {
+    this.plan.ships = ships;
     const target = this.plannedEnemyTarget ? null : this.plan.command?.target;
-    const keepsSlot = ship !== null && previous !== undefined && isSameSlot(ship.target, previous);
-    if (previous && target && isSameSlot(target, previous) && !keepsSlot) this.plan.command = null;
-    this.plan.ship = ship;
+    if (target && this.shipAt(this.board.lane("player", target.lane).slots[target.slotIndex]!) === null) this.plan.command = null;
   }
 
   /** Der Lane-Wechsel des Bewegungsbefehls. `from` kann der Slot des eingeplanten Schiffs sein, der auf dem Brett noch leer ist (siehe `shipAt`). */
@@ -79,38 +99,40 @@ export class Match {
 
   /**
    * Ziel-Slots für den Bewegungsbefehl auf das Schiff in `from`: nicht für das manövrierende Schiff,
-   * und Deploy und Manöver-Ziel zählen als besetzt (`Board.canMove`).
+   * und Deploys und Manöver-Ziel zählen als besetzt (`Board.canMove`).
    */
   commandMoveDestinations(from: Slot): number[] {
     const maneuver = this.plannedManeuver;
     if (maneuver?.from === from) return [];
-    return this.board.moveDestinations(from, [this.plannedDeploy, maneuver && slotTarget(maneuver.to)]);
+    return this.board.moveDestinations(from, [...this.plannedDeploys, maneuver && slotTarget(maneuver.to)]);
   }
 
   /** Ziel-Slots für das Manöver des Schiffs in `from`: nur echte Schiffe, die kein Bewegungsbefehl verlegt. */
   maneuverDestinations(from: Slot): number[] {
     const command = this.plannedCommandMove;
     if (!from.isOccupied || command?.from === from) return [];
-    return this.board.moveDestinations(from, [this.plannedDeploy, command && slotTarget(command.to)]);
+    return this.board.moveDestinations(from, [...this.plannedDeploys, command && slotTarget(command.to)]);
   }
 
   /**
-   * Ob das gewählte Schiff auf `slot` landen kann, ohne den eingeplanten Lane-Wechseln im Weg zu stehen.
-   * Verlegt der Befehl das bisher geplante Schiff, fällt er beim Umplanen ohnehin weg (`planShip`).
+   * Ob die Karte `handIndex` auf `slot` landen kann, neben den übrigen eingeplanten Schiffen (`keptDeploys`)
+   * und ohne den eingeplanten Lane-Wechseln im Weg zu stehen. Verlegt der Befehl ein Schiff, das dabei
+   * wegfällt, fällt er beim Umplanen ohnehin weg (`planShip`).
    */
-  canDeploy(slot: Slot): boolean {
-    if (!this.board.canPlace(slot.lane, slot.index)) return false;
-    const deploy = slotTarget(slot);
+  canDeploy(slot: Slot, handIndex: number): boolean {
+    const deploys = [...this.keptDeploys(handIndex).map((ship) => ship.target), slotTarget(slot)];
+    if (!this.board.canPlace(slot.lane, slot.index, deploys.slice(0, -1))) return false;
     const command = this.plannedCommandMove;
-    const keptCommand = command !== null && !this.isPlannedDeploy(command.from) ? command : null;
+    const keeps = (move: PlannedMove) => move.from.isOccupied || deploys.some((deploy) => isSameSlot(deploy, slotTarget(move.from)));
+    const keptCommand = command !== null && keeps(command) ? command : null;
     const maneuver = this.plannedManeuver;
     const fits = (move: PlannedMove | null, other: PlannedMove | null) =>
-      move === null || this.board.canMove(move.from, move.to.index, [deploy, other && slotTarget(other.to)]);
+      move === null || this.board.canMove(move.from, move.to.index, [...deploys, other && slotTarget(other.to)]);
     return fits(keptCommand, maneuver) && fits(maneuver, keptCommand);
   }
 
-  private get plannedDeploy(): SlotTarget | null {
-    return this.plan.ship?.target ?? null;
+  private get plannedDeploys(): SlotTarget[] {
+    return this.plan.ships.map((ship) => ship.target);
   }
 
   private move(ship: SlotTarget, destination: number): PlannedMove {
@@ -137,6 +159,7 @@ export class Match {
     this.submitted = view.submittedPlan !== null;
     this.round = view.round;
     this.board.load(view.board);
+    this.board.overdrive = overdriveBonus(view.round);
     this.shipHand = view.shipHand.map(shipById);
     this.commandHand = view.commandHand.map(commandById);
     this.shipDeckSize = view.shipDeckSize;

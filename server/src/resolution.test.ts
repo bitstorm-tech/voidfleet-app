@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
+import { Board, overdriveBonus, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import { commandById, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
 import type { RoundEvent } from "../../shared/protocol.ts";
 import { resolveCleanup, resolveCombat, resolveEffects, resolveManeuver, type Commander, type PlayedCommand } from "./resolution.ts";
@@ -375,5 +375,27 @@ describe("Fähigkeiten", () => {
     cruiser.hp = 4;
     expect(round(board).some((event) => event.kind === "ability")).toBe(false);
     expect(cruiser.hp).toBe(4);
+  });
+});
+
+describe("Overdrive", () => {
+  test("ab Runde 8 +1 ATK, alle 4 Runden ein weiterer Punkt", () => {
+    expect([1, 7, 8, 11, 12, 16].map(overdriveBonus)).toEqual([0, 0, 1, 1, 2, 3]);
+  });
+
+  test("Kampfschiffe treffen mit dem Bonus, Support-Schiffe bleiben bei 0 ATK", () => {
+    const board = new Board();
+    board.overdrive = 2;
+    const drone = place(board, "player", "command", 0, "repair_drone");
+    place(board, "player", "strike", 1, "void_interceptor");
+    const target = place(board, "enemy", "strike", 0, "iron_dreadnought");
+    expect(drone.attack).toBe(0);
+    expect(drone.canAttack).toBe(false);
+    const attacks = round(board).filter((event) => event.kind === "attack");
+    expect(attacks.map((event) => [event.attacker.cardId, event.amount])).toEqual([
+      ["void_interceptor", shipById("void_interceptor").atk + 2],
+      ["iron_dreadnought", shipById("iron_dreadnought").atk + 2],
+    ]);
+    expect(target.hp + target.shield).toBe(hp("iron_dreadnought") + shipById("iron_dreadnought").shield - shipById("void_interceptor").atk - 2);
   });
 });

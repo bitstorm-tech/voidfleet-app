@@ -81,6 +81,22 @@ body {
   white-space: nowrap;
 }
 
+.overdrive-label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgb(var(--buff));
+  padding: 4px 10px;
+  border: 1px solid rgb(var(--buff) / 0.6);
+  border-radius: 4px;
+}
+
+.overdrive-label[hidden] {
+  display: none;
+}
+
 .status-label {
   font-size: 18px;
   color: var(--text-dim);
@@ -564,6 +580,13 @@ body {
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--accent);
+}
+
+.round-banner em {
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 600;
+  color: rgb(var(--buff));
 }
 
 .round-banner.visible {

@@ -11,6 +11,8 @@ export const de: Messages = {
     playComputer: "Gegen Computer spielen",
     showLog: "Log einblenden",
     hideLog: "Log ausblenden",
+    overdrive: (bonus) => `Overdrive +${bonus}`,
+    overdriveHint: (bonus) => `Overdrive: alle Kampfschiffe +${bonus} ATK`,
   },
   settings: {
     title: "Einstellungen",
@@ -27,19 +29,19 @@ export const de: Messages = {
     sections: [
       {
         heading: "Ziel",
-        text: "Vernichte die gegnerische Flotte. Wer nach einer Runde kein Kampfschiff mehr auf dem Brett hat, verliert — Support-Schiffe zählen nicht. Trifft es beide, endet das Spiel unentschieden.",
+        text: "Vernichte die gegnerische Flotte. Wer nach einer Runde kein Kampfschiff mehr hat, weder auf dem Brett noch auf der Hand, verliert — Support-Schiffe zählen nicht. Trifft es beide, endet das Spiel unentschieden. Damit sich keine Partie endlos hinzieht, beginnt ab Runde 8 der Overdrive: Alle Kampfschiffe beider Seiten bekommen +1 ATK, alle 4 Runden einen mehr (Runde 12, 16 …).",
       },
       {
         heading: "Dein Zug",
-        text: "Jede Runde wählst du bis zu ein Schiff und einen Befehl aus deiner Hand und beendest den Zug. Dein Gegner tut gleichzeitig dasselbe, ohne deine Wahl zu sehen. Es gibt keine Kosten und kein Zeitlimit. Ein Befehl darf auch das Schiff treffen, das du in dieser Runde legst, etwa um es zu überladen oder gleich in die andere Lane zu verlegen. Zusätzlich darfst du eines deiner Schiffe, das schon auf dem Brett steht, in einen freien Slot der anderen Lane manövrieren — Schiff antippen, dann den Slot. Der Preis: Dieses Schiff feuert in dieser Runde nicht. Ein Befehl auf das Schiff folgt ihm in den neuen Slot.",
+        text: "Jede Runde wählst du bis zu ein Schiff und einen Befehl aus deiner Hand und beendest den Zug. In Runde 1 stellst du deine Flotte auf: bis zu zwei Schiffe und ein Befehl. Dein Gegner tut gleichzeitig dasselbe, ohne deine Wahl zu sehen. Es gibt keine Kosten und kein Zeitlimit. Ein Befehl darf auch ein Schiff treffen, das du in dieser Runde legst, etwa um es zu überladen oder gleich in die andere Lane zu verlegen. Zusätzlich darfst du eines deiner Schiffe, das schon auf dem Brett steht, in einen freien Slot der anderen Lane manövrieren — Schiff antippen, dann den Slot. Der Preis: Dieses Schiff feuert in dieser Runde nicht. Ein Befehl auf das Schiff folgt ihm in den neuen Slot.",
       },
       {
         heading: "Das Brett",
-        text: "Jede Seite hat zwei Lanes: Strike vorne, Command dahinter. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 8. Ein Schiff in der Command-Lane ist gedeckt, solange im Strike-Slot direkt davor ein Schiff steht; sonst kann es angegriffen werden. Die Lane wechseln Schiffe über das Manöver deines Zugs oder über Befehle wie Flanking Maneuver, Intercept und Recall; diese kosten das Schiff nicht seinen Angriff. In beiden Fällen wählst du einen beliebigen freien Slot der anderen Lane. Manöver und Befehl können nicht dasselbe Schiff verlegen und nicht im selben Slot landen, und ein in dieser Runde geräumter Slot wird erst in der nächsten frei. Bewegung hat ein Risiko: Sperrfeuer trifft jedes gegnerische Schiff, das in dieser Runde die Lane gewechselt hat.",
+        text: "Jede Seite hat zwei Lanes: Strike vorne, Command dahinter. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 6. Ein Schiff in der Command-Lane ist gedeckt, solange im Strike-Slot direkt davor ein Schiff steht; sonst kann es angegriffen werden. Die Lane wechseln Schiffe über das Manöver deines Zugs oder über Befehle wie Flanking Maneuver, Intercept und Recall; diese kosten das Schiff nicht seinen Angriff. In beiden Fällen wählst du einen beliebigen freien Slot der anderen Lane. Manöver und Befehl können nicht dasselbe Schiff verlegen und nicht im selben Slot landen, und ein in dieser Runde geräumter Slot wird erst in der nächsten frei. Bewegung hat ein Risiko: Sperrfeuer trifft jedes gegnerische Schiff, das in dieser Runde die Lane gewechselt hat.",
       },
       {
         heading: "Auflösung",
-        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Manöver (Schiffe wechseln die Lane), Effects (Befehle wirken, Angriffe zuletzt: Ein Torpedo zielt auf einen Slot, nicht auf ein Schiff, und trifft, wer nach allen Bewegungen dort steht — auch ein gedecktes Schiff —, sonst verpufft er im leeren Slot), Combat (alle Schiffe feuern gleichzeitig, kein Schuss geht auf ein schon zerstörtes Ziel), Cleanup (Rundeneffekte enden, Reparaturdrohnen reparieren). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand).",
+        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Manöver (Schiffe wechseln die Lane), Effects (Befehle wirken, Angriffe zuletzt: Ein Torpedo zielt auf einen Slot, nicht auf ein Schiff, und trifft, wer nach allen Bewegungen dort steht — auch ein gedecktes Schiff —, sonst verpufft er im leeren Slot), Combat (alle Schiffe feuern gleichzeitig, kein Schuss geht auf ein schon zerstörtes Ziel), Cleanup (Rundeneffekte enden, Reparaturdrohnen reparieren). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand); erst dann wird geprüft, ob eine Flotte geschlagen ist.",
       },
       {
         heading: "Schiffe",
@@ -61,7 +63,9 @@ export const de: Messages = {
     waitingForOpponent: (link) => `Warte auf den Gegner — Link teilen: ${link}`,
     opponentSubmitted: "Der Gegner hat seinen Zug schon beendet.",
     fleet: (count, max) => `Flotte ${count}/${max}`,
-    noFreeSlot: (ship, perLane, perSide) => `kein freier Slot für ${ship} (max. ${perLane} pro Lane, ${perSide} pro Seite).`,
+    noFreeSlot: (ship, perLane, perSide) =>
+      `kein freier Slot für ${ship} (max. ${perLane} pro Lane, ${perSide} pro Seite, eingeplante Schiffe mitgezählt).`,
+    deploysLeft: (count) => (count === 0 ? "alle Schiffe eingeplant" : `noch ${count} ${count === 1 ? "Schiff" : "Schiffe"} zu legen`),
     placeShip: (ship) => `${ship}: leuchtenden Slot antippen. Nochmal auf die Karte klicken nimmt zurück.`,
     noCommandTarget: (command) => `kein eigenes Schiff als Ziel für ${command}.`,
     chooseCommandTarget: (command) => `${command}: eigenes Schiff antippen. Nochmal auf die Karte klicken nimmt zurück.`,
@@ -70,7 +74,7 @@ export const de: Messages = {
     chooseDestination: (command, ship) => `${command}: leuchtenden Slot für ${ship} antippen. Nochmal auf die Karte klicken nimmt zurück.`,
     chooseManeuver: (ship) => `Manöver: leuchtenden Slot für ${ship} antippen; es feuert diese Runde nicht. Nochmal auf das Schiff oder Esc bricht ab.`,
     maneuver: (ship) => `Manöver von ${ship}`,
-    planned: (cards) => `${cards} steht bereit. „Zug beenden“ oder Karte bzw. manövrierendes Schiff antippen zum Zurücknehmen.`,
+    planned: (cards) => `${cards} steht bereit. „Zug beenden“ oder Karte, Geist bzw. manövrierendes Schiff antippen zum Zurücknehmen.`,
     idle: "Schiffs- oder Befehlskarte antippen oder ein eigenes Schiff auf dem Brett, um es zu manövrieren. Ohne Karte „Zug beenden“ (Pass).",
     resolving: "Beide Züge sind aufgedeckt — die Runde wird aufgelöst …",
     matchOver: "Das Match ist beendet.",
@@ -128,6 +132,7 @@ export const de: Messages = {
     opponent_missing: "Der Gegner ist noch nicht beigetreten.",
     already_submitted: "Der Zug dieser Runde ist bereits beendet.",
     ship_not_in_hand: "Diese Schiffskarte ist nicht auf der Hand.",
+    too_many_ships: "So viele Schiffe darfst du in dieser Runde nicht legen.",
     slot_unavailable: "Auf diesem Slot kann kein Schiff landen.",
     command_not_in_hand: "Diese Befehlskarte ist nicht auf der Hand.",
     target_required: "Dieser Befehl braucht ein Ziel.",

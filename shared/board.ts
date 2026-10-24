@@ -36,7 +36,22 @@ export function slotTarget(slot: Slot): SlotTarget {
 
 export const SLOT_COUNT = 6;
 export const MAX_SHIPS_PER_LANE = 4;
-export const MAX_SHIPS_PER_SIDE = 8;
+export const MAX_SHIPS_PER_SIDE = 6;
+
+/** Aufstellung: In Runde 1 darf jede Seite zwei Schiffe legen, danach eines. */
+export function maxDeploys(round: number): number {
+  return round === 1 ? 2 : 1;
+}
+
+/** Ab dieser Runde bekommen alle Kampfschiffe Overdrive, damit Partien nicht im Patt enden. */
+const OVERDRIVE_START = 8;
+/** Alle so viele Runden steigt der Overdrive um 1 ATK. */
+const OVERDRIVE_STEP = 4;
+
+/** ATK-Bonus aller Kampfschiffe in dieser Runde: +1 ab Runde 8, +2 ab Runde 12, +3 ab Runde 16 usw. */
+export function overdriveBonus(round: number): number {
+  return round < OVERDRIVE_START ? 0 : Math.floor((round - OVERDRIVE_START) / OVERDRIVE_STEP) + 1;
+}
 
 export class Slot {
   card: ShipCard | null = null;
@@ -67,8 +82,11 @@ export class Slot {
     return this.isOccupied && this.hp <= 0;
   }
 
+  /** Overdrive (`Board.overdrive`) gilt nur für Kampfschiffe, Support bleibt bei 0. */
   get attack(): number {
-    return this.card ? Math.max(0, this.card.atk + this.signalBoost + this.attackBonus) : 0;
+    if (!this.card) return 0;
+    const overdrive = this.card.atk > 0 ? this.lane.board.overdrive : 0;
+    return Math.max(0, this.card.atk + overdrive + this.signalBoost + this.attackBonus);
   }
 
   /**
@@ -163,6 +181,7 @@ export class Lane {
   readonly slots: readonly Slot[];
 
   constructor(
+    readonly board: Board,
     readonly side: Side,
     readonly type: LaneType,
   ) {
@@ -195,11 +214,13 @@ export function nearest(slots: readonly Slot[], index: number): Slot | null {
 
 export class Board {
   readonly lanes: readonly Lane[] = [
-    new Lane("player", "command"),
-    new Lane("player", "strike"),
-    new Lane("enemy", "strike"),
-    new Lane("enemy", "command"),
+    new Lane(this, "player", "command"),
+    new Lane(this, "player", "strike"),
+    new Lane(this, "enemy", "strike"),
+    new Lane(this, "enemy", "command"),
   ];
+  /** ATK-Bonus aller Kampfschiffe aus der Rundenzahl (`overdriveBonus`); gehört nicht in den Snapshot. */
+  overdrive = 0;
 
   lane(side: Side, type: LaneType): Lane {
     return this.lanes.find((lane) => lane.side === side && lane.type === type)!;
@@ -228,15 +249,22 @@ export class Board {
     return this.ships(side).length;
   }
 
-  canPlace(lane: Lane, slotIndex: number): boolean {
+  /**
+   * Ob ein Schiff auf dem Slot landen kann. `arrivals` sind die übrigen Deploys derselben Seite in
+   * dieser Runde: Ihre Slots gelten als besetzt, sie zählen zur Lane- und zur Flottengrenze.
+   */
+  canPlace(lane: Lane, slotIndex: number, arrivals: readonly SlotTarget[] = []): boolean {
     const slot = lane.slots[slotIndex];
-    if (slot === undefined || slot.isOccupied || lane.isFull) return false;
-    return this.shipCount(lane.side) < MAX_SHIPS_PER_SIDE;
+    if (slot === undefined || slot.isOccupied) return false;
+    const incoming = arrivals.filter((arrival) => arrival.lane === lane.type);
+    if (incoming.some((arrival) => arrival.slotIndex === slotIndex)) return false;
+    if (lane.occupiedSlots.length + incoming.length >= MAX_SHIPS_PER_LANE) return false;
+    return this.shipCount(lane.side) + arrivals.length < MAX_SHIPS_PER_SIDE;
   }
 
   /**
    * Ob das Schiff in `from` in den Slot `index` der anderen Lane wechseln kann. `arrivals` sind die
-   * Slots, die dieselbe Seite in dieser Runde sonst noch belegt: der Deploy (er landet vor allen
+   * Slots, die dieselbe Seite in dieser Runde sonst noch belegt: die Deploys (sie landen vor allen
    * Bewegungen) und das Ziel der zweiten Bewegung (Grundmanöver bzw. Bewegungsbefehl). Sie gelten als
    * besetzt und zählen zur Lane-Grenze. Bewusst streng: Ein Schiff, das seine Lane verlässt, gibt
    * seinen Slot und seinen Platz in der Lane für die anderen Bewegungen dieser Runde nicht frei.

@@ -1,13 +1,13 @@
 // Der Computergegner: plant aus Brett und eigener Hand einen Zug. Er sieht nur,
 // was auch ein Spieler sieht, insbesondere nicht den Plan des Gegners.
-// Faustregeln: immer ein Schiff legen (Kampfschiffe zuerst, robuste nach vorne,
+// Faustregeln: immer so viele Schiffe legen wie erlaubt (Kampfschiffe zuerst, robuste nach vorne,
 // Jäger und Support in einen gedeckten Command-Slot) und den Befehl spielen, der
 // nach grober Schätzung am meisten Schaden anrichtet oder verhindert. Das
 // Grundmanöver nutzt er noch nicht.
 
-import { nearest, opposite, otherLane, SLOT_COUNT, type Board, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
+import { Board, maxDeploys, nearest, opposite, otherLane, SLOT_COUNT, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import type { CommandCard, ShipCard } from "../../shared/cards.ts";
-import type { SlotTarget, TurnPlan } from "../../shared/protocol.ts";
+import type { Deploy, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { highest } from "./resolution.ts";
 
 export interface BotHands {
@@ -21,9 +21,9 @@ const LANE_CENTER = (SLOT_COUNT - 1) / 2;
 /** Ein Abschuss ist mehr wert als der reine Schaden. */
 const KILL_BONUS = 2;
 
-export function planBotTurn(board: Board, bot: BotHands): TurnPlan {
-  const ship = planShip(board, bot);
-  return { ship, command: planCommand(board, bot, ship), maneuver: null };
+export function planBotTurn(board: Board, bot: BotHands, round: number): TurnPlan {
+  const ships = planShips(board, bot, maxDeploys(round));
+  return { ships, command: planCommand(board, bot, ships), maneuver: null };
 }
 
 // --- Schiff ---
@@ -33,11 +33,27 @@ function shipValue(card: ShipCard): number {
   return (card.atk > 0 ? 100 : 0) + card.hp + card.shield + 2 * card.atk;
 }
 
-function planShip(board: Board, bot: BotHands): TurnPlan["ship"] {
-  const card = highest(bot.shipHand, shipValue);
+/** Legt die Schiffe nacheinander: jedes auf ein Brett, auf dem die vorigen schon stehen. */
+function planShips(board: Board, bot: BotHands, count: number): Deploy[] {
+  const ships: Deploy[] = [];
+  const after = new Board();
+  after.load(board.snapshot());
+  const hand = bot.shipHand.map((card, handIndex) => ({ card, handIndex }));
+  for (let i = 0; i < count; i++) {
+    const ship = planShip(after, bot.side, hand.map((entry) => entry.card));
+    if (ship === null) break;
+    const { card, handIndex } = hand.splice(ship.handIndex, 1)[0]!;
+    after.place(after.lane(bot.side, ship.target.lane), ship.target.slotIndex, card);
+    ships.push({ handIndex, target: ship.target });
+  }
+  return ships;
+}
+
+function planShip(board: Board, side: Side, shipHand: readonly ShipCard[]): Deploy | null {
+  const card = highest(shipHand, shipValue);
   if (card === null) return null;
-  const strike = board.lane(bot.side, "strike");
-  const command = board.lane(bot.side, "command");
+  const strike = board.lane(side, "strike");
+  const command = board.lane(side, "command");
   // Ein Strike-Schiff deckt den Command-Slot dahinter: Jäger und Support kommen in einen
   // gedeckten Command-Slot, robuste Schiffe vor ein ungedecktes Command-Schiff, sonst nach vorne.
   const fragile = card.shipClass === "fighter" || card.shipClass === "support";
@@ -45,7 +61,7 @@ function planShip(board: Board, bot: BotHands): TurnPlan["ship"] {
   const preferred = fragile ? free(command, strike) : free(strike, command);
   for (const slot of [nearest(preferred, LANE_CENTER), strike.freeSlotNear(LANE_CENTER), command.freeSlotNear(LANE_CENTER)]) {
     if (slot && board.canPlace(slot.lane, slot.index)) {
-      return { handIndex: bot.shipHand.indexOf(card), target: { lane: slot.lane.type, slotIndex: slot.index } };
+      return { handIndex: shipHand.indexOf(card), target: { lane: slot.lane.type, slotIndex: slot.index } };
     }
   }
   return null;
@@ -59,8 +75,8 @@ interface Option {
   destination: number | null;
 }
 
-function planCommand(board: Board, bot: BotHands, ship: TurnPlan["ship"]): TurnPlan["command"] {
-  const situation = new Situation(board, bot, ship);
+function planCommand(board: Board, bot: BotHands, ships: readonly Deploy[]): TurnPlan["command"] {
+  const situation = new Situation(board, bot, ships);
   let best: (Option & { handIndex: number }) | null = null;
   for (const [handIndex, card] of bot.commandHand.entries()) {
     const option = situation.evaluate(card);
@@ -87,7 +103,7 @@ function damageValue(slot: Slot, amount: number): number {
   return Math.min(amount, remaining) + (remaining <= amount ? KILL_BONUS : 0);
 }
 
-/** Die Lage vor der Bewertung der Befehle; das geplante Schiff zählt schon mit, ist aber noch kein Ziel. */
+/** Die Lage vor der Bewertung der Befehle; die geplanten Schiffe zählen schon mit, sind aber noch kein Ziel. */
 class Situation {
   private readonly side: Side;
   private readonly own: readonly Slot[];
@@ -96,26 +112,27 @@ class Situation {
   private readonly count: Record<LaneType, number>;
   private readonly enemyAttack: number;
   private readonly enemyMaxAttack: number;
-  /** Ob das geplante Schiff vorne mitschießt. */
-  private readonly deploysStrikeAttacker: boolean;
-  private readonly deploy: SlotTarget | null;
+  /** Wie viele der geplanten Schiffe vorne mitschießen. */
+  private readonly strikeAttackerDeploys: number;
+  private readonly deploys: readonly SlotTarget[];
 
   constructor(
     private readonly board: Board,
     private readonly bot: BotHands,
-    ship: TurnPlan["ship"],
+    ships: readonly Deploy[],
   ) {
     this.side = bot.side;
     this.own = board.ships(bot.side);
     this.enemies = board.ships(opposite(bot.side));
+    this.deploys = ships.map((ship) => ship.target);
+    const deploysIn = (lane: LaneType) => this.deploys.filter((deploy) => deploy.lane === lane).length;
     this.count = {
-      strike: this.lane("strike").occupiedSlots.length + (ship?.target.lane === "strike" ? 1 : 0),
-      command: this.lane("command").occupiedSlots.length + (ship?.target.lane === "command" ? 1 : 0),
+      strike: this.lane("strike").occupiedSlots.length + deploysIn("strike"),
+      command: this.lane("command").occupiedSlots.length + deploysIn("command"),
     };
     this.enemyAttack = this.enemies.reduce((total, slot) => total + slot.attack, 0);
     this.enemyMaxAttack = Math.max(0, ...this.enemies.map((slot) => slot.attack));
-    this.deploysStrikeAttacker = ship?.target.lane === "strike" && bot.shipHand[ship.handIndex]!.atk > 0;
-    this.deploy = ship?.target ?? null;
+    this.strikeAttackerDeploys = ships.filter((ship) => ship.target.lane === "strike" && bot.shipHand[ship.handIndex]!.atk > 0).length;
   }
 
   private lane(type: LaneType) {
@@ -127,10 +144,9 @@ class Situation {
     return this.board.isExposed(slot) && slot.hp + slot.shield <= this.enemyMaxAttack;
   }
 
-  /** Ob nach dem Deploy ein Schiff in diesem Slot steht. */
+  /** Ob nach den Deploys ein Schiff in diesem Slot steht. */
   private occupied(lane: LaneType, index: number): boolean {
-    const deploy = this.deploy;
-    return this.lane(lane).slots[index]!.isOccupied || (deploy?.lane === lane && deploy.slotIndex === index);
+    return this.lane(lane).slots[index]!.isOccupied || this.deploys.some((deploy) => deploy.lane === lane && deploy.slotIndex === index);
   }
 
   /**
@@ -140,7 +156,7 @@ class Situation {
    */
   private move(slot: Slot): { destination: Slot; paired: boolean } | null {
     const lane = this.lane(otherLane(slot.lane.type));
-    const free = this.board.moveDestinations(slot, [this.deploy]).map((index) => lane.slots[index]!);
+    const free = this.board.moveDestinations(slot, this.deploys).map((index) => lane.slots[index]!);
     const paired = free.filter((other) => other.index !== slot.index && this.occupied(slot.lane.type, other.index));
     const destination = nearest(paired.length > 0 ? paired : free, slot.index);
     return destination && { destination, paired: paired.length > 0 };
@@ -185,7 +201,7 @@ class Situation {
       case "targeting_jammer":
         return untargeted(this.board.lane(opposite(this.side), "strike").occupiedSlots.filter((slot) => slot.attack > 0).length);
       case "power_surge":
-        return untargeted(this.lane("strike").occupiedSlots.filter(attacks).length + (this.deploysStrikeAttacker ? 1 : 0));
+        return untargeted(this.lane("strike").occupiedSlots.filter(attacks).length + this.strikeAttackerDeploys);
       case "emergency_shields": {
         // Jäger schießen auf das schwächste ungedeckte Schiff: Das bekommt den Schild.
         const target = lowest(this.board.exposedShips(this.side), hp);
@@ -217,8 +233,9 @@ class Situation {
       }
       case "recall": {
         // Zieht ein angeschlagenes Schiff nach hinten und heilt es; vorne muss aber jemand bleiben.
-        if (count.strike < 2) return null;
-        const target = lowest(this.lane("strike").occupiedSlots, hp)!;
+        // Zwei gelegte Schiffe zählen vorne mit, ohne schon auf dem Brett zu stehen.
+        const target = lowest(this.lane("strike").occupiedSlots, hp);
+        if (count.strike < 2 || target === null) return null;
         const healing = Math.min(2, target.card!.hp - target.hp);
         return this.moving(target, healing + (this.endangered(target) && this.pairsAfterMove(target) ? 1.5 : 0));
       }

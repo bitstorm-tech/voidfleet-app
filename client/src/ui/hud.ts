@@ -1,12 +1,13 @@
-// Kopfzeile (Runde + Status), Log-Panel, Befehls-Banner, Ankündigung einer neuen Runde sowie der Aktionsknopf
+// Kopfzeile (Runde, Overdrive ab Runde 8, Status), Log-Panel, Befehls-Banner, Ankündigung einer neuen Runde sowie der Aktionsknopf
 // (Submit, Überspringen oder Computergegner, je nach Lage) als DOM-Overlay.
 
-import type { Side } from "../../../shared/board.ts";
+import { overdriveBonus, type Side } from "../../../shared/board.ts";
 import { playUiSound } from "../audio/uiSounds.ts";
 import { t } from "../i18n/index.ts";
 
 export class Hud {
   private readonly roundLabel: HTMLElement;
+  private readonly overdriveLabel: HTMLElement;
   private readonly statusLabel: HTMLElement;
   private readonly logPanel: HTMLElement;
   private readonly logToggle: HTMLButtonElement;
@@ -25,6 +26,7 @@ export class Hud {
       "beforeend",
       `<div class="top-bar">
         <span class="round-label"></span>
+        <span class="overdrive-label" hidden></span>
         <span class="status-label"></span>
       </div>
       <div class="log-panel">
@@ -39,6 +41,7 @@ export class Hud {
       <div class="round-banner"></div>`,
     );
     this.roundLabel = container.querySelector(".round-label")!;
+    this.overdriveLabel = container.querySelector(".overdrive-label")!;
     this.statusLabel = container.querySelector(".status-label")!;
     this.logPanel = container.querySelector(".log-panel")!;
     this.logToggle = container.querySelector(".log-toggle")!;
@@ -65,6 +68,13 @@ export class Hud {
     this.roundLabel.textContent = t.hud.round(round);
   }
 
+  /** Zeigt den ATK-Bonus aller Kampfschiffe, solange es einen gibt. */
+  setOverdrive(bonus: number): void {
+    this.overdriveLabel.hidden = bonus === 0;
+    this.overdriveLabel.textContent = t.hud.overdrive(bonus);
+    this.overdriveLabel.title = t.hud.overdriveHint(bonus);
+  }
+
   setStatus(text: string): void {
     this.statusLabel.textContent = text;
   }
@@ -83,12 +93,16 @@ export class Hud {
     restartAnimation(this.banner);
   }
 
-  /** Kündigt groß in der Bildmitte an, dass eine neue Runde begonnen hat; blendet sich selbst wieder aus. */
+  /** Kündigt groß in der Bildmitte an, dass eine neue Runde begonnen hat, samt steigendem Overdrive; blendet sich selbst wieder aus. */
   showRoundBanner(round: number): void {
     this.roundBanner.replaceChildren(
       Object.assign(document.createElement("span"), { textContent: t.hud.newRound }),
       Object.assign(document.createElement("strong"), { textContent: t.hud.round(round) }),
     );
+    const bonus = overdriveBonus(round);
+    if (bonus > overdriveBonus(round - 1)) {
+      this.roundBanner.append(Object.assign(document.createElement("em"), { textContent: t.hud.overdriveHint(bonus) }));
+    }
     restartAnimation(this.roundBanner);
     playUiSound("round");
   }
