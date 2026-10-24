@@ -146,6 +146,16 @@ body {
   right: 80px;
 }
 
+.surrender-toggle {
+  position: absolute;
+  top: 8px;
+  right: 116px;
+}
+
+.surrender-toggle[hidden] {
+  display: none;
+}
+
 .log-text {
   display: none;
   width: 420px;
@@ -275,6 +285,35 @@ body {
 
 .rules-dialog {
   width: 520px;
+}
+
+.surrender-text {
+  margin: 0 0 20px;
+  max-width: 360px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.surrender-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+#ui .surrender-actions button {
+  margin: 0;
+  padding: 8px 24px;
+  font-size: 15px;
+}
+
+#ui .surrender-confirm {
+  font-weight: 600;
+  border-color: rgb(var(--lost) / 0.7);
+}
+
+#ui .surrender-confirm:hover {
+  background: rgb(var(--lost) / 0.25);
 }
 
 .rules-body {

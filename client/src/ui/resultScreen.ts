@@ -1,5 +1,5 @@
 // Ergebnis-Overlay nach Matchende: Sieg, Niederlage oder Unentschieden groß
-// in der Bildmitte. „Brett ansehen“ blendet es aus und lässt ein Abzeichen in der
+// in der Bildmitte, nach einer Aufgabe mit entsprechendem Untertitel. „Brett ansehen“ blendet es aus und lässt ein Abzeichen in der
 // Kopfzeile stehen, über das es wieder aufgeht; „Neues Match“ legt ein neues an, ohne die Seite neu zu laden.
 // Solange das Match entschieden ist, trägt der UI-Container die Klasse `match-over`.
 // Beim Erscheinen erklingt eine Fanfare, bei Niederlage und Unentschieden eine düstere.
@@ -50,7 +50,7 @@ export class ResultScreen {
   }
 
   /** Öffnet das Overlay, sobald ein Ergebnis feststeht; bleibt danach in der Hand des Spielers. */
-  show(result: MatchResult | null, round: number): void {
+  show(result: MatchResult | null, round: number, surrendered: boolean): void {
     if (result === this.result) return;
     this.result = result;
     this.container.classList.toggle("match-over", result !== null);
@@ -63,7 +63,7 @@ export class ResultScreen {
     this.overlay.dataset.result = result;
     this.badge.dataset.result = result;
     this.title.textContent = text.title;
-    this.subtitle.textContent = text.subtitle;
+    this.subtitle.textContent = surrendered && result !== "draw" ? t.result.surrendered[result] : text.subtitle;
     this.rounds.textContent = t.result.rounds(round);
     this.badge.textContent = text.title;
     this.setOpen(true);

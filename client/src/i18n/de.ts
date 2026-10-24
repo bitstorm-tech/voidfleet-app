@@ -52,6 +52,11 @@ export const de: Messages = {
   dialog: {
     close: "Schließen",
   },
+  surrender: {
+    title: "Aufgeben",
+    question: "Dieses Match aufgeben? Dein Gegner gewinnt sofort.",
+    confirm: "Aufgeben",
+  },
   loading: {
     assets: (percent) => `Lade Assets … ${percent} %`,
     failed: "Laden fehlgeschlagen — lade die Seite neu.",
@@ -83,6 +88,7 @@ export const de: Messages = {
     won: { title: "Sieg", subtitle: "Die gegnerische Flotte ist vernichtet." },
     lost: { title: "Niederlage", subtitle: "Deine Flotte ist vernichtet." },
     draw: { title: "Unentschieden", subtitle: "Beide Flotten sind vernichtet." },
+    surrendered: { won: "Der Gegner hat aufgegeben.", lost: "Du hast aufgegeben." },
     rounds: (round) => `Entschieden in Runde ${round}`,
     viewBoard: "Brett ansehen",
     newMatch: "Neues Match",

@@ -322,6 +322,23 @@ test("Wer am Rundenende weder auf dem Feld noch auf der Hand ein Kampfschiff hat
   expect(match.submit(0, pass)).toBe("match_over");
 });
 
+test("Wer aufgibt, verliert sofort, auch mit abgegebenem Zug; danach gibt es keine Züge mehr", () => {
+  const match = startedMatch();
+  expect(match.submit(0, pass)).toBeNull();
+  expect(match.surrender(1)).toBeNull();
+  expect(match.view(0)).toMatchObject({ result: "won", surrendered: true, submittedPlan: null });
+  expect(match.view(1)).toMatchObject({ result: "lost", surrendered: true });
+  expect(match.isRoundComplete).toBe(false);
+  expect(match.submit(1, pass)).toBe("match_over");
+  expect(match.surrender(0)).toBe("match_over");
+});
+
+test("Aufgeben geht erst, wenn der Gegner da ist", () => {
+  const match = new Match("test");
+  match.join("a");
+  expect(match.surrender(0)).toBe("opponent_missing");
+});
+
 test("Ohne Kampfschiff auf dem Feld geht es weiter, solange eines auf der Hand liegt", () => {
   const match = startedMatch();
   setShipHands(match, [interceptor], [interceptor]);

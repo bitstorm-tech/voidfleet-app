@@ -57,6 +57,15 @@ function onSubmit(socket: Socket, room: Room, seat: Seat, plan: TurnPlan): void 
   broadcastState(room);
 }
 
+function onSurrender(socket: Socket, room: Room, seat: Seat): void {
+  const error = room.match.surrender(seat);
+  if (error) {
+    send(socket, { type: "error", code: error });
+    return;
+  }
+  broadcastState(room);
+}
+
 function onAddBot(socket: Socket, room: Room): void {
   if (room.match.addBot() === null) {
     send(socket, { type: "error", code: "match_full" });
@@ -101,6 +110,7 @@ const server = Bun.serve({
       const message = JSON.parse(String(raw)) as ClientMessage;
       const room = roomFor(socket.data.matchId);
       if (message.type === "submit") onSubmit(socket, room, seat, message.plan);
+      else if (message.type === "surrender") onSurrender(socket, room, seat);
       else onAddBot(socket, room);
     },
     close(socket) {

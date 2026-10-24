@@ -57,6 +57,8 @@ export interface PlayerView {
   opponent: { joined: boolean; submitted: boolean };
   /** Gesetzt, sobald das Match entschieden ist; danach gibt es keine Züge mehr. */
   result: MatchResult | null;
+  /** Das Match endete, weil ein Spieler aufgegeben hat; wer, folgt aus `result`. */
+  surrendered: boolean;
 }
 
 /** HP und Schild eines Schiffs nach einem Ereignis, damit der Client die Runde Schritt für Schritt zeigen kann. */
@@ -102,8 +104,9 @@ export type RoundEvent =
 /**
  * Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`.
  * `addBot` setzt den Computergegner auf den freien Platz, statt auf einen Menschen zu warten.
+ * `surrender` gibt das Match auf, jederzeit, auch nach abgegebenem Zug; der Gegner gewinnt sofort.
  */
-export type ClientMessage = { type: "submit"; plan: TurnPlan } | { type: "addBot" };
+export type ClientMessage = { type: "submit"; plan: TurnPlan } | { type: "addBot" } | { type: "surrender" };
 
 /** Fehler werden als Code übertragen, der Client formuliert sie in seiner Sprache. */
 export type ErrorCode =

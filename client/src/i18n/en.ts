@@ -64,6 +64,11 @@ export const en = {
   dialog: {
     close: "Close",
   },
+  surrender: {
+    title: "Surrender",
+    question: "Give up this match? Your opponent wins immediately.",
+    confirm: "Surrender",
+  },
   loading: {
     assets: (percent: number) => `Loading assets … ${percent} %`,
     failed: "Loading failed — reload the page.",
@@ -96,6 +101,7 @@ export const en = {
     won: { title: "Victory", subtitle: "The enemy fleet is destroyed." },
     lost: { title: "Defeat", subtitle: "Your fleet is destroyed." },
     draw: { title: "Draw", subtitle: "Both fleets are destroyed." },
+    surrendered: { won: "The opponent has surrendered.", lost: "You surrendered." } satisfies Record<Exclude<MatchResult, "draw">, string>,
     rounds: (round: number) => `Decided in round ${round}`,
     viewBoard: "View board",
     newMatch: "New match",

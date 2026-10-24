@@ -37,6 +37,7 @@ import { LoadingScreen } from "./ui/loadingScreen.ts";
 import { ResultScreen } from "./ui/resultScreen.ts";
 import { RulesDialog } from "./ui/rulesDialog.ts";
 import { SettingsDialog } from "./ui/settingsDialog.ts";
+import { SurrenderDialog } from "./ui/surrenderDialog.ts";
 
 export class MatchController {
   private readonly match = new Match();
@@ -45,6 +46,7 @@ export class MatchController {
   private readonly hand: HandView;
   private readonly playback: RoundPlayback;
   private readonly resultScreen: ResultScreen;
+  private readonly surrenderDialog: SurrenderDialog;
   private connection: ServerConnection;
   private isConnected = true;
   /**
@@ -72,6 +74,7 @@ export class MatchController {
     this.resultScreen = new ResultScreen(ui, () => this.startNewMatch());
     new SettingsDialog(ui);
     new RulesDialog(ui);
+    this.surrenderDialog = new SurrenderDialog(ui, () => this.connection.send({ type: "surrender" }));
     this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton, this.hud.botButton], {
       onShipCardClick: (index) => this.onShipCardClick(index),
       onCommandCardClick: (index) => this.onCommandCardClick(index),
@@ -137,7 +140,7 @@ export class MatchController {
         this.maneuverSource = null;
         this.syncBoard();
         this.refreshSelectionVisuals();
-        this.resultScreen.show(this.match.result, this.match.round);
+        this.resultScreen.show(this.match.result, this.match.round, this.match.surrendered);
         if (isNewRound) this.hud.showRoundBanner(this.match.round);
         break;
       }
@@ -529,6 +532,7 @@ export class MatchController {
     this.hud.showAction(this.isResolving ? "skip" : waitingForOpponent ? "bot" : "submit");
     this.hud.submitButton.disabled = !this.canPlan || !this.match.opponent.joined;
     this.hud.submitButton.textContent = this.match.submitted ? t.hud.waiting : t.hud.endTurn;
+    this.surrenderDialog.setAvailable(this.isConnected && this.match.opponent.joined && this.match.result === null);
   }
 
   private buildStatusText(): string {

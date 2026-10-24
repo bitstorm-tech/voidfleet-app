@@ -109,6 +109,8 @@ export class Match {
   round = 1;
   /** Gewinner aus Sicht des Bretts, "draw" bei Gleichstand; null, solange gespielt wird. */
   winner: Side | "draw" | null = null;
+  /** Wer aufgegeben hat; null, wenn das Match auf dem Brett entschieden wurde oder noch läuft. */
+  surrenderedBy: Side | null = null;
 
   constructor(readonly id: string) {}
 
@@ -144,6 +146,17 @@ export class Match {
     for (const bot of this.players) {
       if (bot.isBot && bot.plan === null) bot.plan = planBotTurn(this.board, bot, this.round);
     }
+    return null;
+  }
+
+  /** Gibt das Match auf: Der Gegner gewinnt sofort, ein abgegebener Zug verfällt. */
+  surrender(seat: Seat): ErrorCode | null {
+    if (this.players.length < 2) return "opponent_missing";
+    if (this.winner !== null) return "match_over";
+    const side = SEAT_SIDE[seat];
+    this.surrenderedBy = side;
+    this.winner = opposite(side);
+    for (const player of this.players) player.plan = null;
     return null;
   }
 
@@ -292,6 +305,7 @@ export class Match {
       submittedPlan: player.plan,
       opponent: { joined: opponent !== undefined, submitted: opponent?.plan != null },
       result: this.resultFor(seat),
+      surrendered: this.surrenderedBy !== null,
     };
   }
 

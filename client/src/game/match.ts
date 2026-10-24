@@ -26,6 +26,7 @@ export class Match {
   submitted = false;
   opponent = { joined: false, submitted: false };
   result: MatchResult | null = null;
+  surrendered = false;
 
   get plannedShips(): ShipCard[] {
     return this.plan.ships.map((ship) => this.shipHand[ship.handIndex]!);
@@ -166,5 +167,6 @@ export class Match {
     this.commandDeckSize = view.commandDeckSize;
     this.opponent = view.opponent;
     this.result = view.result;
+    this.surrendered = view.surrendered;
   }
 }
