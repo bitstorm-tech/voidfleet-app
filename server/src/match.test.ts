@@ -135,24 +135,46 @@ test("Ein Befehl auf das gelegte Schiff wirkt in derselben Runde", () => {
 const strike = (slotIndex: number): SlotTarget => ({ lane: "strike", slotIndex });
 const command = (slotIndex: number): SlotTarget => ({ lane: "command", slotIndex });
 
-test("Das Grundmanöver verlegt ein eigenes Schiff vom Brett in einen freien Slot der anderen Lane", () => {
+test("Das Grundmanöver verlegt ein eigenes Schiff vom Brett in einen freien Slot, auch in derselben Lane", () => {
   const match = startedMatch();
   const player = match.players[0]!;
   const ship = player.shipHand[0]!;
   match.board.place(match.board.lane("player", "strike"), 1, ship);
   match.board.place(match.board.lane("player", "command"), 3, ship);
-  const maneuver = (from: SlotTarget, destination: number, deployTo: SlotTarget | null = null): TurnPlan => ({
+  const maneuver = (from: SlotTarget, destination: SlotTarget, deployTo: SlotTarget | null = null): TurnPlan => ({
     ships: deployTo ? [{ handIndex: 0, target: deployTo }] : [],
     command: null,
     maneuver: { ship: from, destination },
   });
-  expect(match.submit(0, maneuver(strike(0), 2))).toBe("maneuver_not_own_ship");
+  expect(match.submit(0, maneuver(strike(0), command(2)))).toBe("maneuver_not_own_ship");
   // Das gelegte Schiff ist noch nicht auf dem Brett und manövriert nicht.
-  expect(match.submit(0, maneuver(strike(2), 2, strike(2)))).toBe("maneuver_not_own_ship");
-  expect(match.submit(0, maneuver(strike(1), 3))).toBe("maneuver_destination_unavailable");
-  expect(match.submit(0, maneuver(strike(1), 6))).toBe("maneuver_destination_unavailable");
-  expect(match.submit(0, maneuver(strike(1), 2, command(2)))).toBe("maneuver_destination_unavailable");
-  expect(match.submit(0, maneuver(strike(1), 1))).toBeNull();
+  expect(match.submit(0, maneuver(strike(2), command(2), strike(2)))).toBe("maneuver_not_own_ship");
+  expect(match.submit(0, maneuver(strike(1), command(3)))).toBe("maneuver_destination_unavailable");
+  expect(match.submit(0, maneuver(strike(1), command(6)))).toBe("maneuver_destination_unavailable");
+  expect(match.submit(0, maneuver(strike(1), command(2), command(2)))).toBe("maneuver_destination_unavailable");
+  expect(match.submit(0, maneuver(strike(1), strike(1)))).toBe("maneuver_destination_unavailable");
+  expect(match.submit(0, maneuver(strike(1), strike(4), strike(4)))).toBe("maneuver_destination_unavailable");
+  expect(match.submit(0, maneuver(strike(1), strike(4)))).toBeNull();
+});
+
+test("Innerhalb der Lane manövriert ein Schiff auch in einer vollen Lane, etwa in die Deckung", () => {
+  const match = startedMatch();
+  const player = match.players[0]!;
+  const drone = shipById("repair_drone");
+  match.board.place(match.board.lane("player", "strike"), 2, player.shipHand[0]!);
+  for (const index of [0, 3, 4, 5]) match.board.place(match.board.lane("player", "command"), index, drone);
+  const lane = match.board.lane("player", "command");
+  expect(match.board.isExposed(lane.slots[0]!)).toBe(true);
+  // In die volle Command-Lane wechselt niemand, innerhalb von ihr schon.
+  expect(match.board.canMove(match.board.lane("player", "strike").slots[2]!, command(1))).toBe(false);
+  expect(match.submit(0, { ships: [], command: null, maneuver: { ship: command(0), destination: command(2) } })).toBeNull();
+  match.submit(1, pass);
+  const events = match.resolveRound();
+
+  expect(events.find((event) => event.kind === "maneuver")).toMatchObject({ ship: { lane: "command", slotIndex: 0 }, to: command(2) });
+  expect(lane.slots[0]!.isOccupied).toBe(false);
+  expect(lane.slots[2]!.card?.id).toBe("repair_drone");
+  expect(match.board.isExposed(lane.slots[2]!)).toBe(false);
 });
 
 test("Manöver und Bewegungsbefehl bewegen verschiedene Schiffe in verschiedene Slots, zusammen mit dem Deploy unter der Lane-Grenze", () => {
@@ -162,18 +184,18 @@ test("Manöver und Bewegungsbefehl bewegen verschiedene Schiffe in verschiedene 
   for (const index of [1, 4]) match.board.place(match.board.lane("player", "strike"), index, ship);
   for (const index of [3, 5]) match.board.place(match.board.lane("player", "command"), index, ship);
   player.commandHand.splice(0, player.commandHand.length, commandById("flanking_maneuver"));
-  const plan = (deployTo: SlotTarget | null, from: SlotTarget, destination: number, flankFrom: SlotTarget, flankTo: number): TurnPlan => ({
+  const plan = (deployTo: SlotTarget | null, from: SlotTarget, destination: SlotTarget, flankFrom: SlotTarget, flankTo: number): TurnPlan => ({
     ships: deployTo ? [{ handIndex: 0, target: deployTo }] : [],
     command: { handIndex: 0, target: flankFrom, destination: flankTo },
     maneuver: { ship: from, destination },
   });
-  expect(match.submit(0, plan(null, strike(1), 2, strike(1), 4))).toBe("maneuver_conflict");
-  expect(match.submit(0, plan(null, strike(1), 2, strike(4), 2))).toBe("destination_unavailable");
+  expect(match.submit(0, plan(null, strike(1), command(2), strike(1), 4))).toBe("maneuver_conflict");
+  expect(match.submit(0, plan(null, strike(1), command(2), strike(4), 2))).toBe("destination_unavailable");
   // Der Slot, den das Manöver räumt, bleibt für den Befehl belegt.
-  expect(match.submit(0, plan(null, command(3), 2, strike(1), 3))).toBe("destination_unavailable");
+  expect(match.submit(0, plan(null, command(3), strike(2), strike(1), 3))).toBe("destination_unavailable");
   // Command: 2 Schiffe + Deploy + Manöver = 4, für den Befehl ist kein Platz mehr; ohne Deploy schon.
-  expect(match.submit(0, plan(command(0), strike(1), 2, strike(4), 4))).toBe("destination_unavailable");
-  expect(match.submit(0, plan(null, strike(1), 2, strike(4), 4))).toBeNull();
+  expect(match.submit(0, plan(command(0), strike(1), command(2), strike(4), 4))).toBe("destination_unavailable");
+  expect(match.submit(0, plan(null, strike(1), command(2), strike(4), 4))).toBeNull();
 });
 
 test("Ein Befehl auf das manövrierte Schiff folgt ihm; es feuert nicht, wird aber beschossen", () => {
@@ -186,7 +208,7 @@ test("Ein Befehl auf das manövrierte Schiff folgt ihm; es feuert nicht, wird ab
   const overchargeAndManeuver: TurnPlan = {
     ships: [],
     command: { handIndex: 0, target: strike(0), destination: null },
-    maneuver: { ship: strike(0), destination: 2 },
+    maneuver: { ship: strike(0), destination: command(2) },
   };
   expect(match.submit(0, overchargeAndManeuver)).toBeNull();
   match.submit(1, pass);
@@ -396,7 +418,7 @@ test("Seat 1 schießt einen Torpedo: Er trifft den gespiegelten Brett-Slot, nach
     effect: { type: "damage", amount: 5 },
   });
 
-  match.submit(0, { ships: [], command: null, maneuver: { ship: strike(2), destination: 3 } });
+  match.submit(0, { ships: [], command: null, maneuver: { ship: strike(2), destination: command(3) } });
   match.submit(1, torpedo);
   const missed = match.resolveRound();
   const miss: RoundEvent = { kind: "miss", side: "enemy", cardId: "torpedo", target: { side: "player", ...strike(2) } };

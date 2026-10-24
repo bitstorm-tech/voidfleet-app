@@ -92,7 +92,7 @@ export class MatchScene {
   readonly pads: SlotPad[] = [];
   readonly padsByLane = new Map<Lane, SlotPad[]>();
   readonly effects: BoardEffects;
-  /** Pfeile der beiden möglichen Lane-Wechsel eines Zugs: Bewegungsbefehl und Grundmanöver. */
+  /** Pfeile der beiden möglichen Bewegungen eines Zugs: Bewegungsbefehl und Grundmanöver. */
   readonly moveArrow: MoveArrow;
   readonly maneuverArrow: MoveArrow;
   /** Zielslot des Torpedos auf der Gegnerseite. */

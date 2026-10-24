@@ -26,15 +26,15 @@ export interface Deploy {
  * Der Zug einer Runde: bis zu `maxDeploys` Schiffe (in Runde 1 zwei, sonst eines, in verschiedene
  * Slots) und 1 Befehl, jeweils per Hand-Index, dazu höchstens ein Grundmanöver. Ziele liegen auf der eigenen Seite, nur das Ziel eines Befehls mit `choose_enemy_slot`
  * (Torpedo) ist ein Slot der Gegnerseite, auch ein leerer. Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane,
- * sonst null. Das Manöver verlegt ein eigenes Schiff, das schon auf dem Brett steht, in den Slot
- * `destination` der anderen Lane; dafür feuert es in dieser Runde nicht. Eigene Ziele beziehen sich auf
+ * sonst null. Das Manöver verlegt ein eigenes Schiff, das schon auf dem Brett steht, in den freien Slot
+ * `destination` der anderen oder derselben Lane; dafür feuert es in dieser Runde nicht. Eigene Ziele beziehen sich auf
  * die Stellung vor dem Manöver: Ein Befehl auf das manövrierte Schiff folgt ihm. Ein Slot der Gegnerseite
  * bleibt, was er ist: Getroffen wird, wer nach allen Bewegungen dort steht.
  */
 export interface TurnPlan {
   ships: Deploy[];
   command: { handIndex: number; target: SlotTarget | null; destination: number | null } | null;
-  maneuver: { ship: SlotTarget; destination: number } | null;
+  maneuver: { ship: SlotTarget; destination: SlotTarget } | null;
 }
 
 /** Ein Schiff an einer Stelle des Bretts; die Karte steht dabei, weil der Slot danach leer sein kann. */

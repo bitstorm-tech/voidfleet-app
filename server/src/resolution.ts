@@ -49,7 +49,7 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
 
 // --- Manöver ---
 
-/** Grundmanöver: Das Schiff wechselt in den freien Slot der anderen Lane und feuert dafür in dieser Runde nicht. */
+/** Grundmanöver: Das Schiff wechselt in einen freien Slot, in der anderen oder derselben Lane, und feuert dafür in dieser Runde nicht. */
 export function resolveManeuver(from: Slot, to: Slot, events: RoundEvent[]): void {
   const ship = shipRef(from);
   to.takeFrom(from);

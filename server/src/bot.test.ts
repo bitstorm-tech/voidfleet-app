@@ -175,10 +175,24 @@ test("Ein angeschlagenes Strike-Schiff, das sonst fällt, zieht sich hinter ein 
   place(board, "player", "strike", 2, "plasma_frigate").hp = 2;
   place(board, "player", "strike", 3, "iron_dreadnought");
   const enemy = place(board, "enemy", "strike", 2, "void_interceptor");
-  expect(planTurn(board, hands([], [])).maneuver).toEqual({ ship: { lane: "strike", slotIndex: 2 }, destination: 3 });
+  expect(planTurn(board, hands([], [])).maneuver).toEqual({ ship: { lane: "strike", slotIndex: 2 }, destination: { lane: "command", slotIndex: 3 } });
   // Zerstört sein Schuss den Gegner, ist er mehr wert als die 2 HP: Die Fregatte bleibt und tauscht.
   enemy.hp = 3;
   expect(planTurn(board, hands([], [])).maneuver).toBeNull();
+});
+
+test("Ein ungedecktes Support-Schiff hinten rückt innerhalb der Lane hinter ein Strike-Schiff", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  place(board, "player", "command", 0, "repair_drone");
+  place(board, "enemy", "strike", 2, "void_interceptor");
+  expect(planTurn(board, hands([], [])).maneuver).toEqual({ ship: { lane: "command", slotIndex: 0 }, destination: { lane: "command", slotIndex: 2 } });
+  // Ist es schon gedeckt, bleibt es stehen.
+  const covered = new Board();
+  place(covered, "player", "strike", 2, "iron_dreadnought");
+  place(covered, "player", "command", 2, "repair_drone");
+  place(covered, "enemy", "strike", 2, "void_interceptor");
+  expect(planTurn(covered, hands([], [])).maneuver).toBeNull();
 });
 
 test("Das einzige angriffsfähige Schiff manövriert nicht", () => {
@@ -208,7 +222,7 @@ test("Manöver und Bewegungsbefehl verlegen verschiedene Schiffe in verschiedene
   // Recall holt die erste Fregatte hinter die zweite; die zieht sich hinter den Dreadnought zurück,
   // weil Command-Slot 2 schon vergeben und Slot 1 nach dem Recall ungedeckt ist.
   expect(plan.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 1 }, destination: 2 });
-  expect(plan.maneuver).toEqual({ ship: { lane: "strike", slotIndex: 2 }, destination: 3 });
+  expect(plan.maneuver).toEqual({ ship: { lane: "strike", slotIndex: 2 }, destination: { lane: "command", slotIndex: 3 } });
   expect(match.submit(0, plan)).toBeNull();
 });
 

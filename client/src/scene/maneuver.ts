@@ -2,6 +2,8 @@
 // wie nachher mit der Nase zum Gegner: Nach vorn (Command → Strike) schwenken sie
 // in einer S-Kurve in den neuen Slot, nach hinten (Strike → Command) fliegen sie
 // eine Schleife — erst vom Ziel weg nach außen herum, dann von hinten in den Slot.
+// Innerhalb der Lane versetzen sie seitlich, mit der Nase nach vorn und Schräglage in
+// Flugrichtung.
 // Gerechnet wird im Raum des Ziel-Ankers: x seitlich, z nach vorn, Ziel im Ursprung.
 // Wie wendig ein Schiff ist, legt seine Klasse fest: Jäger fliegen schnell, eng und
 // mit starker Schräglage, Schlachtschiffe beschleunigen träge und ziehen weite Bögen.
@@ -33,6 +35,10 @@ const SWERVE_HEIGHT_PER_UNIT = 0.25;
 const SWERVE_MAX_HEIGHT = 1;
 /** Die Wende in den Slot ist enger als die erste, damit die Schleife hinter der Command-Lane im Bild bleibt. */
 const FINAL_TURN = 0.7;
+/** Schräglage beim seitlichen Versetzen, relativ zur größten Schräglage der Klasse. */
+const STRAFE_BANK = 0.6;
+/** Bis zu diesem Längsabstand zum Ziel gilt ein Wechsel als innerhalb der Lane. */
+const SAME_LANE_TOLERANCE = 0.01;
 /** Bézier-Hebel für einen Viertelkreis, relativ zum Radius. */
 const QUARTER_CIRCLE = 0.5523;
 const SAMPLES_PER_SEGMENT = 48;
@@ -55,6 +61,8 @@ export class Maneuver {
   readonly duration: number;
   private readonly handling: Handling;
   private readonly height: number;
+  /** Seitliches Versetzen innerhalb der Lane: -1 nach links, 1 nach rechts, sonst 0. */
+  private readonly strafe: number;
   /** Abgetastete Bahn: Punkte, zurückgelegte Strecke, Kurs und geglättete Krümmung je Punkt. */
   private readonly points: Point[] = [];
   private readonly distances: number[] = [];
@@ -64,8 +72,10 @@ export class Maneuver {
   constructor(from: { x: number; z: number }, shipClass: ShipClass) {
     this.handling = HANDLING[shipClass];
     const start: Point = [from.x, from.z];
-    const isLoop = from.z > 0;
-    const segments = isLoop ? loop(start, this.handling.turnRadius) : swerve(start);
+    const isSameLane = Math.abs(from.z) < SAME_LANE_TOLERANCE;
+    const isLoop = !isSameLane && from.z > 0;
+    this.strafe = isSameLane ? -Math.sign(from.x) : 0;
+    const segments = isSameLane ? sidestep(start) : isLoop ? loop(start, this.handling.turnRadius) : swerve(start);
     this.height = isLoop ? LOOP_HEIGHT : Math.min(SWERVE_HEIGHT_PER_UNIT * Math.abs(from.x), SWERVE_MAX_HEIGHT);
     this.sample(segments);
     this.duration = (this.length / this.handling.speed / (1 - this.handling.acceleration)) * 1000;
@@ -84,14 +94,14 @@ export class Maneuver {
     const f = span > 0 ? (distance - this.distances[i]!) / span : 0;
     const [x0, z0] = this.points[i]!;
     const [x1, z1] = this.points[i + 1]!;
-    const yaw = lerpAngle(this.yaws[i]!, this.yaws[i + 1]!, f);
+    const yaw = this.strafe !== 0 ? 0 : lerpAngle(this.yaws[i]!, this.yaws[i + 1]!, f);
     const curvature = this.curvatures[i]! + (this.curvatures[i + 1]! - this.curvatures[i]!) * f;
 
     const phase = (Math.PI * distance) / this.length;
     const y = this.height * Math.sin(phase) ** 2;
     const climb = ((this.height * Math.PI) / this.length) * Math.sin(2 * phase);
     // Schräglage braucht Fahrt: Sie wächst mit Krümmung und Geschwindigkeit; Rechtskurve = rechte Seite runter.
-    const turn = Math.max(-1, Math.min(1, curvature * this.handling.turnRadius));
+    const turn = this.strafe !== 0 ? STRAFE_BANK * this.strafe : Math.max(-1, Math.min(1, curvature * this.handling.turnRadius));
     return {
       x: x0 + (x1 - x0) * f,
       y,
@@ -164,6 +174,11 @@ export class Maneuver {
 function swerve(start: Point): Point[][] {
   const lever = -start[1] / 2;
   return [[start, [start[0], start[1] + lever], [0, -lever], [0, 0]]];
+}
+
+/** Innerhalb der Lane: geradewegs seitlich in den Slot. */
+function sidestep(start: Point): Point[][] {
+  return [[start, [(start[0] * 2) / 3, 0], [start[0] / 3, 0], [0, 0]]];
 }
 
 /**

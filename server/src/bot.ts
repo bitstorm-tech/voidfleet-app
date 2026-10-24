@@ -3,10 +3,11 @@
 // Faustregeln: immer so viele Schiffe legen wie erlaubt (Kampfschiffe zuerst, robuste nach vorne,
 // Jäger und Support in einen gedeckten Command-Slot), den Befehl spielen, der nach grober
 // Schätzung am meisten Schaden anrichtet oder verhindert, und das Grundmanöver nutzen, um ein
-// Schiff zu retten oder ein anderes zu decken. Ab und zu weicht er einem vermuteten Torpedo aus
-// oder zielt auf ein Ausweichmanöver, damit ihn ein Mensch nicht einfach berechnen kann.
+// Schiff zu retten, in Deckung zu bringen oder ein anderes zu decken. Ab und zu weicht er einem
+// vermuteten Torpedo aus oder zielt auf ein Ausweichmanöver, damit ihn ein Mensch nicht einfach
+// berechnen kann.
 
-import { Board, maxDeploys, nearest, opposite, otherLane, SLOT_COUNT, slotTarget, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
+import { Board, maxDeploys, nearest, opposite, SLOT_COUNT, slotTarget, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import type { CommandCard, ShipCard } from "../../shared/cards.ts";
 import type { Deploy, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
 import { highest, resolveCombat } from "./resolution.ts";
@@ -103,7 +104,7 @@ interface Option {
   destination: Slot | null;
 }
 
-/** Ein Lane-Wechsel dieser Runde, per Grundmanöver oder Befehl. */
+/** Eine Bewegung dieser Runde, per Grundmanöver oder Befehl. */
 interface Move {
   ship: Slot;
   destination: Slot;
@@ -204,8 +205,7 @@ class Situation {
    * bildet nur noch dort ein Paar. null, wenn die andere Lane keinen Platz hat.
    */
   private move(slot: Slot, other: Move | null = null): { destination: Slot; paired: boolean } | null {
-    const lane = this.board.lane(slot.lane.side, otherLane(slot.lane.type));
-    const free = this.board.moveDestinations(slot, other ? [slotTarget(other.destination)] : []).map((index) => lane.slots[index]!);
+    const free = this.board.laneSwitchDestinations(slot, other ? [slotTarget(other.destination)] : []);
     const partner = (index: number) => {
       const neighbour = slot.lane.slots[index]!;
       return neighbour === other?.destination || (neighbour.isOccupied && neighbour !== slot && neighbour !== other?.ship);
@@ -357,14 +357,17 @@ class Situation {
 
   /**
    * Das Grundmanöver neben dem geplanten Befehl: Es lässt dessen Zielschiff in Ruhe und meidet den Slot,
-   * in den der Befehl verlegt. Erst Rückzug, dann Vorrücken, sonst selten ein Ausweichen.
+   * in den der Befehl verlegt. Erst Rückzug, dann Deckung, dann Vorrücken, sonst selten ein Ausweichen.
    */
   planManeuver(command: Option | null): TurnPlan["maneuver"] {
     const other = command?.destination ? { ship: command.target!, destination: command.destination } : null;
     const movable = this.settled(this.own).filter((slot) => slot !== command?.target);
     const move =
-      this.retreat(movable, other) ?? this.advance(movable, other) ?? (this.random() < SURPRISE_CHANCE ? this.dodge(movable, other) : null);
-    return move && { ship: slotTarget(move.ship), destination: move.destination.index };
+      this.retreat(movable, other) ??
+      this.takeCover(movable, other) ??
+      this.advance(movable, other) ??
+      (this.random() < SURPRISE_CHANCE ? this.dodge(movable, other) : null);
+    return move && { ship: slotTarget(move.ship), destination: slotTarget(move.destination) };
   }
 
   /** Kampfschiffe vorne, nachdem `other` die Lane gewechselt hat; `except` zählt nicht mit. */
@@ -395,6 +398,26 @@ class Situation {
     );
     const ship = highest(candidates, (slot) => this.loss(slot) - this.shotValue(slot));
     return ship && { ship, destination: this.move(ship, other)!.destination };
+  }
+
+  /**
+   * Deckung: Ein ungedecktes Command-Schiff, das im Kampf mehr verliert, als sein Schuss bringt, rückt
+   * innerhalb der Lane hinter ein Strike-Schiff, das stehen bleibt (oder hinter das Ziel von `other`).
+   */
+  private takeCover(movable: readonly Slot[], other: Move | null): Move | null {
+    const covered = (slot: Slot) => {
+      const front = this.lane("strike").slots[slot.index]!;
+      return front === other?.destination || (front.isOccupied && front !== other?.ship);
+    };
+    const shelter = (slot: Slot) => {
+      const free = this.board.maneuverDestinations(slot, other ? [slotTarget(other.destination)] : []);
+      return nearest(free.filter((destination) => destination.lane === slot.lane && covered(destination)), slot.index);
+    };
+    const candidates = movable.filter(
+      (slot) => slot.lane.type === "command" && this.board.isExposed(slot) && this.loss(slot) > this.shotValue(slot) && shelter(slot),
+    );
+    const ship = highest(candidates, (slot) => this.loss(slot) - this.shotValue(slot));
+    return ship && { ship, destination: shelter(ship)! };
   }
 
   /** Vorrücken: Greift vorne niemand an, deckt ein robustes Command-Schiff ein anderes. */

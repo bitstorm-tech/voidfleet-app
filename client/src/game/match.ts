@@ -6,7 +6,7 @@ import { commandById, shipById, targetsEnemySlot, type CommandCard, type ShipCar
 import { Board, isSameSlot, maxDeploys, otherLane, overdriveBonus, slotTarget, type Slot } from "../../../shared/board.ts";
 import type { Deploy, MatchResult, PlayerView, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
 
-/** Ein eingeplanter Lane-Wechsel: der Slot des Schiffs und der freie Slot der anderen Lane, in den es geht. */
+/** Eine eingeplante Bewegung: der Slot des Schiffs und der freie Slot, in den es geht. */
 export interface PlannedMove {
   from: Slot;
   to: Slot;
@@ -88,10 +88,10 @@ export class Match {
   get plannedCommandMove(): PlannedMove | null {
     const command = this.plan.command;
     if (!command?.target || command.destination === null) return null;
-    return this.move(command.target, command.destination);
+    return this.move(command.target, { lane: otherLane(command.target.lane), slotIndex: command.destination });
   }
 
-  /** Das Grundmanöver: ein Schiff, das schon auf dem Brett steht; es feuert in dieser Runde nicht. */
+  /** Das Grundmanöver: ein Schiff, das schon auf dem Brett steht, in einen freien Slot beider Lanes; es feuert in dieser Runde nicht. */
   get plannedManeuver(): PlannedMove | null {
     const maneuver = this.plan.maneuver;
     return maneuver && this.move(maneuver.ship, maneuver.destination);
@@ -101,22 +101,22 @@ export class Match {
    * Ziel-Slots für den Bewegungsbefehl auf das Schiff in `from`: nicht für das manövrierende Schiff,
    * und Deploys und Manöver-Ziel zählen als besetzt (`Board.canMove`).
    */
-  commandMoveDestinations(from: Slot): number[] {
+  commandMoveDestinations(from: Slot): Slot[] {
     const maneuver = this.plannedManeuver;
     if (maneuver?.from === from) return [];
-    return this.board.moveDestinations(from, [...this.plannedDeploys, maneuver && slotTarget(maneuver.to)]);
+    return this.board.laneSwitchDestinations(from, [...this.plannedDeploys, maneuver && slotTarget(maneuver.to)]);
   }
 
   /** Ziel-Slots für das Manöver des Schiffs in `from`: nur echte Schiffe, die kein Bewegungsbefehl verlegt. */
-  maneuverDestinations(from: Slot): number[] {
+  maneuverDestinations(from: Slot): Slot[] {
     const command = this.plannedCommandMove;
     if (!from.isOccupied || command?.from === from) return [];
-    return this.board.moveDestinations(from, [...this.plannedDeploys, command && slotTarget(command.to)]);
+    return this.board.maneuverDestinations(from, [...this.plannedDeploys, command && slotTarget(command.to)]);
   }
 
   /**
    * Ob die Karte `handIndex` auf `slot` landen kann, neben den übrigen eingeplanten Schiffen (`keptDeploys`)
-   * und ohne den eingeplanten Lane-Wechseln im Weg zu stehen. Verlegt der Befehl ein Schiff, das dabei
+   * und ohne den eingeplanten Bewegungen im Weg zu stehen. Verlegt der Befehl ein Schiff, das dabei
    * wegfällt, fällt er beim Umplanen ohnehin weg (`planShip`).
    */
   canDeploy(slot: Slot, handIndex: number): boolean {
@@ -127,7 +127,7 @@ export class Match {
     const keptCommand = command !== null && keeps(command) ? command : null;
     const maneuver = this.plannedManeuver;
     const fits = (move: PlannedMove | null, other: PlannedMove | null) =>
-      move === null || this.board.canMove(move.from, move.to.index, [...deploys, other && slotTarget(other.to)]);
+      move === null || this.board.canMove(move.from, slotTarget(move.to), [...deploys, other && slotTarget(other.to)]);
     return fits(keptCommand, maneuver) && fits(maneuver, keptCommand);
   }
 
@@ -135,9 +135,9 @@ export class Match {
     return this.plan.ships.map((ship) => ship.target);
   }
 
-  private move(ship: SlotTarget, destination: number): PlannedMove {
-    const from = this.board.lane("player", ship.lane).slots[ship.slotIndex]!;
-    return { from, to: this.board.lane("player", otherLane(ship.lane)).slots[destination]! };
+  private move(ship: SlotTarget, destination: SlotTarget): PlannedMove {
+    const slotOf = ({ lane, slotIndex }: SlotTarget) => this.board.lane("player", lane).slots[slotIndex]!;
+    return { from: slotOf(ship), to: slotOf(destination) };
   }
 
   /**

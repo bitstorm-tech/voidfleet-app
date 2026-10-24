@@ -160,7 +160,7 @@ export class Match {
     }
     // Manöver und Bewegungsbefehl dürfen nicht im selben Slot landen und zusammen mit den Deploys die
     // Lane-Grenze nicht überschreiten; `canMove` prüft das beim Befehl mit allen Ankünften.
-    const maneuver = plan.maneuver && { lane: otherLane(plan.maneuver.ship.lane), slotIndex: plan.maneuver.destination };
+    const maneuver = plan.maneuver?.destination ?? null;
     if (plan.maneuver) {
       const { ship, destination } = plan.maneuver;
       const slot = this.board.lane(player.side, ship.lane).slots[ship.slotIndex];
@@ -184,7 +184,8 @@ export class Match {
       if (!card.moves && destination !== null) return "destination_not_allowed";
       if (card.moves && target && plan.maneuver && isSameSlot(target, plan.maneuver.ship)) return "maneuver_conflict";
       // Bewegt sich ein gelegtes Schiff, ist `from` sein noch leerer Slot; `canMove` zählt Deploys nur in der Ziel-Lane.
-      if (slot && destination !== null && !this.board.canMove(slot, destination, [...deploys, maneuver])) return "destination_unavailable";
+      const to = target && destination !== null ? { lane: otherLane(target.lane), slotIndex: destination } : null;
+      if (slot && to && !this.board.canMove(slot, to, [...deploys, maneuver])) return "destination_unavailable";
     }
     return null;
   }
@@ -217,8 +218,8 @@ export class Match {
     for (const player of this.players) {
       const maneuver = player.plan!.maneuver;
       if (!maneuver) continue;
-      const lane = this.board.lane(player.side, maneuver.ship.lane);
-      resolveManeuver(lane.slots[maneuver.ship.slotIndex]!, this.board.lane(player.side, otherLane(lane.type)).slots[maneuver.destination]!, events);
+      const slotOf = ({ lane, slotIndex }: SlotTarget) => this.board.lane(player.side, lane).slots[slotIndex]!;
+      resolveManeuver(slotOf(maneuver.ship), slotOf(maneuver.destination), events);
     }
 
     const commands: PlayedCommand[] = [];
@@ -260,7 +261,7 @@ export class Match {
   private afterManeuver(player: Player, target: SlotTarget): SlotTarget {
     const maneuver = player.plan!.maneuver;
     if (!maneuver || !isSameSlot(target, maneuver.ship)) return target;
-    return { lane: otherLane(target.lane), slotIndex: maneuver.destination };
+    return maneuver.destination;
   }
 
   private decideWinner(): Side | "draw" | null {

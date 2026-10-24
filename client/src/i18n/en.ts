@@ -45,15 +45,15 @@ export const en = {
       },
       {
         heading: "Your turn",
-        text: "Each round, pick up to one ship and one command from your hand, then end your turn. In round 1 you set up your fleet: up to two ships plus a command. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit. A command may also target a ship you deploy this round, for example to overcharge it or move it straight to the other lane. On top of that, you may maneuver one of your ships already on the board to a free slot in the other lane — tap it, then the slot. The price: that ship doesn't fire this round. A command on it follows it to its new slot.",
+        text: "Each round, pick up to one ship and one command from your hand, then end your turn. In round 1 you set up your fleet: up to two ships plus a command. Your opponent does the same at the same time without seeing your choice. There are no costs and no time limit. A command may also target a ship you deploy this round, for example to overcharge it or move it straight to the other lane. On top of that, you may maneuver one of your ships already on the board to a free slot, in either lane — tap it, then the slot. The price: that ship doesn't fire this round. A command on it follows it to its new slot.",
       },
       {
         heading: "The board",
-        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 6. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. Ships change lanes through the maneuver of your turn or through commands like Flanking Maneuver, Intercept and Recall; these don't cost the ship its attack. Either way you pick any free slot in the other lane. Maneuver and command can't move the same ship or land on the same slot, and a slot vacated this round only frees up next round. Moving has a risk: Barrage hits every enemy ship that changed lanes this round.",
+        text: "Each side has two lanes: Strike in front, Command behind. A lane holds at most 4 ships, a side at most 6. A ship in the Command lane is covered as long as a ship stands in the Strike slot directly in front of it; otherwise it can be attacked. The maneuver of your turn moves a ship to any free slot, in the other lane or the same one, for example to tuck a Repair Drone in behind a Strike ship. Ships also change lanes through commands like Flanking Maneuver, Intercept and Recall, to a free slot in the other lane; these don't cost the ship its attack. Maneuver and command can't move the same ship or land on the same slot, and a slot vacated this round only frees up next round. Moving has a risk: Barrage hits every enemy ship that changed slots this round.",
       },
       {
         heading: "Resolution",
-        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Maneuvers (ships switch lanes), Effects (commands take effect, attacks last: a Torpedo aims at a slot, not a ship, and hits whoever stands there after all moves — even a covered ship — or fizzles in the empty slot), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand); only after that is it checked whether a fleet is beaten.",
+        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Maneuvers (ships switch slots), Effects (commands take effect, attacks last: a Torpedo aims at a slot, not a ship, and hits whoever stands there after all moves — even a covered ship — or fizzles in the empty slot), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand); only after that is it checked whether a fleet is beaten.",
       },
       {
         heading: "Ships",
@@ -206,7 +206,7 @@ export const en = {
     targeting_jammer: { name: "Targeting Jammer", effect: "All enemy ships in the Strike Line get -1 ATK this round (min 0)." },
     volley_fire: { name: "Volley Fire", effect: "Deal 1 damage to ALL enemy ships." },
     torpedo: { name: "Torpedo", effect: "Choose an enemy slot. After all moves, deal 5 damage to the ship there, even if covered. An empty slot: miss." },
-    barrage: { name: "Barrage", effect: "Deal 3 damage to every enemy ship that changed lanes this round." },
+    barrage: { name: "Barrage", effect: "Deal 3 damage to every enemy ship that changed slots this round." },
   } satisfies Record<CommandId, CardText>,
 };
 

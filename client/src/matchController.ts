@@ -320,8 +320,8 @@ export class MatchController {
 
   /**
    * Einzige Gültigkeitsregel für Highlight und Klick: gewähltes Schiff -> freie
-   * eigene Slots, die den eingeplanten Lane-Wechseln nicht im Weg stehen; Manöver-Schiff -> seine
-   * Ziel-Slots in der anderen Lane; gewählter Befehl -> eigene Schiffe in einer erlaubten Lane, auch
+   * eigene Slots, die den eingeplanten Bewegungen nicht im Weg stehen; Manöver-Schiff -> seine
+   * freien Ziel-Slots in beiden Lanes; gewählter Befehl -> eigene Schiffe in einer erlaubten Lane, auch
    * das eingeplante, bei verlegenden Befehlen nur mit freiem Ziel-Slot, danach die freien Slots der
    * anderen Lane; der Torpedo -> jeder Slot der Gegnerseite, sonst ist sie nie Ziel. Ohne Auswahl
    * leuchten nur das bereits gewählte eigene Befehlsziel, die Ziel-Slots und das manövrierende Schiff
@@ -336,11 +336,11 @@ export class MatchController {
     if (lane.side === "enemy") return false;
     if (this.selectedShipIndex !== null) return this.match.canDeploy(slot, this.selectedShipIndex);
     if (this.maneuverSource !== null) {
-      return lane !== this.maneuverSource.lane && this.match.maneuverDestinations(this.maneuverSource).includes(slot.index);
+      return this.match.maneuverDestinations(this.maneuverSource).includes(slot);
     }
     if (this.selectedCommandIndex !== null) {
       if (this.moveSource !== null) {
-        return lane !== this.moveSource.lane && this.match.commandMoveDestinations(this.moveSource).includes(slot.index);
+        return this.match.commandMoveDestinations(this.moveSource).includes(slot);
       }
       if (this.match.shipAt(slot) === null || !canTargetLane(command!, lane.type)) return false;
       return !command!.moves || this.match.commandMoveDestinations(slot).length > 0;
@@ -363,7 +363,7 @@ export class MatchController {
 
   /** Plant das Grundmanöver; das Schiff steht bis zur Auflösung als Geist im Ziel-Slot. */
   private stageManeuverOn(pad: SlotPad): void {
-    this.match.plan.maneuver = { ship: slotTarget(this.maneuverSource!), destination: pad.slot.index };
+    this.match.plan.maneuver = { ship: slotTarget(this.maneuverSource!), destination: slotTarget(pad.slot) };
     this.selectManeuver(null);
     playUiSound("place");
   }
@@ -388,7 +388,7 @@ export class MatchController {
 
   /**
    * Stellt die Geister dorthin, wo sie laut `ghostTargets` stehen sollen; stehen sie schon richtig, bleiben sie.
-   * Die Pfeile der Lane-Wechsel folgen den Geistern der verlegten Schiffe.
+   * Die Pfeile der Bewegungen folgen den Geistern der verlegten Schiffe.
    */
   private refreshGhosts(): void {
     showArrow(this.view.moveArrow, this.shownCommandMove());
@@ -443,7 +443,7 @@ export class MatchController {
   }
 
   /**
-   * Ein Lane-Wechsel, wie Geist und Pfeil ihn zeigen: beim Wählen (`source`) zum Slot unter dem Zeiger,
+   * Eine Bewegung, wie Geist und Pfeil sie zeigen: beim Wählen (`source`) zum Slot unter dem Zeiger,
    * sonst der eingeplante, solange er nicht gerade neu gewählt wird.
    */
   private shownMove(source: Slot | null, planned: PlannedMove | null, isReplanning: boolean): { from: SlotPad; to: SlotPad } | null {

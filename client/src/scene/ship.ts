@@ -192,7 +192,7 @@ export class ShipView {
   }
 
   /**
-   * Lane-Wechsel: Das Schiff hängt schon am neuen Anker und steht noch an seiner alten Stelle;
+   * Slot-Wechsel: Das Schiff hängt schon am neuen Anker und steht noch an seiner alten Stelle;
    * es fliegt von dort auf der Bahn aus `maneuver.ts` in den Slot, mit Kurs, Steigung und Schräglage.
    */
   async maneuver(): Promise<void> {

@@ -1,4 +1,4 @@
-// Leuchtender Bogenpfeil über dem Brett, der einen geplanten Lane-Wechsel zeigt:
+// Leuchtender Bogenpfeil über dem Brett, der eine geplante Bewegung zeigt:
 // Er steigt über dem Schiff auf, wölbt sich zum Ziel-Slot und fällt senkrecht
 // auf ihn herab, damit die Spitze klar auf den Slot zeigt.
 

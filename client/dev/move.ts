@@ -1,7 +1,8 @@
 // Vorschau der Lane-Wechsel ohne Server: Je ein Schiff jeder Klasse wechselt in
 // Dauerschleife zwischen Strike und Command, abwechselnd nach vorn (S-Kurve) und
 // nach hinten (Schleife), mit wechselndem Slot-Versatz. `?slow=4` bremst die
-// Szene um den Faktor, `?ship=<id>` zeigt nur dieses Schiff.
+// Szene um den Faktor, `?ship=<id>` zeigt nur dieses Schiff, `?within` lässt die
+// Schiffe innerhalb ihrer Lane um ein bis zwei Slots seitlich versetzen.
 
 import { Board, type LaneType } from "../../shared/board.ts";
 import { SHIPS, type ShipId } from "../../shared/cards.ts";
@@ -29,6 +30,7 @@ view.engine.getDeltaTime = () => realDelta() / slow;
 window.view = view;
 
 const only = params.get("ship") as ShipId | null;
+const within = params.has("within");
 const ids: ShipId[] = only ? [only] : ["void_interceptor", "repair_drone", "horizon_cruiser", "iron_dreadnought"];
 /** Je Schiff ein eigener Streifen aus Slots; der Versatz pro Wechsel läuft 0, +1, -1, +2. */
 const OFFSETS = [1, -1, 0, 2, -2, 1, -1];
@@ -40,8 +42,9 @@ const ships = ids.map((id, i) => {
 });
 
 async function move(entry: (typeof ships)[number], step: number): Promise<void> {
-  const lane: LaneType = entry.lane === "command" ? "strike" : "command";
-  const offset = only ? OFFSETS[step % OFFSETS.length]! : step % 2 === 0 ? 0 : entry.home < 3 ? 1 : -1;
+  const lane: LaneType = within ? entry.lane : entry.lane === "command" ? "strike" : "command";
+  const away = (entry.home < 3 ? 1 : -1) * (1 + ((step >> 1) % 2));
+  const offset = within ? (entry.slot === entry.home ? away : 0) : only ? OFFSETS[step % OFFSETS.length]! : step % 2 === 0 ? 0 : entry.home < 3 ? 1 : -1;
   const slot = Math.max(0, Math.min(5, entry.home + offset));
   const from: SlotPad = view.pad("player", entry.lane, entry.slot);
   const to = view.pad("player", lane, slot);
