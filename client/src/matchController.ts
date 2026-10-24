@@ -117,6 +117,7 @@ export class MatchController {
       case "round":
         // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
         this.isResolving = true;
+        this.match.endRound();
         this.refreshSelectionVisuals();
         setMusicMood("battle");
         await this.playback.play(message.round, message.events);

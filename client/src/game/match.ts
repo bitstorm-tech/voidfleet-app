@@ -36,14 +36,19 @@ export class Match {
   }
 
   /**
-   * Übernimmt die Server-Sicht. Ein noch nicht abgegebener Plan bleibt innerhalb der Runde erhalten;
-   * ein abgegebener, den der Server nicht mehr meldet, ist aufgelöst — auch in der letzten Runde,
-   * nach der die Rundenzahl nicht mehr steigt.
+   * Die Runde ist aufgelöst, der Plan verbraucht. Das meldet erst die Auflösung selbst: Wer als Zweiter
+   * abgibt, bekommt keinen Zustand mit abgegebenem Plan, und nach der letzten Runde steigt die
+   * Rundenzahl nicht mehr.
    */
+  endRound(): void {
+    this.plan = { ship: null, command: null };
+  }
+
+  /** Übernimmt die Server-Sicht. Ein noch nicht abgegebener Plan bleibt innerhalb der Runde erhalten. */
   apply(view: PlayerView): void {
     if (view.submittedPlan) {
       this.plan = view.submittedPlan;
-    } else if (this.submitted || view.round !== this.round) {
+    } else if (view.round !== this.round) {
       this.plan = { ship: null, command: null };
     }
     this.submitted = view.submittedPlan !== null;
