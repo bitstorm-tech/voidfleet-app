@@ -5,10 +5,9 @@ import type { Locale } from "./i18n/index.ts";
 
 /**
  * Animationsgeschwindigkeit als Streckungsfaktor aller Animationen (Tweens,
- * Partikel und CSS). „Normal“ streckt auf das Doppelte: Die Auflösung einer
- * Runde soll sich cineastisch anfühlen, nicht hektisch.
+ * Partikel und CSS). „Normal“ spielt die Dauern so ab, wie sie im Code stehen.
  */
-export const ANIMATION_SPEEDS = { slow: 3, normal: 2, fast: 1.2, veryFast: 0.6 } as const;
+export const ANIMATION_SPEEDS = { slow: 2, normal: 1, fast: 0.6, veryFast: 0.35 } as const;
 
 export type AnimationSpeed = keyof typeof ANIMATION_SPEEDS;
 

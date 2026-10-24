@@ -1,6 +1,7 @@
 // Spielt die aufgedeckten Ereignisse einer Runde auf dem Brett ab: Deploy,
 // Befehle, Kampf und Cleanup nacheinander, gleichartige Ereignisse jeweils
-// gleichzeitig. Nur die Schüsse im Kampf laufen einzeln ab, damit man bei
+// gleichzeitig. Die Schüsse im Kampf laufen als Salve kurz versetzt und
+// überlappend ab, Einschläge auf dasselbe Ziel mit etwas Abstand, damit man bei
 // vollem Brett nachvollziehen kann, wer wen trifft. Die Szene läuft dabei dem Spielzustand voraus; den Endzustand
 // übernimmt danach der Server-Snapshot (`MatchController.syncBoard`) — auch
 // dann, wenn der Spieler die Animation per `skip` abbricht.
@@ -16,6 +17,7 @@ import { color3 } from "./data/palette.ts";
 import type { SoundId } from "./data/sounds.ts";
 import { t } from "./i18n/index.ts";
 import { destroyShip } from "./scene/destruction.ts";
+import { boltDuration } from "./scene/effects.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
@@ -66,7 +68,11 @@ const COMMAND_SOUNDS: Record<CommandId, SoundId | null> = {
 const SIDE_X: Record<Side, number> = { player: -4.5, enemy: 4.5 };
 
 /** Pause zwischen zwei Schritten, damit man sie auseinanderhalten kann. */
-const STEP_PAUSE = 280;
+const STEP_PAUSE = 200;
+/** Abstand zwischen den Starts zweier Schüsse einer Salve. */
+const SALVO_STAGGER = 250;
+/** Mindestabstand zweier Einschläge auf dasselbe Ziel, damit die Schadenszahlen nicht übereinanderliegen. */
+const SAME_TARGET_GAP = 500;
 /** So lange steht das Befehls-Banner, bevor die Wirkung einsetzt. */
 const BANNER_LEAD = 650;
 const SHIP_CENTER = new Vector3(0, 0.15, 0);
@@ -76,8 +82,8 @@ const ORBIT_OFFSET = new Vector3(0, 9, 0);
 /** Schüsse enden nicht im Mittelpunkt, sondern so weit davor auf der Hülle. */
 const HULL_RADIUS = 0.45;
 
-/** Ereignisse mit gleichem Schlüssel stehen hintereinander und laufen gemeinsam ab; `null` steht für sich allein. */
-function stepKey(event: RoundEvent): string | null {
+/** Ereignisse mit gleichem Schlüssel stehen hintereinander und laufen gemeinsam ab. */
+function stepKey(event: RoundEvent): string {
   switch (event.kind) {
     case "deploy":
     case "pass":
@@ -88,8 +94,6 @@ function stepKey(event: RoundEvent): string | null {
       return `command-${event.side}-${event.cardId}`;
     case "ability":
       return `ability-${event.source.side}-${event.source.lane}-${event.source.slotIndex}`;
-    case "attack":
-      return null;
     default:
       return event.kind;
   }
@@ -100,7 +104,7 @@ function groupSteps(events: readonly RoundEvent[]): RoundEvent[][] {
   for (const event of events) {
     const last = steps.at(-1);
     const key = stepKey(event);
-    if (last && key !== null && stepKey(last[0]!) === key) last.push(event);
+    if (last && stepKey(last[0]!) === key) last.push(event);
     else steps.push([event]);
   }
   return steps;
@@ -119,8 +123,10 @@ export class RoundPlayback {
     this.hud.appendLog([t.log.roundHeader(round)]);
     this.isSkipped = false;
     for (const step of groupSteps(events)) {
-      this.hud.appendLog(step.map(describeEvent));
-      if (this.isSkipped) continue;
+      if (this.isSkipped) {
+        this.hud.appendLog(step.map(describeEvent));
+        continue;
+      }
       setAnimationScope(step[0]!.kind === "attack" ? "attack" : "general");
       await this.playStep(step);
       await wait(this.view.scene, STEP_PAUSE);
@@ -140,6 +146,8 @@ export class RoundPlayback {
 
   private async playStep(step: readonly RoundEvent[]): Promise<void> {
     const first = step[0]!;
+    if (first.kind === "attack") return this.salvo(step as Extract<RoundEvent, { kind: "attack" }>[]);
+    this.hud.appendLog(step.map(describeEvent));
     if (first.kind === "effect" || first.kind === "draw" || first.kind === "noEffect") {
       this.announceCommand(first);
       await wait(this.view.scene, BANNER_LEAD);
@@ -149,6 +157,29 @@ export class RoundPlayback {
       await wait(this.view.scene, BANNER_LEAD);
     }
     await Promise.all(step.map((event) => this.playEvent(event)));
+  }
+
+  /**
+   * Die Schüsse starten im Abstand `SALVO_STAGGER` und kommen dabei je Schuss ins Log; ein Schuss wartet
+   * zusätzlich, bis sein Einschlag `SAME_TARGET_GAP` nach dem vorigen auf dasselbe Ziel liegt. So treffen
+   * die Schüsse jedes Ziel in der gemeldeten Reihenfolge, und die Statusbalken springen nicht zurück.
+   */
+  private async salvo(shots: readonly Extract<RoundEvent, { kind: "attack" }>[]): Promise<void> {
+    const impacts = new Map<SlotPad, number>();
+    let start = -SALVO_STAGGER;
+    await Promise.all(
+      shots.map((shot) => {
+        const origin = this.centerOf(this.padOf(shot.attacker));
+        const target = this.padOf(shot.target);
+        const flight = boltDuration(origin, this.impactFrom(target, origin));
+        start = Math.max(start + SALVO_STAGGER, (impacts.get(target) ?? -Infinity) + SAME_TARGET_GAP - flight);
+        impacts.set(target, start + flight);
+        return wait(this.view.scene, start).then(() => {
+          this.hud.appendLog([describeEvent(shot)]);
+          return this.playEvent(shot);
+        });
+      }),
+    );
   }
 
   private announceCommand(event: Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" }>): void {

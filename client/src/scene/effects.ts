@@ -201,6 +201,11 @@ interface Flash {
   intensity: number;
 }
 
+/** Flugzeit eines Bolzens von `from` nach `to` in ms (vor der Streckung). */
+export function boltDuration(from: Vector3, to: Vector3): number {
+  return (Vector3.Distance(from, to) / BOLT_SPEED) * 1000;
+}
+
 export class BoardEffects {
   /** Weiche Scheibe: Partikel und Blitz. */
   private readonly dot: RawTexture;
@@ -231,8 +236,7 @@ export class BoardEffects {
     mesh.scaling.z = BOLT_STRETCH;
     mesh.position.copyFrom(from);
     mesh.lookAt(to);
-    const duration = (Vector3.Distance(from, to) / BOLT_SPEED) * 1000;
-    await tween(this.scene, duration, (progress) => Vector3.LerpToRef(from, to, easeInCubic(progress) * 0.4 + progress * 0.6, mesh.position));
+    await tween(this.scene, boltDuration(from, to), (progress) => Vector3.LerpToRef(from, to, easeInCubic(progress) * 0.4 + progress * 0.6, mesh.position));
     this.disposeMesh(mesh);
   }
 
