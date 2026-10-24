@@ -174,7 +174,7 @@ export class ShipView {
       const altitude = Math.min(z / descentStart, 1);
       this.root.position.y = OVERFLIGHT_HEIGHT * easeInOutSine(altitude);
       this.modelRoot.rotation.x = DESCENT_PITCH * Math.sin(Math.PI * altitude);
-    });
+    }, "movement");
     this.statusBars.setEnabled(true);
   }
 
@@ -189,7 +189,7 @@ export class ShipView {
       this.root.position.set(pose.x, pose.y, pose.z);
       this.root.rotation.y = pose.yaw;
       this.modelRoot.rotation.set(pose.pitch, 0, pose.roll);
-    });
+    }, "movement");
     this.root.position.setAll(0);
     this.root.rotation.setAll(0);
     this.modelRoot.rotation.setAll(0);

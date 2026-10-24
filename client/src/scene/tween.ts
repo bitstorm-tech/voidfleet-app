@@ -1,12 +1,14 @@
 // Zeit-Helfer für Animationen im Render-Takt der Szene. Läuft die Szene nicht
 // (Tab im Hintergrund), pausieren die Animationen mit ihr. Alle Animationen
 // (Tweens, Partikel und über `--animation-time-scale` auch CSS) sind um die
-// eingestellte Geschwindigkeit gestreckt; Angriffe haben einen eigenen Regler.
+// eingestellte Geschwindigkeit gestreckt; Angriffe und Schiffsbewegungen haben eigene Regler.
 
 import type { Scene } from "@babylonjs/core/scene";
 import { ANIMATION_SPEEDS, onSettingsChange, settings } from "../settings.ts";
 
-export type AnimationScope = "attack" | "general";
+export type AnimationScope = "attack" | "movement" | "general";
+
+const SCOPE_SETTINGS = { attack: "attackSpeed", movement: "movementSpeed", general: "animationSpeed" } as const;
 
 let scope: AnimationScope = "general";
 
@@ -17,7 +19,7 @@ export function setAnimationScope(next: AnimationScope): void {
 }
 
 export function animationTimeScale(of: AnimationScope = scope): number {
-  return ANIMATION_SPEEDS[of === "attack" ? settings.attackSpeed : settings.animationSpeed];
+  return ANIMATION_SPEEDS[settings[SCOPE_SETTINGS[of]]];
 }
 
 function applyCssTimeScale(): void {
@@ -42,10 +44,9 @@ export function skipAnimations(skip: boolean): void {
 
 /**
  * Ruft `update` jeden Frame mit dem Fortschritt 0..1 auf und endet nach `duration` ms vor der Streckung
- * durch den beim Start geltenden Regler; eine Umstellung der Einstellung wirkt auch auf laufende Tweens.
+ * durch `tweenScope` (sonst den beim Start geltenden Regler); eine Umstellung der Einstellung wirkt auch auf laufende Tweens.
  */
-export function tween(scene: Scene, duration: number, update: (progress: number) => void): Promise<void> {
-  const tweenScope = scope;
+export function tween(scene: Scene, duration: number, update: (progress: number) => void, tweenScope = scope): Promise<void> {
   return new Promise((resolve) => {
     const finish = () => {
       scene.onBeforeRenderObservable.remove(observer);

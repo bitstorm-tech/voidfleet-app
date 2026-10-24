@@ -15,6 +15,8 @@ export type AnimationSpeed = keyof typeof ANIMATION_SPEEDS;
 export interface Settings {
   /** Schüsse im Kampf. */
   attackSpeed: AnimationSpeed;
+  /** Flüge der Schiffe: Deploy-Einflug und Lane-Wechsel. */
+  movementSpeed: AnimationSpeed;
   /** Alle übrigen Animationen. */
   animationSpeed: AnimationSpeed;
   /** Gewählte Sprache; ohne Wahl gilt die Browsersprache. */
@@ -22,7 +24,7 @@ export interface Settings {
 }
 
 const STORAGE_KEY = "voidfleet.settings";
-const DEFAULTS: Settings = { attackSpeed: "normal", animationSpeed: "normal" };
+const DEFAULTS: Settings = { attackSpeed: "normal", movementSpeed: "normal", animationSpeed: "normal" };
 
 export const settings: Settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") };
 

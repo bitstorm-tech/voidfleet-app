@@ -15,6 +15,7 @@ export const de: Messages = {
   settings: {
     title: "Einstellungen",
     attackSpeed: "Geschwindigkeit der Angriffe",
+    movementSpeed: "Geschwindigkeit der Bewegungen",
     animationSpeed: "Übrige Animationen",
     language: "Sprache",
     speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
