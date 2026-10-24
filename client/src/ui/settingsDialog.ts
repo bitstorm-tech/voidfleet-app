@@ -1,5 +1,5 @@
 // Einstellungen: Zahnrad-Knopf oben rechts neben dem Log-Knopf öffnet einen modalen Dialog
-// mit Reglern für die Lautstärke von Musik und Effekten, je einer Geschwindigkeitswahl für Angriffe,
+// mit Reglern für die Lautstärke von Musik, Effekten und Bordfunk, je einer Geschwindigkeitswahl für Angriffe,
 // Schiffsbewegungen und die übrigen Animationen sowie der Sprache. Jede Auswahl wird gespeichert
 // (`settings.ts`); Lautstärken und Geschwindigkeiten gelten sofort, ein Sprachwechsel lädt die Seite neu.
 
@@ -7,7 +7,7 @@ import { locale, LOCALE_NAMES, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { iconDialog } from "./iconDialog.ts";
 
-type VolumeSetting = "musicVolume" | "effectsVolume";
+type VolumeSetting = "musicVolume" | "effectsVolume" | "voiceVolume";
 type SpeedSetting = "attackSpeed" | "movementSpeed" | "animationSpeed";
 
 const ICON = `<circle cx="12" cy="12" r="3" />
@@ -19,6 +19,7 @@ export class SettingsDialog {
     dialog.querySelector(".dialog-close")!.before(
       volumeSlider("musicVolume"),
       volumeSlider("effectsVolume"),
+      volumeSlider("voiceVolume"),
       speedChoice("attackSpeed"),
       speedChoice("movementSpeed"),
       speedChoice("animationSpeed"),

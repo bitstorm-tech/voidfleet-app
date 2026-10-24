@@ -1,10 +1,11 @@
-// Die Auflösung einer Runde ab dem Deploy: Fähigkeiten beim Deploy, Manöver, Effects, Combat, Cleanup.
-// Portiert aus game_mechanics.gd. Jede Phase arbeitet auf dem Brett aus Sicht
-// von Seat 0 und hängt ihre Ereignisse an `events` an.
+// Die Auflösung einer Runde: Deploy samt Fähigkeiten, Manöver, Effects, Combat, Cleanup. Portiert aus
+// game_mechanics.gd. Der Server löst damit die aufgedeckten Züge auf (`Match.resolveRound`), der Client
+// rechnet mit denselben Regeln die Zielvorschau beim Planen (`client/src/game/preview.ts`). Jede Phase
+// arbeitet auf dem Brett aus Sicht von Seat 0 und hängt ihre Ereignisse an `events` an.
 
-import { nearest, opposite, slotTarget, type Board, type Side, type Slot } from "../../shared/board.ts";
-import { COMMAND_ORDER, shipById, targetsEnemySlot, type CommandCard } from "../../shared/cards.ts";
-import type { CommandEffect, RoundEvent, ShipRef, ShipStats } from "../../shared/protocol.ts";
+import { isSameSlot, nearest, opposite, otherLane, slotTarget, type Board, type Side, type Slot } from "./board.ts";
+import { COMMAND_ORDER, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "./cards.ts";
+import type { CommandEffect, RoundEvent, ShipRef, ShipStats, SlotTarget, TurnPlan } from "./protocol.ts";
 
 const SIDES: readonly Side[] = ["player", "enemy"];
 
@@ -21,6 +22,17 @@ export interface PlayedCommand {
   target: Slot | null;
   /** Bei Befehlen, die ihr Ziel verlegen: der freie Slot in der anderen Lane, geprüft beim Submit. */
   destination: Slot | null;
+}
+
+/**
+ * Der aufgedeckte Zug einer Seite: wie `TurnPlan`, aber mit den Karten statt ihrer Hand-Indizes. Er ist
+ * geprüft (`Match.validate`); eigene Ziele beziehen sich auf die Stellung vor dem Manöver.
+ */
+export interface Turn {
+  commander: Commander;
+  ships: { card: ShipCard; target: SlotTarget }[];
+  command: { card: CommandCard; target: SlotTarget | null; destination: number | null } | null;
+  maneuver: TurnPlan["maneuver"];
 }
 
 export function shipRef(slot: Slot): ShipRef {
@@ -40,6 +52,68 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
   return best;
 }
 
+// --- Runde ---
+
+/**
+ * Löst eine Runde mit den Zügen beider Seiten auf und gibt ihre Ereignisse zurück: Deploy samt Fähigkeiten,
+ * Manöver, Effects, Combat, Cleanup. `random` liefert Zahlen in [0, 1); ohne ihn (Zielvorschau) feuern
+ * Plasma Frigates beim Deploy nicht, weil ihr Ziel Zufall ist.
+ */
+export function resolveTurns(board: Board, turns: readonly Turn[], random: (() => number) | null): RoundEvent[] {
+  const events: RoundEvent[] = [];
+  const deployed: Slot[] = [];
+  for (const { commander, ships } of turns) {
+    for (const { card, target } of ships) {
+      deployed.push(board.place(board.lane(commander.side, target.lane), target.slotIndex, card)!);
+      events.push({ kind: "deploy", side: commander.side, cardId: card.id, target });
+    }
+    if (ships.length === 0) events.push({ kind: "pass", side: commander.side });
+  }
+  resolveDeployAbilities(board, deployed, turns.flatMap((turn) => moveDestinations(board, turn)), random, events);
+
+  // Jede Seite bewegt nur eigene Schiffe, die Manöver kommen sich also nicht in die Quere.
+  // Ein Schiff, das schon beim Deploy gefallen ist, bewegt sich nicht mehr.
+  for (const { commander, maneuver } of turns) {
+    const from = maneuver && ownSlot(board, commander.side, maneuver.ship);
+    if (from?.isOccupied) resolveManeuver(from, ownSlot(board, commander.side, maneuver!.destination), events);
+  }
+
+  const commands = turns.filter((turn) => turn.command !== null).map((turn) => revealCommand(board, turn, events));
+  resolveEffects(board, commands, events);
+  resolveCombat(board, events);
+  resolveCleanup(board, events);
+  return events;
+}
+
+function ownSlot(board: Board, side: Side, { lane, slotIndex }: SlotTarget): Slot {
+  return board.lane(side, lane).slots[slotIndex]!;
+}
+
+/** Die Ziel-Slots der Bewegungen im Zug: Grundmanöver und Bewegungsbefehl (der nie das manövrierte Schiff verlegt). */
+function moveDestinations(board: Board, { commander, maneuver, command }: Turn): Slot[] {
+  const moved = command?.target && command.destination !== null ? { lane: otherLane(command.target.lane), slotIndex: command.destination } : null;
+  return [maneuver?.destination, moved].filter((target) => target != null).map((target) => ownSlot(board, commander.side, target));
+}
+
+/** Deckt den Befehl auf: Ein eigenes Ziel folgt dem Manöver, ein Slot der Gegnerseite (Torpedo) bleibt stehen. */
+function revealCommand(board: Board, { commander, command, maneuver }: Turn, events: RoundEvent[]): PlayedCommand {
+  const { card, destination } = command!;
+  const side = targetsEnemySlot(card) ? opposite(commander.side) : commander.side;
+  const target = command!.target && (side === commander.side ? afterManeuver(maneuver, command!.target) : command!.target);
+  events.push({ kind: "command", side: commander.side, cardId: card.id, target: target && { side, ...target } });
+  return {
+    commander,
+    card,
+    target: target && board.lane(side, target.lane).slots[target.slotIndex]!,
+    destination: target && destination !== null ? board.lane(side, otherLane(target.lane)).slots[destination]! : null,
+  };
+}
+
+/** Wo ein eigenes Befehlsziel nach dem Manöver steht: Zielt der Befehl auf das manövrierte Schiff, folgt er ihm. */
+function afterManeuver(maneuver: Turn["maneuver"], target: SlotTarget): SlotTarget {
+  return maneuver && isSameSlot(target, maneuver.ship) ? maneuver.destination : target;
+}
+
 // --- Deploy ---
 
 /**
@@ -49,13 +123,13 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
  * meidet sie, die Bewegungen bleiben also gültig. Zu Lane- und Flottengrenze zählt sie nicht; nur wenn
  * kein Slot der Lane frei ist, gibt es keine Drohne. Dann schießt jede Plasma Frigate 3 Schaden
  * auf ein zufälliges gegnerisches Schiff der gleichnamigen Lane, gedeckt oder nicht, auch auf eine frische Drohne.
- * `random` liefert Zahlen in [0, 1).
+ * `random` liefert Zahlen in [0, 1); ohne ihn (Zielvorschau) feuern die Plasma Frigates nicht.
  */
 export function resolveDeployAbilities(
   board: Board,
   deployed: readonly Slot[],
   reserved: readonly Slot[],
-  random: () => number,
+  random: (() => number) | null,
   events: RoundEvent[],
 ): void {
   for (const carrier of deployed.filter((slot) => slot.card!.id === "titan_carrier")) {
@@ -64,6 +138,7 @@ export function resolveDeployAbilities(
     slot.place(shipById("drone"));
     events.push({ kind: "spawn", source: shipRef(carrier), ship: shipRef(slot) });
   }
+  if (random === null) return;
   for (const frigate of deployed.filter((slot) => slot.card!.id === "plasma_frigate")) {
     const targets = board.lane(opposite(frigate.lane.side), frigate.lane.type).occupiedSlots.filter((slot) => !slot.isDestroyed);
     if (targets.length === 0) continue;

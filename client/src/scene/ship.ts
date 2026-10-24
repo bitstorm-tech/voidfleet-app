@@ -1,11 +1,13 @@
 // Ein Schiff auf dem Brett. Die Nase zeigt nach lokal +Z, die Ausrichtung
-// bestimmt allein der Elternknoten (der Anker des SlotPads).
+// bestimmt allein der Elternknoten (der Anker des SlotPads). Beim Planen zeigt es die
+// Zielvorschau: auf den Balken den drohenden Verlust, neben ihnen einen Totenkopf, wenn es fällt.
 // Die Modelle kommen als glTF aus `tools/ships/` (Blender); alle Dateien werden
 // beim Start geladen (`loadShipModels`) und pro Schiff instanziiert. Zu jedem Modell gehört ein Wrack
 // aus Bruchstücken, das bei der Zerstörung an seine Stelle tritt (`destruction.ts`).
 
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Material } from "@babylonjs/core/Materials/material";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
@@ -17,12 +19,14 @@ import { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { Tools } from "@babylonjs/core/Misc/tools";
+import type { Observer } from "@babylonjs/core/Misc/observable";
 import type { Scene } from "@babylonjs/core/scene";
 // Registriert `renderOverlay` auf Mesh: zeichnet das Modell in einer Farbe darüber (Treffer-Blitz).
 import "@babylonjs/core/Rendering/outlineRenderer";
 import type { ShipCard, ShipClass } from "../../../shared/cards.ts";
+import type { ShipStats } from "../../../shared/protocol.ts";
 import { loopSound } from "../audio/sounds.ts";
-import { color3 } from "../data/palette.ts";
+import { color3, PALETTE, toCss } from "../data/palette.ts";
 import { allShipModels, shipModel, wreckModel } from "../data/shipModels.ts";
 import type { SoundId } from "../data/sounds.ts";
 import { randomInCone } from "./effects.ts";
@@ -69,6 +73,7 @@ const GHOST_ALPHA = 0.35;
 const GHOST_TINT = new Color3(0.2, 0.62, 0.95);
 const GHOST_ALBEDO = new Color3(0.45, 0.6, 0.75);
 
+const TRACK_WIDTH = 2.72;
 const BAR_WIDTH = 2.56;
 const HP_COLOR_EMPTY = color3("hpEmpty");
 const HP_COLOR_HALF = color3("hpHalf");
@@ -76,6 +81,12 @@ const HP_COLOR_FULL = color3("hpFull");
 const BAR_TRACK_COLOR = new Color3(0.13, 0.15, 0.22);
 /** Ein Schiff, das diese Runde manövriert und deshalb nicht feuert, zeigt seine Balken gedämpft. */
 const HOLD_FIRE_ALPHA = 0.3;
+/** Zielvorschau: Der drohende Verlust blinkt in der Schadensfarbe, der Totenkopf pulsiert mit (Takt in Hz, schwächste Deckkraft). */
+const LOSS_COLOR = color3("damage");
+const PREVIEW_PULSE = 1.4;
+const PREVIEW_MIN_VISIBILITY = 0.25;
+/** Kantenlänge des Totenkopfs; er steht links neben dem Hüllenbalken. */
+const SKULL_SIZE = 0.62;
 
 const containers = new Map<string, AssetContainer>();
 
@@ -106,6 +117,15 @@ export class ShipView {
   private readonly hpFill: Mesh;
   private readonly shieldRow: TransformNode;
   private readonly shieldFill: Mesh;
+  /** Zielvorschau: drohender Verlust rechts neben der Füllung, blinkend. */
+  private readonly hpLoss: Mesh;
+  private readonly shieldLoss: Mesh;
+  /** Totenkopf der Zielvorschau; auf Höhe der Balken, aber auch an Geistern, die keine Balken haben. */
+  private readonly skull: Mesh;
+  private readonly pulse: Observer<Scene>;
+  private current: ShipStats;
+  /** HP und Schild nach der Runde laut Zielvorschau, null: das Schiff fällt; ohne Vorschau undefined. */
+  private preview: ShipStats | null | undefined;
   /** Material und volle Deckkraft je Balken, zum Dämpfen (`setHoldingFire`). */
   private readonly bars: { material: StandardMaterial; alpha: number }[] = [];
   /** Eigene Materialien (Balken, Geist-Kopien, Wrack); glTF-Materialien gehören dem geteilten Container. */
@@ -131,28 +151,56 @@ export class ShipView {
     this.statusBars.position.y = BAR_MIN_HEIGHT;
     this.statusBars.setEnabled(!isGhost);
 
-    this.createBar("hp-track", 2.72, 0.3, BAR_TRACK_COLOR, 0.92, this.statusBars, 1);
+    this.createBar("hp-track", TRACK_WIDTH, 0.3, BAR_TRACK_COLOR, 0.92, this.statusBars, 1);
     this.hpFill = this.createBar("hp-fill", BAR_WIDTH, 0.19, HP_COLOR_FULL, 0.999, this.statusBars, 2);
+    this.hpLoss = this.createBar("hp-loss", BAR_WIDTH, 0.19, LOSS_COLOR, 0.999, this.statusBars, 2);
 
     this.shieldRow = new TransformNode("shield-row", scene);
     this.shieldRow.parent = this.statusBars;
     this.shieldRow.position.y = -0.29;
-    this.createBar("shield-track", 2.72, 0.21, BAR_TRACK_COLOR, 0.92, this.shieldRow, 1);
+    this.createBar("shield-track", TRACK_WIDTH, 0.21, BAR_TRACK_COLOR, 0.92, this.shieldRow, 1);
     this.shieldFill = this.createBar("shield-fill", BAR_WIDTH, 0.12, color3("shield"), 0.999, this.shieldRow, 2);
+    this.shieldLoss = this.createBar("shield-loss", BAR_WIDTH, 0.12, LOSS_COLOR, 0.999, this.shieldRow, 2);
+
+    this.skull = CreatePlane("skull", { size: SKULL_SIZE }, scene);
+    this.skull.material = skullMaterial(scene);
+    this.skull.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    this.skull.isPickable = false;
+    this.skull.renderingGroupId = 1;
+    this.skull.alphaIndex = 3;
+    this.skull.parent = this.root;
+    this.skull.setEnabled(false);
+    // Verlust und Totenkopf blinken im selben Takt, über alle Schiffe gleich.
+    this.pulse = scene.onBeforeRenderObservable.add(() => {
+      const strength = 0.5 + 0.5 * Math.sin((performance.now() / 1000) * PREVIEW_PULSE * 2 * Math.PI);
+      const visibility = PREVIEW_MIN_VISIBILITY + (1 - PREVIEW_MIN_VISIBILITY) * strength;
+      this.hpLoss.visibility = this.shieldLoss.visibility = visibility;
+      this.skull.visibility = 0.55 + 0.45 * strength;
+    });
 
     this.addModel();
-    this.setStats(card.hp, card.shield);
+    this.current = { hp: card.hp, shield: card.shield };
+    this.updateBars();
   }
 
   /** Live-Werte über dem Schiff; die Maxima kommen aus der Karte. */
   setStats(hp: number, shield: number): void {
-    const hpRatio = ratio(hp, this.card.hp);
-    this.setFill(this.hpFill, hpRatio);
-    (this.hpFill.material as StandardMaterial).emissiveColor = hpColor(hpRatio);
+    this.current = { hp, shield };
+    this.updateBars();
+  }
 
-    const shieldMax = Math.max(this.card.shield, shield);
-    this.shieldRow.setEnabled(shieldMax > 0);
-    if (shieldMax > 0) this.setFill(this.shieldFill, ratio(shield, shieldMax));
+  /**
+   * Zielvorschau: HP und Schild nach der Runde, `null`, wenn das Schiff fällt, `undefined` ohne Vorschau.
+   * Die Füllung zeigt dann, was bleibt, der blinkende Rest dahinter, was verloren geht.
+   */
+  setPreview(after: ShipStats | null | undefined): void {
+    this.preview = after;
+    this.updateBars();
+  }
+
+  /** Totenkopf links neben dem Hüllenbalken: Laut Zielvorschau fällt das Schiff in dieser Runde. */
+  setDoomed(value: boolean): void {
+    this.skull.setEnabled(value);
   }
 
   /** Dämpft die Statusbalken, solange das Schiff wegen seines Manövers nicht feuert. */
@@ -284,6 +332,7 @@ export class ShipView {
   }
 
   dispose(): void {
+    this.scene.onBeforeRenderObservable.remove(this.pulse);
     this.root.dispose(false, false);
     // Geist-Kopien klonen beim `clone()` auch ihre Texturen; die gehören dann ebenfalls diesem Schiff.
     for (const material of this.ownedMaterials) material.dispose(false, true);
@@ -302,6 +351,7 @@ export class ShipView {
     const { max } = this.modelRoot.getHierarchyBoundingVectors();
     const top = Vector3.TransformCoordinates(max, this.root.getWorldMatrix().clone().invert()).y;
     this.statusBars.position.y = Math.max(BAR_MIN_HEIGHT, top + BAR_MARGIN);
+    this.skull.position.set(-(TRACK_WIDTH + SKULL_SIZE) / 2 - 0.08, this.statusBars.position.y - 0.05, 0);
   }
 
   private prepareMesh(mesh: AbstractMesh): void {
@@ -354,12 +404,73 @@ export class ShipView {
     return mesh;
   }
 
-  /** Der Balken wächst von links: schmaler skalieren und nach links versetzen. */
-  private setFill(bar: Mesh, fillRatio: number): void {
-    bar.setEnabled(fillRatio > 0);
-    bar.scaling.x = fillRatio;
-    bar.position.x = (-BAR_WIDTH * (1 - fillRatio)) / 2;
+  /** Füllung bis zu dem, was nach der Vorschau bleibt (ohne Vorschau: alles), dahinter der Verlust bis zum jetzigen Stand. */
+  private updateBars(): void {
+    const after = this.preview === undefined ? this.current : (this.preview ?? { hp: 0, shield: 0 });
+    const hp = Math.min(after.hp, this.current.hp);
+    this.setSection(this.hpFill, 0, ratio(hp, this.card.hp));
+    this.setSection(this.hpLoss, ratio(hp, this.card.hp), ratio(this.current.hp, this.card.hp));
+    (this.hpFill.material as StandardMaterial).emissiveColor = hpColor(ratio(hp, this.card.hp));
+
+    const shieldMax = Math.max(this.card.shield, this.current.shield);
+    this.shieldRow.setEnabled(shieldMax > 0);
+    if (shieldMax === 0) return;
+    const shield = Math.min(after.shield, this.current.shield);
+    this.setSection(this.shieldFill, 0, ratio(shield, shieldMax));
+    this.setSection(this.shieldLoss, ratio(shield, shieldMax), ratio(this.current.shield, shieldMax));
   }
+
+  /** Ein Abschnitt des Balkens zwischen zwei Anteilen, von links gemessen: schmaler skalieren und versetzen. */
+  private setSection(bar: Mesh, from: number, to: number): void {
+    bar.setEnabled(to > from);
+    bar.scaling.x = to - from;
+    bar.position.x = BAR_WIDTH * ((from + to) / 2 - 0.5);
+  }
+}
+
+const skullMaterials = new WeakMap<Scene, StandardMaterial>();
+
+/** Ein Material für alle Totenköpfe der Szene: weißer Schädel auf einer Plakette in der Schadensfarbe. */
+function skullMaterial(scene: Scene): StandardMaterial {
+  let material = skullMaterials.get(scene);
+  if (material) return material;
+  const size = 128;
+  const texture = new DynamicTexture("skull", { width: size, height: size }, scene);
+  texture.hasAlpha = true;
+  const context = texture.getContext();
+  const badge = toCss(PALETTE.damage);
+  context.fillStyle = badge;
+  context.beginPath();
+  context.arc(64, 64, 62, 0, 2 * Math.PI);
+  context.fill();
+  // Schädel und Kiefer weiß, Augen, Nase und Zahnlücken in der Farbe der Plakette ausgespart.
+  context.fillStyle = "rgb(255 250 245)";
+  context.beginPath();
+  context.arc(64, 56, 35, 0, 2 * Math.PI);
+  context.fill();
+  context.fillRect(44, 70, 40, 34);
+  context.fillStyle = badge;
+  for (const x of [50, 78]) {
+    context.beginPath();
+    context.arc(x, 60, 11, 0, 2 * Math.PI);
+    context.fill();
+  }
+  context.beginPath();
+  context.moveTo(64, 70);
+  context.lineTo(58, 82);
+  context.lineTo(70, 82);
+  context.fill();
+  for (const x of [56, 64, 72]) context.fillRect(x - 1.5, 90, 3, 14);
+  texture.update();
+
+  material = new StandardMaterial("skull", scene);
+  material.diffuseTexture = texture;
+  material.useAlphaFromDiffuseTexture = true;
+  material.emissiveColor = Color3.White();
+  material.disableLighting = true;
+  material.disableDepthWrite = true;
+  skullMaterials.set(scene, material);
+  return material;
 }
 
 function ratio(current: number, maximum: number): number {

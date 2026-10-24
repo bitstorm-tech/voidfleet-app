@@ -1,15 +1,19 @@
 // Vorschau aller Klänge ohne Server (`BUN_PORT=4173 bun dev/sounds.html`): die Lautstärkeregler wie im Spiel,
-// die Musik in beiden Stimmungen, die synthetisierten Klänge der Oberfläche und jede Variante jedes
-// Soundeffekts einzeln, so wie das Spiel sie abspielt (gleiche Lautheit, Lautstärke und Verstimmung).
+// die Musik in beiden Stimmungen, die synthetisierten Klänge der Oberfläche, jede Variante jedes
+// Soundeffekts einzeln, so wie das Spiel sie abspielt (gleiche Lautheit, Lautstärke und Verstimmung), und jede
+// Aufnahme des Bordfunks über die Funkstrecke (der gesprochene Text steht im Tooltip).
 // Neben jeder Datei stehen Dauer, Spitze, Lautheit (lauteste 50 ms), stiller Vorlauf und der Pegel der
 // ersten und letzten Sekunde, damit Ausreißer auffallen; bei der Musik zusätzlich der Kernteil ohne Ein- und
 // Ausklang, der als `loop` in `data/sounds.ts` gehört. `window.soundStats` enthält dieselben Werte.
 
 import { context } from "../src/audio/mixer.ts";
 import { loadMusic, setMusicMood } from "../src/audio/music.ts";
+import { loadRadio, say, silenceRadio } from "../src/audio/radio.ts";
 import { loadSounds, loopSound, playSound } from "../src/audio/sounds.ts";
 import { playUiSound, UI_SOUNDS } from "../src/audio/uiSounds.ts";
+import { RADIO, type RadioCue } from "../src/data/radio.ts";
 import { MUSIC, SOUNDS, type MusicMood, type SoundId } from "../src/data/sounds.ts";
+import { en } from "../src/i18n/en.ts";
 import { settings, updateSettings } from "../src/settings.ts";
 
 interface Stats {
@@ -37,10 +41,10 @@ const LOOP_PREVIEW = 4000;
 
 const root = document.getElementById("sounds")!;
 window.soundStats = {};
-await Promise.all([...loadSounds(), ...loadMusic()]);
+await Promise.all([...loadSounds(), ...loadMusic(), ...loadRadio()]);
 
 heading("Lautstärke");
-for (const [setting, label] of [["musicVolume", "Musik"], ["effectsVolume", "Effekte"]] as const) {
+for (const [setting, label] of [["musicVolume", "Musik"], ["effectsVolume", "Effekte"], ["voiceVolume", "Bordfunk"]] as const) {
   const input = Object.assign(document.createElement("input"), { type: "range", min: "0", max: "1", step: "0.05", value: String(settings[setting]) });
   input.addEventListener("input", () => updateSettings({ [setting]: Number(input.value) }));
   row(label, [input]);
@@ -66,6 +70,22 @@ for (const id of Object.keys(SOUNDS) as SoundId[]) {
   };
   row(id, [button("Zufall", play()), ...files.map((_, variant) => button(String(variant + 1), play(variant)))]);
   files.forEach((url, variant) => row("", [], url, `${id}_${variant + 1}`));
+}
+
+heading("Bordfunk");
+for (const cue of Object.keys(RADIO) as RadioCue[]) {
+  const { files } = RADIO[cue];
+  const lines = en.radio.lines[cue];
+  const buttons = files.map((_, variant) => {
+    const element = button(String(variant + 1), () => {
+      silenceRadio();
+      say(cue, variant);
+    });
+    element.title = lines[variant]!;
+    return element;
+  });
+  row(cue, buttons);
+  files.forEach((url, variant) => row("", [], url, `${cue}_${variant + 1}`));
 }
 
 function heading(text: string): void {

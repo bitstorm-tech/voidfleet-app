@@ -4,7 +4,7 @@
 
 import { commandById, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
 import { Board, isSameSlot, maxDeploys, otherLane, overdriveBonus, slotTarget, type Slot } from "../../../shared/board.ts";
-import type { Deploy, MatchResult, PlayerView, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
+import type { Deploy, MatchResult, OpponentView, PlayerView, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
 
 /** Eine eingeplante Bewegung: der Slot des Schiffs und der freie Slot, in den es geht. */
 export interface PlannedMove {
@@ -27,7 +27,8 @@ export class Match {
   plan: TurnPlan = emptyPlan();
   /** Der Zug ist abgegeben und bis zur Auflösung gesperrt. */
   submitted = false;
-  opponent = { joined: false, submitted: false };
+  /** Was man vom Gegner weiß, sobald er beigetreten ist. */
+  opponent: OpponentView | null = null;
   result: MatchResult | null = null;
   surrendered = false;
 

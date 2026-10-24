@@ -12,9 +12,10 @@ export const ANIMATION_SPEEDS = { slow: 2, normal: 1, fast: 0.6, veryFast: 0.35 
 export type AnimationSpeed = keyof typeof ANIMATION_SPEEDS;
 
 export interface Settings {
-  /** Lautstärke von Musik und Effekten, jeweils 0..1. */
+  /** Lautstärke von Musik, Effekten und Bordfunk, jeweils 0..1; Bordfunk auf 0 schaltet ihn samt Untertiteln ab. */
   musicVolume: number;
   effectsVolume: number;
+  voiceVolume: number;
   /** Schüsse im Kampf. */
   attackSpeed: AnimationSpeed;
   /** Flüge der Schiffe: Deploy-Einflug und Lane-Wechsel. */
@@ -29,6 +30,7 @@ const STORAGE_KEY = "voidfleet.settings";
 const DEFAULTS: Settings = {
   musicVolume: 0.6,
   effectsVolume: 0.8,
+  voiceVolume: 0.8,
   attackSpeed: "normal",
   movementSpeed: "normal",
   animationSpeed: "normal",

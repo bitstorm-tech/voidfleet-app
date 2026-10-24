@@ -379,13 +379,37 @@ test("Ab Runde 8 gilt der Overdrive schon beim Planen der Runde", () => {
   expect(match.board.overdrive).toBe(1);
 });
 
+test("Der Gegner sieht Handgrößen, Decks und die aufgedeckten Befehle, aber keine Handkarten", () => {
+  const alone = new Match("test");
+  alone.join("a");
+  expect(alone.view(0).opponent).toBeNull();
+
+  const match = startedMatch();
+  const player = match.players[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("scavenge"), commandById("torpedo"));
+  const torpedo = { ships: [], command: { handIndex: 1, target: { lane: "strike" as const, slotIndex: 0 }, destination: null }, maneuver: null };
+  expect(match.submit(0, torpedo)).toBeNull();
+  // Bis zum Aufdecken ist nur bekannt, dass er abgegeben hat.
+  expect(match.view(1).opponent).toMatchObject({ submitted: true, commandHandSize: 2, playedCommands: [] });
+  expect(match.submit(1, { ships: [], command: null, maneuver: null })).toBeNull();
+  match.resolveRound();
+  expect(match.view(1).opponent).toEqual({
+    submitted: false,
+    shipHandSize: 5,
+    commandHandSize: 2,
+    shipDeckSize: 11,
+    commandDeckSize: 11,
+    playedCommands: ["torpedo"],
+  });
+});
+
 test("Der Computergegner nimmt den freien Platz und zieht, sobald der Spieler abgibt", () => {
   const match = new Match("test");
   match.join("a");
   expect(match.addBot()).toBe(1);
   expect(match.addBot()).toBeNull();
   expect(match.join("c")).toBeNull();
-  expect(match.view(0).opponent).toEqual({ joined: true, submitted: false });
+  expect(match.view(0).opponent).toMatchObject({ submitted: false, playedCommands: [] });
 
   expect(match.submit(0, deploy)).toBeNull();
   expect(match.isRoundComplete).toBe(true);

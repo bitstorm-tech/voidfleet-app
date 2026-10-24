@@ -2,7 +2,8 @@
 // Manöver, Befehle, Kampf und Cleanup nacheinander, gleichartige Ereignisse jeweils
 // gleichzeitig. Die Schüsse im Kampf laufen als Salve kurz versetzt und
 // überlappend ab, Einschläge auf dasselbe Ziel mit etwas Abstand, damit man bei
-// vollem Brett nachvollziehen kann, wer wen trifft. Die Szene läuft dabei dem Spielzustand voraus; den Endzustand
+// vollem Brett nachvollziehen kann, wer wen trifft. Der Bordfunk kündigt Schritte an und reagiert auf ihren
+// Ausgang (`radioCues.ts`). Die Szene läuft dabei dem Spielzustand voraus; den Endzustand
 // übernimmt danach der Server-Snapshot (`MatchController.syncBoard`) — auch
 // dann, wenn der Spieler die Animation per `skip` abbricht.
 
@@ -11,11 +12,13 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { Side } from "../../shared/board.ts";
 import { shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
 import type { RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget } from "../../shared/protocol.ts";
+import { say, silenceRadio } from "./audio/radio.ts";
 import { playSound, stopSounds } from "./audio/sounds.ts";
 import { playUiSound } from "./audio/uiSounds.ts";
 import { color3 } from "./data/palette.ts";
 import type { SoundId } from "./data/sounds.ts";
 import { t } from "./i18n/index.ts";
+import { announcement, reactions } from "./radioCues.ts";
 import { destroyShip } from "./scene/destruction.ts";
 import { boltDuration } from "./scene/effects.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
@@ -166,11 +169,20 @@ export class RoundPlayback {
     this.isSkipped = true;
     skipAnimations(true);
     stopSounds();
+    silenceRadio();
     this.floats.clear();
     this.hud.hideBanner();
   }
 
+  /** Ein Schritt samt Bordfunk: die Ankündigung zusammen mit dem Banner, die Reaktion, sobald er abgespielt ist. */
   private async playStep(step: readonly RoundEvent[]): Promise<void> {
+    const cue = announcement(step);
+    if (cue) say(cue);
+    await this.playEvents(step);
+    for (const reaction of reactions(step)) say(reaction);
+  }
+
+  private async playEvents(step: readonly RoundEvent[]): Promise<void> {
     const first = step[0]!;
     if (first.kind === "attack") return this.salvo(step as Extract<RoundEvent, { kind: "attack" }>[]);
     this.hud.appendLog(step.map(describeEvent));

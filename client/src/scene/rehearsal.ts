@@ -1,6 +1,7 @@
 // Generalprobe hinter dem Ladebildschirm: Babylon übersetzt einen Shader erst, wenn etwas zum ersten
 // Mal gezeichnet wird, und das Bild stockt dabei. Deshalb wird beim Laden alles einmal gezeigt, was im
-// Spiel vorkommt — Schiffe mit Treffer-Blitz, Geister, glühende Wracks und alle Effekte — und danach
+// Spiel vorkommt — Schiffe mit Treffer-Blitz und Zielvorschau, Geister, glühende Wracks, die Bögen der
+// Zielvorschau und alle Effekte — und danach
 // wieder entsorgt. Die Shader bleiben übersetzt, weil `Effect.PersistentMode` sie nie freigibt (`matchScene.ts`).
 // Die Effekte bleiben dabei stumm, auch wenn ein Klick auf den Ladebildschirm den Ton schon freigegeben hat.
 
@@ -29,9 +30,14 @@ export async function rehearse(view: MatchScene): Promise<void> {
     for (const mesh of wrecked.root.getChildMeshes()) mesh.renderOverlay = true;
     effects.burn(pieces[0]!, 1, 0.3, 50);
     void ship.flash();
+    ship.setPreview({ hp: 1, shield: 0 });
+    ship.setDoomed(true);
+    ghost.setDoomed(true);
     ships.push(ship, ghost, wrecked);
   }
   for (const ship of ships) ship.root.position.copyFrom(STAGE);
+  const lines = (["player", "enemy"] as const).map((side) => ({ from: view.pad(side, "strike", 0), to: view.pad(side, "command", 5), side }));
+  view.targetLines.show(lines);
 
   effects.pop(STAGE, Vector3.Up(), 1);
   const shots = [
@@ -43,6 +49,7 @@ export async function rehearse(view: MatchScene): Promise<void> {
   // Auch alles, was noch ausgeblendet ist (leuchtende Slots, Bogenpfeil), wird dabei übersetzt.
   await scene.whenReadyAsync();
   await Promise.all(shots);
+  view.targetLines.show([]);
   for (const ship of ships) ship.dispose();
   // Erst wenn der letzte Funke verglüht ist, darf der Ladebildschirm den Blick freigeben.
   await new Promise<void>((resolve) => {

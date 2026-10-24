@@ -1,16 +1,20 @@
-// Erzeugt die Soundeffekte und die Hintergrundmusik über fal.ai und legt sie unter `assets/audio/` ab:
+// Erzeugt die Soundeffekte, die Hintergrundmusik und den Bordfunk über fal.ai und legt sie unter `assets/audio/` ab:
 // Effekte mit ElevenLabs Sound Effects v2 als `sfx/<id>_<n>.mp3` (mehrere Varianten je Sound, eingebunden
-// in `src/data/sounds.ts`), Musik mit ElevenLabs Music als `music/<id>.mp3`. Vorhandene Dateien werden
-// übersprungen; eine missratene Variante löscht man und startet das Skript erneut.
+// in `src/data/sounds.ts`), Musik mit ElevenLabs Music als `music/<id>.mp3`, die Funksprüche des Bordfunks
+// mit ElevenLabs Text-to-Speech als `radio/<id>_<n>.mp3` (eingebunden in `src/data/radio.ts`; die Texte stehen in
+// `src/i18n/en.ts` unter `radio`, je Variante eine Datei). Vorhandene Dateien werden übersprungen; eine
+// missratene Variante löscht man und startet das Skript erneut.
 //
 //   FAL_KEY=… bun tools/generateAudio.ts                       # alle fehlenden Dateien
 //   FAL_KEY=… bun tools/generateAudio.ts --force               # alle neu
 //   FAL_KEY=… bun tools/generateAudio.ts explosion_large calm  # nur diese (immer neu, alle Varianten)
 
 import { mkdir } from "node:fs/promises";
+import { en } from "../src/i18n/en.ts";
 
 const SFX_MODEL = "fal-ai/elevenlabs/sound-effects/v2";
 const MUSIC_MODEL = "fal-ai/elevenlabs/music";
+const SPEECH_MODEL = "fal-ai/elevenlabs/tts/multilingual-v2";
 const OUT_DIR = `${import.meta.dir}/../assets/audio`;
 const PARALLEL = 4;
 const POLL_INTERVAL = 1500;
@@ -181,6 +185,12 @@ const MUSIC: Record<string, { prompt: string; seconds: number }> = {
   },
 };
 
+/**
+ * Die Funkoffizierin des Bordfunks: knapp, bestimmt, ein wenig schneller als normal. Trocken aufgenommen;
+ * den Funkklang (Bandpass, Rauschen, Sprechtaste) macht erst das Spiel (`src/audio/radio.ts`).
+ */
+const RADIO_VOICE = { voice: "Alice", stability: 0.45, similarity_boost: 0.8, style: 0.3, speed: 1.05 };
+
 interface Job {
   id: string;
   path: string;
@@ -203,6 +213,14 @@ const jobs: Job[] = [
     model: MUSIC_MODEL,
     input: { prompt: track.prompt, music_length_ms: track.seconds * 1000, force_instrumental: true },
   })),
+  ...Object.entries(en.radio.lines).flatMap(([id, lines]) =>
+    lines.map((text, index) => ({
+      id,
+      path: `${OUT_DIR}/radio/${id}_${index + 1}.mp3`,
+      model: SPEECH_MODEL,
+      input: { text, ...RADIO_VOICE },
+    })),
+  ),
 ];
 
 /** Über die Warteschlange von fal statt `fal.run`: Musik braucht länger, als ein einzelner Request offen bleibt. */
@@ -240,6 +258,7 @@ const queue = jobs.filter((job) => {
 });
 await mkdir(`${OUT_DIR}/sfx`, { recursive: true });
 await mkdir(`${OUT_DIR}/music`, { recursive: true });
+await mkdir(`${OUT_DIR}/radio`, { recursive: true });
 console.log(`${queue.length} Datei(en) über fal.ai …`);
 
 const failed: string[] = [];

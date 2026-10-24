@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Board, overdriveBonus, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import { commandById, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
 import type { RoundEvent } from "../../shared/protocol.ts";
-import { resolveCleanup, resolveCombat, resolveDeployAbilities, resolveEffects, resolveManeuver, type Commander, type PlayedCommand } from "./resolution.ts";
+import { resolveCleanup, resolveCombat, resolveDeployAbilities, resolveEffects, resolveManeuver, type Commander, type PlayedCommand } from "../../shared/resolution.ts";
 
 function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: ShipId): Slot {
   return board.place(board.lane(side, lane), slotIndex, shipById(id))!;

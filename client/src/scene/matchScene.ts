@@ -32,6 +32,7 @@ import { LaneLabel } from "./laneLabel.ts";
 import { MoveArrow } from "./moveArrow.ts";
 import type { ShipView } from "./ship.ts";
 import { SlotPad, createPadMaterials } from "./slotPad.ts";
+import { TargetLines } from "./targetLines.ts";
 import { TargetReticle } from "./targetReticle.ts";
 import { animationTimeScale } from "./tween.ts";
 
@@ -97,6 +98,8 @@ export class MatchScene {
   readonly maneuverArrow: MoveArrow;
   /** Zielslot des Torpedos auf der Gegnerseite. */
   readonly reticle: TargetReticle;
+  /** Zielvorschau beim Planen: wer im Kampf auf wen feuert. */
+  readonly targetLines: TargetLines;
   private readonly camera: TargetCamera;
   private readonly cameraRig: TransformNode;
   private readonly glow: GlowLayer;
@@ -150,6 +153,7 @@ export class MatchScene {
     this.moveArrow = new MoveArrow(this.scene, this.glow);
     this.maneuverArrow = new MoveArrow(this.scene, this.glow);
     this.reticle = new TargetReticle(this.scene, this.glow);
+    this.targetLines = new TargetLines(this.scene, this.glow);
 
     this.createBoard(board);
 

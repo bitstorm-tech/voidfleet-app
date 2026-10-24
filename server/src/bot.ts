@@ -10,7 +10,7 @@
 import { Board, maxDeploys, nearest, opposite, SLOT_COUNT, slotTarget, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import type { CommandCard, ShipCard } from "../../shared/cards.ts";
 import type { Deploy, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
-import { highest, resolveCombat } from "./resolution.ts";
+import { highest, resolveCombat } from "../../shared/resolution.ts";
 
 export interface BotHands {
   readonly side: Side;

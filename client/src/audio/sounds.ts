@@ -2,7 +2,8 @@
 // Lautheit gebracht; der stille Vorlauf wird übersprungen, damit der Ton genau mit dem Bild einsetzt. Jedes
 // Abspielen wählt eine zufällige Variante (nie zweimal dieselbe hintereinander) und verstimmt sie leicht; die
 // Stereoposition folgt dem Geschehen auf dem Brett (eigene Seite links, Gegner rechts). Solange Animationen
-// übersprungen werden, der Ton nicht freigegeben oder stumm geschaltet ist, bleibt es still.
+// übersprungen werden, der Ton nicht freigegeben oder stumm geschaltet ist, bleibt es still. Der Bordfunk lädt
+// seine Aufnahmen ebenso (`loadSample`), spielt sie aber selbst ab (`radio.ts`).
 
 import { SOUNDS, type SoundId } from "../data/sounds.ts";
 import { animationsSkipped } from "../scene/tween.ts";
@@ -43,7 +44,7 @@ export interface SoundHandle {
   stop(fade?: number): void;
 }
 
-interface Sample {
+export interface Sample {
   buffer: AudioBuffer;
   /** Verstärkung auf die gemeinsame Lautheit. */
   gain: number;
@@ -60,7 +61,7 @@ let isMuted = false;
 /** Lädt und dekodiert alle Effekte; im Spiel über `preload.ts`, Dev-Seiten rufen es selbst auf. */
 export function loadSounds(): Promise<void>[] {
   return (Object.keys(SOUNDS) as SoundId[]).map(async (id) => {
-    samples.set(id, await Promise.all(SOUNDS[id].files.map(load)));
+    samples.set(id, await Promise.all(SOUNDS[id].files.map(loadSample)));
   });
 }
 
@@ -87,7 +88,7 @@ function start(id: SoundId, options: PlayOptions, loop: boolean): SoundHandle {
   const variants = samples.get(id);
   const active = voices.get(id) ?? new Set<SoundHandle>();
   if (!variants || isMuted || !isAudible() || animationsSkipped() || active.size >= MAX_VOICES) return SILENT;
-  const { buffer, gain, onset } = variants[options.variant ?? pickVariant(id, variants.length)]!;
+  const { buffer, gain, onset } = variants[options.variant ?? pickVariant(lastVariant, id, variants.length)]!;
   const now = context.currentTime;
   const level = gain * SOUNDS[id].volume * (options.volume ?? 1);
   const playbackRate = (options.rate ?? 1) * (1 + (Math.random() - 0.5) * DETUNE);
@@ -120,11 +121,11 @@ function start(id: SoundId, options: PlayOptions, loop: boolean): SoundHandle {
   return voice;
 }
 
-/** Zufällig eine Variante, aber nie zweimal dieselbe hintereinander. */
-function pickVariant(id: SoundId, count: number): number {
-  const choices = [...Array(count).keys()].filter((index) => count === 1 || index !== lastVariant.get(id));
+/** Zufällig eine Variante, aber nie zweimal dieselbe hintereinander; `last` merkt sich die letzte je Id. */
+export function pickVariant<Id>(last: Map<Id, number>, id: Id, count: number): number {
+  const choices = [...Array(count).keys()].filter((index) => count === 1 || index !== last.get(id));
   const index = choices[Math.floor(Math.random() * choices.length)]!;
-  lastVariant.set(id, index);
+  last.set(id, index);
   return index;
 }
 
@@ -132,7 +133,8 @@ function panAt(x: number): number {
   return Math.min(Math.max(x / PAN_WIDTH, -MAX_PAN), MAX_PAN);
 }
 
-async function load(url: string): Promise<Sample> {
+/** Lädt und dekodiert eine Datei samt Verstärkung auf die gemeinsame Lautheit und stillem Vorlauf. */
+export async function loadSample(url: string): Promise<Sample> {
   const response = await fetch(url);
   const buffer = await context.decodeAudioData(await response.arrayBuffer());
   return { buffer, ...analyse(buffer) };

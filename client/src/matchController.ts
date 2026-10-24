@@ -10,18 +10,23 @@
 // mit Ziel-Slot, Geist und Pfeil; das Schiff feuert dann nicht, seine Balken sind gedämpft.
 // Ein Klick auf das manövrierende Schiff oder Escape nimmt das Manöver zurück.
 // Der Torpedo zielt auf einen Slot der Gegnerseite, auch einen leeren; ein Fadenkreuz markiert ihn.
-// Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner.
+// Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner. Solange geplant wird, zeigt die
+// Zielvorschau (`game/preview.ts`), wie die Runde mit diesem Plan liefe, wenn der Gegner nichts tut.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 // „Neues Match“ wechselt nur die Verbindung; Szene und geladene Assets bleiben.
 // Die Musik folgt der Phase: ruhig beim Planen, angespannt während die Runde abläuft, still nach Spielende.
+// Zwischen den Runden meldet sich der Bordfunk (`audio/radio.ts`), während einer Runde die Wiedergabe.
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
-import { canTargetLane, needsTarget, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
+import { canTargetLane, isToken, needsTarget, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
 import { maxDeploys, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, overdriveBonus, slotTarget, type Lane, type Slot } from "../../shared/board.ts";
-import type { ServerMessage } from "../../shared/protocol.ts";
+import type { MatchResult, OpponentView, ServerMessage, SlotRef } from "../../shared/protocol.ts";
 import { setMusicMood } from "./audio/music.ts";
+import { say } from "./audio/radio.ts";
 import { playUiSound } from "./audio/uiSounds.ts";
+import type { RadioCue } from "./data/radio.ts";
 import { Match, type PlannedMove } from "./game/match.ts";
+import { previewRound, type RoundPreview } from "./game/preview.ts";
 import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
 import { preloadAssets } from "./preload.ts";
@@ -34,10 +39,15 @@ import { FloatingTexts } from "./ui/floatingText.ts";
 import { HandView } from "./ui/hand.ts";
 import { Hud } from "./ui/hud.ts";
 import { LoadingScreen } from "./ui/loadingScreen.ts";
+import { OpponentPanel } from "./ui/opponentPanel.ts";
+import { RadioSubtitle } from "./ui/radioSubtitle.ts";
 import { ResultScreen } from "./ui/resultScreen.ts";
 import { RulesDialog } from "./ui/rulesDialog.ts";
 import { SettingsDialog } from "./ui/settingsDialog.ts";
 import { SurrenderDialog } from "./ui/surrenderDialog.ts";
+
+/** Den Ausgang meldet der Bordfunk kurz nach dem Einsatz der Fanfare (Millisekunden). */
+const RESULT_REPORT_DELAY = 1500;
 
 export class MatchController {
   private readonly match = new Match();
@@ -47,6 +57,7 @@ export class MatchController {
   private readonly playback: RoundPlayback;
   private readonly resultScreen: ResultScreen;
   private readonly surrenderDialog: SurrenderDialog;
+  private readonly opponentPanel: OpponentPanel;
   private connection: ServerConnection;
   private isConnected = true;
   /**
@@ -65,6 +76,10 @@ export class MatchController {
   private hoveredPad: SlotPad | null = null;
   private ghostPads: SlotPad[] = [];
   private validTargetCount = 0;
+  /** Die Zielvorschau des eingeplanten Zugs; null, solange keine Runde geplant wird. */
+  private preview: RoundPreview | null = null;
+  /** Eigene Kriegsschiffe auf Brett und Hand beim letzten Zustand, für die Meldung, dass nur noch eines übrig ist. */
+  private warships = 0;
 
   constructor(canvas: HTMLCanvasElement, ui: HTMLElement) {
     this.view = new MatchScene(canvas, this.match.board);
@@ -74,6 +89,8 @@ export class MatchController {
     this.resultScreen = new ResultScreen(ui, () => this.startNewMatch());
     new SettingsDialog(ui);
     new RulesDialog(ui);
+    this.opponentPanel = new OpponentPanel(ui);
+    new RadioSubtitle(ui);
     this.surrenderDialog = new SurrenderDialog(ui, () => this.connection.send({ type: "surrender" }));
     this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton, this.hud.botButton, this.hud.checklist], {
       onShipCardClick: (index) => this.onShipCardClick(index),
@@ -132,6 +149,7 @@ export class MatchController {
       case "state": {
         // Runde 1 versteht sich von selbst, ebenso der erste Zustand nach dem Laden der Seite.
         const isNewRound = this.match.round > 0 && message.view.round > this.match.round && message.view.result === null;
+        const before = { opponent: this.match.opponent, result: this.match.result };
         this.match.apply(message.view);
         setMusicMood(this.match.result === null ? "calm" : null);
         this.selectedShipIndex = null;
@@ -142,6 +160,7 @@ export class MatchController {
         this.refreshSelectionVisuals();
         this.resultScreen.show(this.match.result, this.match.round, this.match.surrendered);
         if (isNewRound) this.hud.showRoundBanner(this.match.round);
+        this.reportByRadio(before, isNewRound);
         break;
       }
       case "round":
@@ -391,7 +410,8 @@ export class MatchController {
 
   /**
    * Stellt die Geister dorthin, wo sie laut `ghostTargets` stehen sollen; stehen sie schon richtig, bleiben sie.
-   * Die Pfeile der Bewegungen folgen den Geistern der verlegten Schiffe.
+   * Die Pfeile der Bewegungen folgen den Geistern der verlegten Schiffe. Danach kommt die Zielvorschau
+   * dazu, die auch an den Geistern hängt.
    */
   private refreshGhosts(): void {
     showArrow(this.view.moveArrow, this.shownCommandMove());
@@ -402,20 +422,23 @@ export class MatchController {
     const unchanged =
       targets.length === this.ghostPads.length &&
       targets.every((target, index) => target.pad === this.ghostPads[index] && target.card === target.pad.ship?.card);
-    if (unchanged) return;
-    this.clearGhosts();
-    for (const { pad, card } of targets) pad.attachShip(new ShipView(this.view.scene, card, true));
-    this.ghostPads = targets.map((target) => target.pad);
+    if (!unchanged) {
+      this.clearGhosts();
+      for (const { pad, card } of targets) pad.attachShip(new ShipView(this.view.scene, card, true));
+      this.ghostPads = targets.map((target) => target.pad);
+    }
+    this.showPreview();
   }
 
   /**
    * Beim Platzieren zeigt der Geist den Slot unter dem Zeiger, sonst das eingeplante Schiff.
    * Ebenso stehen die verlegten Schiffe beim Wählen des Ziel-Slots unter dem Zeiger, sonst auf dem
-   * eingeplanten Ziel-Slot (siehe `shownMove`).
+   * eingeplanten Ziel-Slot (siehe `shownMove`). Die Drohnen, die eingeplante Titan Carrier laut
+   * Zielvorschau starten, stehen zuerst in der Liste: Ein Geist unter dem Zeiger auf ihrem Slot verdrängt sie.
    */
   private ghostTargets(): { pad: SlotPad; card: ShipCard }[] {
     if (this.isResolving) return [];
-    const ghosts: { pad: SlotPad; card: ShipCard }[] = [];
+    const ghosts = (this.preview?.drones ?? []).map((drone) => ({ pad: this.padOf(drone), card: shipById("drone") }));
     const hovered = this.hoveredPad !== null && this.isValidTarget(this.hoveredPad) ? this.hoveredPad : null;
     const placing = this.selectedShipIndex !== null && hovered !== null;
     for (const ship of placing ? this.match.keptDeploys(this.selectedShipIndex!) : this.match.plan.ships) {
@@ -460,6 +483,31 @@ export class MatchController {
     return { from: padOf(planned.from), to: padOf(planned.to) };
   }
 
+  /** Rechnet die Zielvorschau neu, sobald sich Brett oder Plan ändern; während der Auflösung und nach Spielende gibt es keine. */
+  private updatePreview(): void {
+    const planning = !this.isResolving && this.match.round > 0 && this.match.result === null;
+    this.preview = planning ? previewRound(this.match) : null;
+  }
+
+  /**
+   * Die Zielvorschau auf dem Brett: Bögen der Schüsse, auf den Balken der drohende Verlust und ein Totenkopf an
+   * jedem Schiff, das fallen würde, auch an Geistern. Ein Schiff, das sich bewegt, steht dabei schon im Ziel-Slot.
+   */
+  private showPreview(): void {
+    const preview = this.preview;
+    const shots = preview?.shots ?? [];
+    this.view.targetLines.show(shots.map(({ attacker, target }) => ({ from: this.padOf(attacker), to: this.padOf(target), side: attacker.side })));
+    const losses = new Set(preview?.losses.map((ref) => this.padOf(ref)));
+    for (const pad of this.view.pads) {
+      pad.ship?.setDoomed(losses.has(pad));
+      if (!pad.ship?.isGhost) pad.ship?.setPreview(preview?.outcomes.get(pad.slot));
+    }
+  }
+
+  private padOf(ref: SlotRef): SlotPad {
+    return this.view.pad(ref.side, ref.lane, ref.slotIndex);
+  }
+
   /** Das manövrierende Schiff feuert nicht und zeigt das mit gedämpften Balken; in der Auflösung setzt sie die Wiedergabe. */
   private refreshHoldFire(): void {
     if (this.isResolving) return;
@@ -475,9 +523,30 @@ export class MatchController {
   // --- Runde ---
 
   private submit(): void {
-    if (!this.canPlan || !this.match.opponent.joined) return;
+    if (!this.canPlan || this.match.opponent === null) return;
     this.connection.send({ type: "submit", plan: this.match.plan });
     playUiSound("confirm");
+    say("orders_sent");
+  }
+
+  /**
+   * Was der Bordfunk zwischen den Runden meldet: den Gefechtsbeginn, den Overdrive, das letzte eigene Kriegsschiff,
+   * dass der Gegner seinen Zug beendet hat, und zuletzt den Ausgang des Matches.
+   */
+  private reportByRadio(before: { opponent: OpponentView | null; result: MatchResult | null }, isNewRound: boolean): void {
+    const { match } = this;
+    const warships = [...match.board.ships("player").map((slot) => slot.card!), ...match.shipHand].filter((card) => card.atk > 0 && !isToken(card)).length;
+    const lostTheLast = warships === 1 && this.warships > 1;
+    this.warships = warships;
+    if (match.result !== null) {
+      if (before.result === null) setTimeout(() => say(resultCue(match.result!, match.surrendered)), RESULT_REPORT_DELAY);
+      return;
+    }
+    if (before.opponent === null && match.opponent !== null && match.round === 1) say("battle_start");
+    const overdrive = overdriveBonus(match.round);
+    if (isNewRound && overdrive > overdriveBonus(match.round - 1)) say(overdrive === 1 ? "overdrive" : "overdrive_up");
+    if (lostTheLast) say("last_ship");
+    if (!before.opponent?.submitted && match.opponent?.submitted && !match.submitted) say("enemy_ready");
   }
 
   /** Szene an den neuen Zustand angleichen (auch Schiffe, die die Lane gewechselt haben); der Geist kommt zuletzt. */
@@ -492,6 +561,7 @@ export class MatchController {
       }
       pad.ship?.setStats(slot.hp, slot.shield);
     }
+    this.updatePreview();
     this.refreshGhosts();
   }
 
@@ -518,6 +588,7 @@ export class MatchController {
       if (valid) this.validTargetCount += 1;
     }
     this.view.setGridVisible(this.selectedShipIndex !== null || this.moveSource !== null || this.maneuverSource !== null);
+    this.updatePreview();
     this.refreshGhosts();
     this.refreshHoldFire();
     this.updateHud();
@@ -528,16 +599,17 @@ export class MatchController {
     this.hud.setOverdrive(overdriveBonus(this.match.round));
     this.hud.setStatus(this.buildStatusText());
     // Solange kein Gegner da ist, bietet der Knopf den Computergegner an.
-    const waitingForOpponent = this.isConnected && this.match.round > 0 && !this.match.opponent.joined;
+    const waitingForOpponent = this.isConnected && this.match.round > 0 && this.match.opponent === null;
     this.hud.showAction(this.isResolving ? "skip" : waitingForOpponent ? "bot" : "submit");
-    this.hud.submitButton.disabled = !this.canPlan || !this.match.opponent.joined;
+    this.hud.submitButton.disabled = !this.canPlan || this.match.opponent === null;
     this.hud.submitButton.textContent = this.match.submitted ? t.hud.waiting : t.hud.endTurn;
-    const planning = !this.isResolving && this.canPlan && this.match.opponent.joined;
+    const planning = !this.isResolving && this.canPlan && this.match.opponent !== null;
     this.hud.setChecklist(planning ? this.match.turnProgress : null, {
       planned: this.match.plan.ships.length,
       max: maxDeploys(this.match.round),
     });
-    this.surrenderDialog.setAvailable(this.isConnected && this.match.opponent.joined && this.match.result === null);
+    this.surrenderDialog.setAvailable(this.isConnected && this.match.opponent !== null && this.match.result === null);
+    this.opponentPanel.show(this.match.opponent);
   }
 
   private buildStatusText(): string {
@@ -546,12 +618,11 @@ export class MatchController {
     if (this.isResolving) return t.status.resolving;
     if (this.match.result !== null) return t.status.matchOver;
     if (this.match.submitted) return t.status.submitted;
-    if (!this.match.opponent.joined) return t.status.waitingForOpponent(this.shareLink());
+    if (this.match.opponent === null) return t.status.waitingForOpponent(this.shareLink());
     const fleet = t.status.fleet(this.match.board.shipCount("player"), MAX_SHIPS_PER_SIDE);
     // Aufstellung: Solange mehr als ein Schiff erlaubt ist, steht dabei, wie viele noch gelegt werden dürfen.
     const deploys = maxDeploys(this.match.round) > 1 ? ` · ${t.status.deploysLeft(this.match.deploysLeft)}` : "";
-    const opponent = this.match.opponent.submitted ? ` ${t.status.opponentSubmitted}` : "";
-    return `${fleet}${deploys} — ${this.buildPlanningText()}${opponent}`;
+    return `${fleet}${deploys} — ${this.buildPlanningText()}`;
   }
 
   /** Der Match-Link ohne `?lang=`, damit der Gegner seine eigene Sprache bekommt. */
@@ -591,6 +662,13 @@ export class MatchController {
     this.hoveredPad?.setHovered(true);
     this.refreshGhosts();
   }
+}
+
+/** Der Funkspruch zum Ausgang; nach einer Aufgabe meldet er den Rückzug. */
+function resultCue(result: MatchResult, surrendered: boolean): RadioCue {
+  if (result === "draw") return "draw";
+  if (result === "won") return surrendered ? "enemy_surrender" : "victory";
+  return surrendered ? "retreat" : "defeat";
 }
 
 function showArrow(arrow: MoveArrow, move: { from: SlotPad; to: SlotPad } | null): void {

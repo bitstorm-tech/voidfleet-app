@@ -18,6 +18,60 @@ export interface RulesSection {
   caption?: string;
 }
 
+/**
+ * Funksprüche des Bordfunks (`audio/radio.ts`): je Spruch der gesprochene Text seiner Varianten. Die Aufnahmen sind
+ * englisch, `tools/generateAudio.ts` liest ihre Texte von hier; andere Sprachen übersetzen nur den Untertitel.
+ */
+const radioLines = {
+  battle_start: ["All ships at battle stations. Awaiting your orders, Admiral.", "Fleet in position. Ready when you are, Admiral."],
+  orders_sent: ["Orders confirmed. Executing.", "Copy that, Admiral.", "Understood. All ships, execute."],
+  enemy_ready: ["The enemy fleet has locked in their moves.", "The enemy is ready, Admiral. Your call."],
+  overdrive: ["Reactors at overdrive. All weapons free!", "Overdrive engaged! Every gun at full power!"],
+  overdrive_up: ["Overdrive rising! The reactors are running hot!", "Pushing the reactors further. Expect heavier fire!"],
+  last_ship: ["That's our last warship, Admiral!", "We're down to our last warship!"],
+  victory: ["Enemy fleet destroyed. The sector is ours, Admiral!", "That's the last of them. Victory, Admiral!"],
+  defeat: ["We've lost the fleet. All hands, abandon ship.", "Our fleet is gone. All survivors, fall back."],
+  draw: ["Both fleets are gone. No one wins today."],
+  enemy_surrender: ["The enemy is withdrawing. They've surrendered!"],
+  retreat: ["Signal the retreat. All ships, disengage."],
+  torpedo_away: ["Torpedo away!", "Fish in the water!"],
+  torpedo_hit: ["Direct hit!", "Torpedo impact confirmed!"],
+  torpedo_missed: ["Torpedo missed! They moved out of the way.", "No impact. The target slipped away."],
+  torpedo_incoming: ["Incoming torpedo!", "Torpedo inbound! Brace for impact!"],
+  torpedo_dodged: ["Their torpedo missed!", "Torpedo went wide. Nice flying!"],
+  barrage_hit: ["Caught them moving!", "Barrage on target! They flew right into it!"],
+  barrage_missed: ["Barrage hit nothing. They held their ground."],
+  barrage_caught: ["Barrage! We flew right into it!", "They were waiting for us to move!"],
+  orbital_strike: ["Orbital strike inbound on target!"],
+  orbital_incoming: ["Orbital strike incoming! Brace!"],
+  volley: ["All batteries, fire!"],
+  volley_incoming: ["Missiles incoming!"],
+  emp_hit: ["EMP hit! Their weapons are down."],
+  emp_incoming: ["EMP! Our weapons are offline!"],
+  jammer: ["Jamming their targeting systems."],
+  jammed: ["They're jamming our targeting!"],
+  shields_up: ["Shields up!", "Diverting power to shields!"],
+  overcharge: ["Overcharging weapons. She won't hold together for long!"],
+  power_surge: ["Power surge to the strike line!"],
+  scavenge: ["Salvage teams report new supplies."],
+  intercept: ["Moving to intercept!"],
+  recall: ["Pull her back and patch her up!"],
+  flanking: ["Flanking maneuver, go!"],
+  drone_launch: ["Drone away!"],
+  frigate_fire: ["Frigate firing on arrival!"],
+  repair: ["Repair drones at work."],
+  scrap: ["The raider is stripping the wreckage!"],
+  enemy_destroyed: ["Enemy ship destroyed!", "Target down!", "Splash one!", "Kill confirmed!"],
+  ship_lost: ["We lost a ship!", "Ship down! Ship down!", "We've lost one of ours!"],
+  hull_critical: ["Hull integrity critical!", "She's badly hurt, Admiral!"],
+} as const;
+
+export type RadioCue = keyof typeof radioLines;
+/** Ein Tupel gleicher Länge mit beliebigen Texten. */
+type Translated<Lines> = { readonly [Variant in keyof Lines]: string };
+/** Je Funkspruch so viele Untertitel wie Aufnahmen, in der Sprache des Spielers. */
+export type RadioLines = { [Cue in RadioCue]: Translated<(typeof radioLines)[Cue]> };
+
 export const en = {
   /** Name der Sprache in ihr selbst, für die Sprachwahl. */
   languageName: "English",
@@ -42,6 +96,7 @@ export const en = {
     title: "Settings",
     musicVolume: "Music",
     effectsVolume: "Sound effects",
+    voiceVolume: "Radio chatter",
     attackSpeed: "Attack speed",
     movementSpeed: "Movement speed",
     animationSpeed: "Other animations",
@@ -114,7 +169,7 @@ export const en = {
         paragraphs: [
           "Ships have hull points (HP), attack (ATK) and sometimes a shield. There are four classes; the class decides how the ship picks its target in combat. Your ship deck holds two copies of each ship.",
           "Some ships have an ability. On deploy, once both sides have placed their ships: a Titan Carrier launches its Drone into the nearest free slot of its lane (Drones count toward neither the lane nor the fleet limit; there is no Drone only if every slot of the lane is taken), then every Plasma Frigate deals 3 damage to a random enemy ship in the lane of the same name (Strike against Strike, Command against Command), ignoring cover — a fresh Drone can be hit too. A ship destroyed that way neither maneuvers nor receives your command.",
-          "The Drone (1 HP, 1 ATK, Fighter) isn't in any deck; it counts as a combat ship and toward the lane and fleet limits. It only launches if there is room — also for the destinations of your maneuver and movement command this round. The Scrap Raider permanently gains +1 ATK whenever an enemy ship in the lane of the same name is destroyed, however it falls; it keeps the bonus when it moves. The Repair Drone repairs in Cleanup, the Signal Booster boosts its lane.",
+          "The Drone (1 HP, 1 ATK, Fighter) isn't in any deck; it counts as a combat ship, but toward neither the lane nor the fleet limit. It only launches if there is room — also for the destinations of your maneuver and movement command this round. The Scrap Raider permanently gains +1 ATK whenever an enemy ship in the lane of the same name is destroyed, however it falls; it keeps the bonus when it moves. The Repair Drone repairs in Cleanup, the Signal Booster boosts its lane.",
         ],
       },
       commands: {
@@ -128,14 +183,15 @@ export const en = {
         heading: "Hand and decks",
         paragraphs: [
           "You start with 4 ships — always 1 support ship and 3 combat ships — and 3 commands. At the end of every round you draw 1 ship and 1 command. Each hand holds at most 6 cards: with a full hand you draw nothing, so play your cards. Scavenge draws 1 extra ship and 1 extra command right away, again within the hand limit.",
-          "Your ship deck has 16 cards (each ship twice), your command deck 16 cards too (Torpedo and Barrage twice, every other command once). When a deck is empty, you simply draw nothing from it.",
+          "Your ship deck has 16 cards (each ship twice), your command deck 15 (Torpedo and Barrage twice, every other command once). When a deck is empty, you simply draw nothing from it.",
         ],
       },
       controls: {
         heading: "Controls",
         paragraphs: [
           "Tap a card in your hand, then a glowing slot or ship on the board; the status line at the top tells you what the selected card needs. Tapping the card again takes it back, as does tapping a ghost ship. To maneuver, tap one of your ships on the board without a card selected, then the destination slot; tap the ship again or press Escape to cancel.",
-          "“End turn” submits your plan. While the round is resolved you can skip the animation; the log button at the top right lists every event of the match. Scroll to zoom the board and drag to pan while zoomed in. Sound, animation speed and language live in the settings next to this dialog; the flag next to it surrenders the match after a confirmation, and your opponent wins immediately.",
+          "While you plan, the board previews the round as if your opponent did nothing: arcs show which ship fires at which, hull bars blink with the damage a ship would take, and a skull marks every ship that would be destroyed — your planned ships included. Chance, like the Plasma Frigate's shot, isn't included. The panel at the top right shows what you know about your opponent: whether they have ended their turn, how many cards they hold and have left in their decks, and how many copies of each command they haven't played yet.",
+          "“End turn” submits your plan. While the round is resolved you can skip the animation; the log button at the top right lists every event of the match. Scroll to zoom the board and drag to pan while zoomed in. Sound, radio chatter, animation speed and language live in the settings next to this dialog; the flag next to it surrenders the match after a confirmation, and your opponent wins immediately.",
         ],
       },
     } satisfies Record<string, RulesSection>,
@@ -199,7 +255,6 @@ export const en = {
     connecting: "Connecting to the server …",
     submitted: "Turn ended — waiting for the opponent.",
     waitingForOpponent: (link: string) => `Waiting for the opponent — share this link: ${link}`,
-    opponentSubmitted: "The opponent has already ended their turn.",
     fleet: (count: number, max: number) => `Fleet ${count}/${max}`,
     noFreeSlot: (ship: string, perLane: number, perSide: number) =>
       `no free slot for ${ship} (max. ${perLane} per lane, ${perSide} per side, planned ships included).`,
@@ -217,6 +272,21 @@ export const en = {
     idle: "Tap a ship or command card, or one of your ships on the board to maneuver it. Click “End turn” without a card to pass.",
     resolving: "Both turns are revealed — resolving the round …",
     matchOver: "The match is over.",
+  },
+  opponent: {
+    title: "Opponent",
+    planning: "planning …",
+    ready: "turn ended",
+    ships: "Ships",
+    commands: "Commands",
+    hand: "Hand",
+    deck: "Deck",
+    unplayed: "Unplayed commands",
+  },
+  radio: {
+    /** Absender im Untertitel. */
+    speaker: "Fleet Comms",
+    lines: radioLines as RadioLines,
   },
   result: {
     won: { title: "Victory", subtitle: "The enemy fleet is destroyed." },

@@ -44,6 +44,17 @@ export interface ShipRef extends SlotRef {
 
 export type MatchResult = "won" | "lost" | "draw";
 
+/** Was man vom Gegner weiß: ob er abgegeben hat, wie viele Karten er hält und welche Befehle er schon gespielt hat. */
+export interface OpponentView {
+  submitted: boolean;
+  shipHandSize: number;
+  commandHandSize: number;
+  shipDeckSize: number;
+  commandDeckSize: number;
+  /** Seine aufgedeckten Befehle in der Reihenfolge, in der er sie gespielt hat. */
+  playedCommands: CommandId[];
+}
+
 export interface PlayerView {
   matchId: string;
   round: number;
@@ -54,7 +65,8 @@ export interface PlayerView {
   commandDeckSize: number;
   /** Der abgegebene Zug dieser Runde; null, solange noch geplant wird. */
   submittedPlan: TurnPlan | null;
-  opponent: { joined: boolean; submitted: boolean };
+  /** Der Gegner, sobald er beigetreten ist. */
+  opponent: OpponentView | null;
   /** Gesetzt, sobald das Match entschieden ist; danach gibt es keine Züge mehr. */
   result: MatchResult | null;
   /** Das Match endete, weil ein Spieler aufgegeben hat; wer, folgt aus `result`. */
