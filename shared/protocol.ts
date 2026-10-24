@@ -60,6 +60,9 @@ export type CommandEffect =
   | { type: "heal"; amount: number }
   | { type: "move"; to: SlotTarget };
 
+/** Was eine Schiffs-Fähigkeit an einem Schiff bewirkt. */
+export type AbilityEffect = Extract<CommandEffect, { type: "heal" }>;
+
 /**
  * Was in einer Runde aufgedeckt und aufgelöst wurde, in Auflösungsreihenfolge.
  * Im Kampf feuern erst alle Schiffe (`attack`), dann wirkt der summierte Schaden (`hit`).
@@ -71,6 +74,8 @@ export type RoundEvent =
   | { kind: "effect"; side: Side; cardId: CommandId; ship: ShipRef; effect: CommandEffect; after: ShipStats }
   | { kind: "draw"; side: Side; cardId: CommandId; ships: number; commands: number }
   | { kind: "noEffect"; side: Side; cardId: CommandId }
+  /** Fähigkeit eines Schiffs (`source`) an einem anderen, bisher nur die Reparatur der Repair Drone im Cleanup. */
+  | { kind: "ability"; source: ShipRef; ship: ShipRef; effect: AbilityEffect; after: ShipStats }
   | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number; after: ShipStats }
   | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "destroyed"; ship: ShipRef };

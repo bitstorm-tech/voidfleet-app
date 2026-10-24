@@ -49,7 +49,7 @@ export const en = {
       },
       {
         heading: "Resolution",
-        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Effects (commands take effect), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire). Then everyone draws a ship and a command (up to 6 cards per hand).",
+        text: "Once both have ended their turn, the moves are revealed and resolved in phases: Deploy (ships enter the board), Effects (commands take effect), Combat (all ships fire at once, no shot goes at an already destroyed target), Cleanup (round effects expire, Repair Drones repair). Then everyone draws a ship and a command (up to 6 cards per hand).",
       },
       {
         heading: "Ships",
@@ -103,6 +103,7 @@ export const en = {
     disable: (command: string, ship: string) => `Effect: ${command} — ${ship} cannot attack this round`,
     heal: (command: string, ship: string, amount: number) => `Effect: ${command} heals ${ship} for ${amount}`,
     move: (command: string, ship: string, slot: string) => `Effect: ${command} — ${ship} moves to ${slot}`,
+    repair: (source: string, ship: string, amount: number) => `Cleanup: ${source} repairs ${ship} for ${amount}`,
     draw: (command: string, who: string, ships: number, commands: number) =>
       `Effect: ${command} — ${who} +${ships} ship, +${commands} command`,
     noEffect: (command: string, who: string) => `Effect: ${command} (${who}) has no effect`,
@@ -160,9 +161,9 @@ export const en = {
     horizon_cruiser: { name: "Horizon Cruiser", effect: "Solid stats, reliable." },
     iron_dreadnought: { name: "Iron Dreadnought", effect: "Shield 2: Absorbs the first 2 damage each round." },
     plasma_frigate: { name: "Plasma Frigate", effect: "On Deploy: Deal 1 damage to a random enemy ship in the same lane." },
-    repair_drone: { name: "Repair Drone", effect: "Heals 2 HP to the allied ship with the lowest HP each round." },
+    repair_drone: { name: "Repair Drone", effect: "End of each round: Repairs 2 HP on the damaged allied combat ship with the lowest HP." },
     scrap_raider: { name: "Scrap Raider", effect: "When an enemy ship in the same lane is destroyed: +1 ATK permanently." },
-    signal_booster: { name: "Signal Booster", effect: "On Deploy: All allied ships in the same lane gain +1 ATK permanently." },
+    signal_booster: { name: "Signal Booster", effect: "All other allied ships in the same lane have +1 ATK, as long as the Signal Booster is there." },
     titan_carrier: { name: "Titan Carrier", effect: "On Deploy: Spawn a Drone (1 HP, 1 ATK) in the same lane." },
     void_interceptor: { name: "Void Interceptor", effect: "Pure damage, no tricks." },
   } satisfies Record<ShipId, CardText>,

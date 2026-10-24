@@ -37,7 +37,7 @@ export const de: Messages = {
       },
       {
         heading: "Auflösung",
-        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Effects (Befehle wirken), Combat (alle Schiffe feuern gleichzeitig, kein Schuss geht auf ein schon zerstörtes Ziel), Cleanup (Rundeneffekte enden). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand).",
+        text: "Sobald beide ihren Zug beendet haben, wird aufgedeckt und in Phasen aufgelöst: Deploy (Schiffe kommen aufs Brett), Effects (Befehle wirken), Combat (alle Schiffe feuern gleichzeitig, kein Schuss geht auf ein schon zerstörtes Ziel), Cleanup (Rundeneffekte enden, Reparaturdrohnen reparieren). Danach zieht jeder ein Schiff und einen Befehl nach (höchstens 6 Karten je Hand).",
       },
       {
         heading: "Schiffe",
@@ -88,6 +88,7 @@ export const de: Messages = {
     disable: (command, ship) => `Wirkung: ${command} — ${ship} kann diese Runde nicht angreifen`,
     heal: (command, ship, amount) => `Wirkung: ${command} heilt ${ship} um ${amount}`,
     move: (command, ship, slot) => `Wirkung: ${command} — ${ship} wechselt auf ${slot}`,
+    repair: (source, ship, amount) => `Cleanup: ${source} repariert ${ship} um ${amount}`,
     draw: (command, who, ships, commands) => `Wirkung: ${command} — ${who} +${ships} Schiff, +${commands} Befehl`,
     noEffect: (command, who) => `Wirkung: ${command} (${who}) bleibt ohne Wirkung`,
     attack: (attacker, target, amount) => `Kampf: ${attacker} feuert auf ${target} (${amount})`,
@@ -144,9 +145,9 @@ export const de: Messages = {
     horizon_cruiser: { name: "Horizon-Kreuzer", effect: "Solide Werte, zuverlässig." },
     iron_dreadnought: { name: "Eisen-Dreadnought", effect: "Schild 2: Absorbiert jede Runde die ersten 2 Schaden." },
     plasma_frigate: { name: "Plasma-Fregatte", effect: "Beim Deploy: 1 Schaden an ein zufälliges gegnerisches Schiff in derselben Lane." },
-    repair_drone: { name: "Reparaturdrohne", effect: "Heilt jede Runde 2 HP beim verbündeten Schiff mit den wenigsten HP." },
+    repair_drone: { name: "Reparaturdrohne", effect: "Am Ende jeder Runde: Repariert 2 HP beim beschädigten verbündeten Kampfschiff mit den wenigsten HP." },
     scrap_raider: { name: "Schrott-Raider", effect: "Wird ein gegnerisches Schiff in derselben Lane zerstört: dauerhaft +1 ATK." },
-    signal_booster: { name: "Signalverstärker", effect: "Beim Deploy: Alle verbündeten Schiffe in derselben Lane erhalten dauerhaft +1 ATK." },
+    signal_booster: { name: "Signalverstärker", effect: "Alle anderen verbündeten Schiffe in derselben Lane haben +1 ATK, solange der Signalverstärker dort steht." },
     titan_carrier: { name: "Titan-Träger", effect: "Beim Deploy: Erzeugt eine Drohne (1 HP, 1 ATK) in derselben Lane." },
     void_interceptor: { name: "Void-Abfangjäger", effect: "Reiner Schaden, keine Tricks." },
   },

@@ -61,14 +61,14 @@ describe("Combat", () => {
     place(board, "player", "strike", 0, "void_interceptor");
     place(board, "player", "strike", 1, "void_interceptor");
     const front = place(board, "enemy", "strike", 0, "horizon_cruiser");
-    const back = place(board, "enemy", "command", 0, "repair_drone");
+    const back = place(board, "enemy", "command", 0, "signal_booster");
     front.hp = 3;
     const shots = round(board)
       .filter((event) => event.kind === "attack")
       .filter((event) => event.attacker.side === "player");
     expect(shots).toHaveLength(1);
     expect(front.isOccupied).toBe(false);
-    expect(back.hp).toBe(hp("repair_drone"));
+    expect(back.hp).toBe(hp("signal_booster"));
   });
 
   test("ein im selben Kampf zerstörtes Schiff feuert noch, weil die Seiten gleichzeitig schießen", () => {
@@ -99,11 +99,11 @@ describe("Combat", () => {
     const board = new Board();
     place(board, "player", "strike", 0, "horizon_cruiser");
     const front = place(board, "enemy", "strike", 3, "titan_carrier");
-    const covered = place(board, "enemy", "command", 3, "repair_drone");
-    const exposed = place(board, "enemy", "command", 0, "repair_drone");
+    const covered = place(board, "enemy", "command", 3, "signal_booster");
+    const exposed = place(board, "enemy", "command", 0, "signal_booster");
     round(board);
-    expect(exposed.hp).toBe(hp("repair_drone") - 2);
-    expect(covered.hp).toBe(hp("repair_drone"));
+    expect(exposed.hp).toBe(hp("signal_booster") - 2);
+    expect(covered.hp).toBe(hp("signal_booster"));
     expect(front.hp).toBe(hp("titan_carrier"));
   });
 
@@ -112,7 +112,7 @@ describe("Combat", () => {
     place(board, "player", "command", 0, "void_interceptor");
     place(board, "player", "command", 1, "iron_dreadnought");
     place(board, "player", "command", 4, "horizon_cruiser");
-    const weak = place(board, "enemy", "strike", 0, "repair_drone");
+    const weak = place(board, "enemy", "strike", 0, "signal_booster");
     const strong = place(board, "enemy", "strike", 2, "plasma_frigate");
     const tough = place(board, "enemy", "strike", 5, "titan_carrier");
     weak.hp = 3;
@@ -120,7 +120,7 @@ describe("Combat", () => {
       .filter((event) => event.kind === "attack")
       .filter((event) => event.attacker.side === "player");
     expect(attacks.map((event) => [event.attacker.cardId, event.target.cardId])).toEqual([
-      ["void_interceptor", "repair_drone"],
+      ["void_interceptor", "signal_booster"],
       ["iron_dreadnought", "plasma_frigate"],
       ["horizon_cruiser", "titan_carrier"],
     ]);
@@ -153,17 +153,17 @@ describe("Combat", () => {
 
   test("Support greift nicht an", () => {
     const board = new Board();
-    place(board, "player", "strike", 0, "repair_drone");
-    const enemy = place(board, "enemy", "strike", 0, "repair_drone");
+    place(board, "player", "strike", 0, "signal_booster");
+    const enemy = place(board, "enemy", "strike", 0, "signal_booster");
     expect(round(board).some((event) => event.kind === "attack")).toBe(false);
-    expect(enemy.hp).toBe(hp("repair_drone"));
+    expect(enemy.hp).toBe(hp("signal_booster"));
   });
 });
 
 describe("Befehle", () => {
   test("Orbital Strike trifft das Schiff mit dem höchsten HP, bevor es feuern kann", () => {
     const board = new Board();
-    const own = place(board, "player", "strike", 0, "repair_drone");
+    const own = place(board, "player", "strike", 0, "signal_booster");
     place(board, "enemy", "strike", 0, "void_interceptor").hp = 3;
     const target = place(board, "enemy", "command", 0, "scrap_raider");
     own.hp = 4;
@@ -221,5 +221,55 @@ describe("Befehle", () => {
 
     round(board, [play("player", "overcharge", moved)]);
     expect(moved.hp).toBe(2);
+  });
+});
+
+describe("Fähigkeiten", () => {
+  test("Signal Booster gibt allen anderen eigenen Schiffen seiner Lane +1 ATK, solange er steht", () => {
+    const board = new Board();
+    const booster = place(board, "player", "strike", 2, "signal_booster");
+    const neighbour = place(board, "player", "strike", 0, "horizon_cruiser");
+    const otherLane = place(board, "player", "command", 0, "horizon_cruiser");
+    const enemy = place(board, "enemy", "strike", 4, "horizon_cruiser");
+    expect([neighbour.attack, otherLane.attack, enemy.attack, booster.attack]).toEqual([3, 2, 2, 0]);
+    place(board, "player", "strike", 5, "signal_booster");
+    expect(neighbour.attack).toBe(4);
+  });
+
+  test("ein im Kampf zerstörter Signal Booster verstärkt die Schüsse dieses Kampfes noch, danach nicht mehr", () => {
+    const board = new Board();
+    const booster = place(board, "player", "strike", 2, "signal_booster");
+    const cruiser = place(board, "player", "strike", 0, "horizon_cruiser");
+    const frigate = place(board, "enemy", "strike", 2, "plasma_frigate");
+    booster.hp = 3;
+    round(board);
+    expect(booster.isOccupied).toBe(false);
+    expect(frigate.hp).toBe(hp("plasma_frigate") - 3);
+    expect(cruiser.attack).toBe(2);
+  });
+
+  test("Repair Drone heilt am Rundenende das beschädigte Kampfschiff mit den wenigsten HP", () => {
+    const board = new Board();
+    const drone = place(board, "player", "command", 0, "repair_drone");
+    const scratched = place(board, "player", "command", 1, "iron_dreadnought");
+    const weakest = place(board, "player", "command", 2, "horizon_cruiser");
+    place(board, "player", "command", 3, "signal_booster").hp = 1;
+    drone.hp = 1;
+    scratched.hp = 11;
+    weakest.hp = 3;
+    const events = round(board);
+    expect(events.filter((event) => event.kind === "ability")).toHaveLength(1);
+    expect([drone.hp, scratched.hp, weakest.hp]).toEqual([1, 11, 5]);
+  });
+
+  test("eine im Kampf zerstörte Repair Drone heilt nicht mehr", () => {
+    const board = new Board();
+    const drone = place(board, "player", "strike", 0, "repair_drone");
+    const cruiser = place(board, "player", "command", 1, "horizon_cruiser");
+    place(board, "enemy", "strike", 0, "plasma_frigate");
+    drone.hp = 3;
+    cruiser.hp = 4;
+    expect(round(board).some((event) => event.kind === "ability")).toBe(false);
+    expect(cruiser.hp).toBe(4);
   });
 });

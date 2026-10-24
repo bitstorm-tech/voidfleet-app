@@ -54,6 +54,8 @@ function stepKey(event: RoundEvent): string | null {
     case "draw":
     case "noEffect":
       return `command-${event.side}-${event.cardId}`;
+    case "ability":
+      return `ability-${event.source.side}-${event.source.lane}-${event.source.slotIndex}`;
     case "attack":
       return null;
     default:
@@ -108,6 +110,9 @@ export class RoundPlayback {
     if (first.kind === "effect" || first.kind === "draw" || first.kind === "noEffect") {
       this.announceCommand(first);
       await wait(this.view.scene, BANNER_LEAD);
+    } else if (first.kind === "ability") {
+      this.hud.showBanner(t.banner.command(t.log.who[first.source.side], t.ships[first.source.cardId].name), null, first.source.side);
+      await wait(this.view.scene, BANNER_LEAD);
     }
     await Promise.all(step.map((event) => this.playEvent(event)));
   }
@@ -125,6 +130,8 @@ export class RoundPlayback {
         return this.deploy(event.side, event.cardId, event.target);
       case "effect":
         return this.effect(event);
+      case "ability":
+        return this.ability(event);
       case "attack": {
         const color = SIDE_COLORS[event.attacker.side];
         const origin = this.centerOf(this.padOf(event.attacker));
@@ -172,6 +179,14 @@ export class RoundPlayback {
       case "move":
         return this.move(pad, this.view.pad(event.ship.side, effect.to.lane, effect.to.slotIndex));
     }
+  }
+
+  /** Erst ein Impuls an der Quelle, dann die Reparatur am Ziel. */
+  private async ability(event: Extract<RoundEvent, { kind: "ability" }>): Promise<void> {
+    const pad = this.padOf(event.ship);
+    await this.view.effects.pulse(this.centerOf(this.padOf(event.source)), SIDE_COLORS[event.source.side], 1.2, 350);
+    pad.ship!.setStats(event.after.hp, event.after.shield);
+    return this.mark(pad, t.float.heal(event.effect.amount), "heal");
   }
 
   /** Mündungsblitz bei `origin`, dann fliegt der Bolzen bis auf die Hülle des Ziels. */

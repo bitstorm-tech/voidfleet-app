@@ -42,6 +42,8 @@ export function describeEvent(event: RoundEvent): string {
           return t.log.move(name, ship, slotLabel(event.ship.side, effect.to));
       }
     }
+    case "ability":
+      return t.log.repair(shipLabel(event.source), shipLabel(event.ship), event.effect.amount);
     case "draw":
       return t.log.draw(t.commands[event.cardId].name, t.log.who[event.side], event.ships, event.commands);
     case "noEffect":

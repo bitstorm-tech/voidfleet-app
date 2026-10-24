@@ -56,7 +56,15 @@ export class Slot {
   }
 
   get attack(): number {
-    return this.card ? Math.max(0, this.card.atk + this.attackBonus) : 0;
+    return this.card ? Math.max(0, this.card.atk + this.signalBoost + this.attackBonus) : 0;
+  }
+
+  /**
+   * Signal Booster: +1 ATK je anderem Booster in derselben Lane. Ein im Kampf
+   * tödlich getroffener Booster zählt noch, bis er im Cleanup das Brett verlässt.
+   */
+  get signalBoost(): number {
+    return this.lane.occupiedSlots.filter((slot) => slot !== this && slot.card!.id === "signal_booster").length;
   }
 
   /** Support-Schiffe (Basis-ATK 0) greifen nie an, auch nicht mit Bonus. */

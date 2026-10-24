@@ -219,8 +219,28 @@ export function resolveCleanup(board: Board, events: RoundEvent[]): void {
     }
   }
   removeDestroyed(board, events);
+  resolveRepairs(board, events);
   for (const lane of board.lanes) {
     for (const slot of lane.slots) slot.endRound();
+  }
+}
+
+/**
+ * Repair Drone: Jede überlebende Drohne heilt am Rundenende 2 HP beim beschädigten
+ * eigenen Kampfschiff mit den wenigsten HP. Support-Schiffe heilt sie nicht, sonst
+ * halten sich Drohnen in der Strike-Lane gegenseitig am Leben. Mehrere Drohnen
+ * wirken nacheinander und wählen jeweils neu.
+ */
+function resolveRepairs(board: Board, events: RoundEvent[]): void {
+  for (const side of SIDES) {
+    const ships = board.ships(side);
+    for (const drone of ships.filter((slot) => slot.card!.id === "repair_drone")) {
+      const damaged = ships.filter((slot) => slot.card!.atk > 0 && slot.hp < slot.card!.hp);
+      const target = highest(damaged, (slot) => -slot.hp);
+      if (target === null) continue;
+      target.heal(2);
+      events.push({ kind: "ability", source: shipRef(drone), ship: shipRef(target), effect: { type: "heal", amount: 2 }, after: stats(target) });
+    }
   }
 }
 
