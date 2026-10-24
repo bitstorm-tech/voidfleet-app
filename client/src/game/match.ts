@@ -35,11 +35,15 @@ export class Match {
     return { from, to: this.board.lane("player", otherLane(from.lane.type)).slots[command.destination]! };
   }
 
-  /** Übernimmt die Server-Sicht. Ein noch nicht abgegebener Plan bleibt innerhalb der Runde erhalten. */
+  /**
+   * Übernimmt die Server-Sicht. Ein noch nicht abgegebener Plan bleibt innerhalb der Runde erhalten;
+   * ein abgegebener, den der Server nicht mehr meldet, ist aufgelöst — auch in der letzten Runde,
+   * nach der die Rundenzahl nicht mehr steigt.
+   */
   apply(view: PlayerView): void {
     if (view.submittedPlan) {
       this.plan = view.submittedPlan;
-    } else if (view.round !== this.round) {
+    } else if (this.submitted || view.round !== this.round) {
       this.plan = { ship: null, command: null };
     }
     this.submitted = view.submittedPlan !== null;
