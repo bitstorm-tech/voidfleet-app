@@ -456,6 +456,27 @@ body {
   accent-color: var(--accent);
 }
 
+.settings-install {
+  margin: 0 0 18px;
+}
+
+.settings-install[hidden] {
+  display: none;
+}
+
+.settings-install span {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+#ui .settings-install button {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
 #ui .dialog-close {
   display: block;
   margin: 6px 0 0 auto;

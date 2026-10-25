@@ -1,11 +1,13 @@
 // Einstellungen: Zahnrad-Knopf oben rechts neben dem Vollbild-Knopf öffnet einen modalen Dialog
 // mit Reglern für die Lautstärke von Musik, Effekten und Bordfunk, je einer Geschwindigkeitswahl für Angriffe,
-// Schiffsbewegungen und die übrigen Animationen sowie der Sprache. Jede Auswahl wird gespeichert
+// Schiffsbewegungen und die übrigen Animationen, der Sprache und, solange der Browser es anbietet,
+// dem Installieren als eigene App (`install.ts`). Jede Auswahl wird gespeichert
 // (`settings.ts`); Lautstärken und Geschwindigkeiten gelten sofort, ein Sprachwechsel lädt die Seite neu.
 
 import { locale, LOCALE_NAMES, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { iconDialog } from "./iconDialog.ts";
+import { installApp, onInstallable } from "./install.ts";
 
 type VolumeSetting = "musicVolume" | "effectsVolume" | "voiceVolume";
 type SpeedSetting = "attackSpeed" | "movementSpeed" | "animationSpeed";
@@ -24,6 +26,7 @@ export class SettingsDialog {
       speedChoice("movementSpeed"),
       speedChoice("animationSpeed"),
       choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
+      installRow(),
     );
   }
 }
@@ -38,6 +41,16 @@ function volumeSlider(setting: VolumeSetting): HTMLLabelElement {
 
 function speedChoice(setting: SpeedSetting): HTMLFieldSetElement {
   return choice(setting, t.settings[setting], t.settings.speeds, settings[setting], (next) => updateSettings({ [setting]: next }));
+}
+
+/** „Als App installieren“, nur solange der Browser die Installation anbietet. */
+function installRow(): HTMLDivElement {
+  const row = Object.assign(document.createElement("div"), { className: "settings-install" });
+  const button = Object.assign(document.createElement("button"), { type: "button", textContent: t.settings.installButton });
+  button.addEventListener("click", installApp);
+  row.append(Object.assign(document.createElement("span"), { textContent: t.settings.install }), button);
+  onInstallable((installable) => (row.hidden = !installable));
+  return row;
 }
 
 /** Segmentierte Auswahl: ein Feld je Option, die gewählte hervorgehoben. */

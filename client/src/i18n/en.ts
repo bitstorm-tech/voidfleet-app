@@ -101,6 +101,8 @@ export const en = {
     movementSpeed: "Movement speed",
     animationSpeed: "Other animations",
     language: "Language",
+    install: "App",
+    installButton: "Install Voidfleet as an app",
     speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
   },
   rules: {

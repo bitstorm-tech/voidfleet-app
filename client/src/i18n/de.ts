@@ -28,6 +28,8 @@ export const de: Messages = {
     movementSpeed: "Geschwindigkeit der Bewegungen",
     animationSpeed: "Übrige Animationen",
     language: "Sprache",
+    install: "App",
+    installButton: "Voidfleet als App installieren",
     speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
   },
   rules: {
