@@ -241,6 +241,10 @@ export const en = {
   dialog: {
     close: "Close",
   },
+  fullscreen: {
+    enter: "Fullscreen (F)",
+    exit: "Exit fullscreen (F)",
+  },
   surrender: {
     title: "Surrender",
     question: "Give up this match? Your opponent wins immediately.",

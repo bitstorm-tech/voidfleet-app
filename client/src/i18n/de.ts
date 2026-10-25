@@ -167,6 +167,10 @@ export const de: Messages = {
   dialog: {
     close: "Schließen",
   },
+  fullscreen: {
+    enter: "Vollbild (F)",
+    exit: "Vollbild beenden (F)",
+  },
   surrender: {
     title: "Aufgeben",
     question: "Dieses Match aufgeben? Dein Gegner gewinnt sofort.",

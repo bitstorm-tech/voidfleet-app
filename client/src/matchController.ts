@@ -39,6 +39,7 @@ import { FloatingTexts } from "./ui/floatingText.ts";
 import { HandView } from "./ui/hand.ts";
 import { Hud } from "./ui/hud.ts";
 import { LoadingScreen } from "./ui/loadingScreen.ts";
+import { installFullscreen, toggleFullscreen } from "./ui/fullscreen.ts";
 import { OpponentPanel } from "./ui/opponentPanel.ts";
 import { RadioSubtitle } from "./ui/radioSubtitle.ts";
 import { ResultScreen } from "./ui/resultScreen.ts";
@@ -87,6 +88,7 @@ export class MatchController {
     this.hud = new Hud(ui);
     this.playback = new RoundPlayback(this.view, this.hud, floats);
     this.resultScreen = new ResultScreen(ui, () => this.startNewMatch());
+    installFullscreen(ui);
     new SettingsDialog(ui);
     new RulesDialog(ui);
     this.opponentPanel = new OpponentPanel(ui);
@@ -296,6 +298,7 @@ export class MatchController {
    * Das Brett zeigt den Zeiger nur, solange eine Karte oder ein Manöver-Schiff gewählt ist; ohne
    * Auswahl startet ein Klick das Grundmanöver. `pickInfo` wird erst beim Zugriff berechnet.
    * Geklickt wird beim Loslassen, damit Ziehen die Kamera verschiebt, ohne Karten zu platzieren.
+   * Ein Doppelklick auf eine freie Stelle schaltet das Vollbild um.
    */
   private onScenePointer(info: PointerInfo): void {
     if (info.type === PointerEventTypes.POINTERMOVE) {
@@ -303,6 +306,8 @@ export class MatchController {
     } else if (info.type === PointerEventTypes.POINTERUP && info.event.button === 0 && !this.view.wasPanned) {
       if (this.hasSelection) this.onBoardClick(pickedPad(info));
       else if (this.canPlan && !this.isResolving) this.onShipClick(pickedPad(info));
+    } else if (info.type === PointerEventTypes.POINTERDOUBLETAP && info.event.button === 0 && pickedPad(info) === null) {
+      toggleFullscreen();
     }
   }
 

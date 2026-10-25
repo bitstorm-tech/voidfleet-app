@@ -1,4 +1,4 @@
-// Einstellungen: Zahnrad-Knopf oben rechts neben dem Log-Knopf öffnet einen modalen Dialog
+// Einstellungen: Zahnrad-Knopf oben rechts neben dem Vollbild-Knopf öffnet einen modalen Dialog
 // mit Reglern für die Lautstärke von Musik, Effekten und Bordfunk, je einer Geschwindigkeitswahl für Angriffe,
 // Schiffsbewegungen und die übrigen Animationen sowie der Sprache. Jede Auswahl wird gespeichert
 // (`settings.ts`); Lautstärken und Geschwindigkeiten gelten sofort, ein Sprachwechsel lädt die Seite neu.

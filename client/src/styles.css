@@ -116,7 +116,7 @@ body {
   gap: 4px;
 }
 
-/* Unauffällige Icon-Knöpfe oben rechts: Log, Einstellungen und Regeln. */
+/* Unauffällige Icon-Knöpfe oben rechts: Log, Vollbild, Einstellungen, Regeln und Aufgeben. */
 .icon-button {
   width: 32px;
   height: 32px;
@@ -136,22 +136,28 @@ body {
   height: 18px;
 }
 
-.settings-toggle {
+.fullscreen-toggle {
   position: absolute;
   top: 8px;
   right: 44px;
 }
 
-.rules-toggle {
+.settings-toggle {
   position: absolute;
   top: 8px;
   right: 80px;
 }
 
-.surrender-toggle {
+.rules-toggle {
   position: absolute;
   top: 8px;
   right: 116px;
+}
+
+.surrender-toggle {
+  position: absolute;
+  top: 8px;
+  right: 152px;
 }
 
 .surrender-toggle[hidden] {
