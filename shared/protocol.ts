@@ -2,6 +2,7 @@
 // Alles ist aus Sicht des Empfängers formuliert: "player" ist die eigene Seite,
 // "enemy" die des Gegners. Karten werden über ihre id übertragen.
 
+import type { AdmiralId, PowerId } from "./admirals.ts";
 import type { BoardSnapshot, LaneType, Side } from "./board.ts";
 import type { CommandId, ShipId } from "./cards.ts";
 
@@ -24,10 +25,11 @@ export interface Deploy {
 
 /**
  * Der Zug einer Runde: bis zu `maxDeploys` Schiffe (in Runde 1 zwei, sonst eines, in verschiedene
- * Slots) und 1 Befehl, jeweils per Hand-Index, dazu höchstens ein Grundmanöver. Ziele liegen auf der eigenen Seite, nur das Ziel eines Befehls mit `choose_enemy_slot`
+ * Slots) und 1 Befehl, jeweils per Hand-Index, dazu entweder ein Grundmanöver oder die Admiralsfähigkeit. Ziele liegen auf der eigenen Seite, nur das Ziel eines Befehls mit `choose_enemy_slot`
  * (Torpedo) ist ein Slot der Gegnerseite, auch ein leerer. Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane,
  * sonst null. Das Manöver verlegt ein eigenes Schiff, das schon auf dem Brett steht, in den freien Slot
- * `destination` der anderen oder derselben Lane; dafür feuert es in dieser Runde nicht. Eigene Ziele beziehen sich auf
+ * `destination` der anderen oder derselben Lane; dafür feuert es in dieser Runde nicht. Die Mirage darf dabei auch in einen
+ * belegten eigenen Slot: Sie tauscht mit dem Schiff dort die Plätze (Phasentausch), und beide feuern. Eigene Ziele beziehen sich auf
  * die Stellung vor dem Manöver: Ein Befehl auf das manövrierte Schiff folgt ihm. Ein Slot der Gegnerseite
  * bleibt, was er ist: Getroffen wird, wer nach allen Bewegungen dort steht.
  */
@@ -35,6 +37,12 @@ export interface TurnPlan {
   ships: Deploy[];
   command: { handIndex: number; target: SlotTarget | null; destination: number | null } | null;
   maneuver: { ship: SlotTarget; destination: SlotTarget } | null;
+  /** Runde 1: der Slot, auf dem das eigene Flaggschiff landet, zusätzlich zu den Schiffen (Pflicht); danach immer null. */
+  flagship: SlotTarget | null;
+  /** Die Admiralsfähigkeit statt des Grundmanövers (nie beides); was `target` sein darf, steht in `POWER_TARGETS`. */
+  power: { target: SlotTarget } | null;
+  /** Pendulum: der Slot des gegnerischen Schiffs (Stellung beim Planen), das sie markiert; nur in Runden, in denen sie nicht feuert. */
+  mark: SlotTarget | null;
 }
 
 /** Ein Schiff an einer Stelle des Bretts; die Karte steht dabei, weil der Slot danach leer sein kann. */
@@ -46,6 +54,8 @@ export type MatchResult = "won" | "lost" | "draw";
 
 /** Was man vom Gegner weiß: ob er abgegeben hat, wie viele Karten er hält und welche Befehle er schon gespielt hat. */
 export interface OpponentView {
+  /** Sein Admiral; null, solange noch nicht beide gewählt haben (die Wahl ist verdeckt). */
+  admiral: AdmiralId | null;
   submitted: boolean;
   shipHandSize: number;
   commandHandSize: number;
@@ -55,10 +65,18 @@ export interface OpponentView {
   playedCommands: CommandId[];
 }
 
+/**
+ * Ob eine Pendulum in dieser Runde feuert, folgt aus dem Brett: Auf der Gegenseite steht ein markiertes
+ * Schiff (`SlotState.marked`). Runde 1 beginnt erst, wenn beide ihren Admiral gewählt haben.
+ */
 export interface PlayerView {
   matchId: string;
   round: number;
+  /** Der eigene Admiral; null, solange noch nicht gewählt. */
+  admiral: AdmiralId | null;
   board: BoardSnapshot;
+  /** So viele Drohnen hat die Hive je Seite in diesem Match schon gestartet (`ABILITY_VALUES.hiveBudget`). */
+  hiveLaunches: Record<Side, number>;
   shipHand: ShipId[];
   commandHand: CommandId[];
   shipDeckSize: number;
@@ -89,17 +107,26 @@ export type CommandEffect =
   | { type: "move"; to: SlotTarget };
 
 /** Was eine Schiffs-Fähigkeit an einem Schiff bewirkt. */
-export type AbilityEffect = Extract<CommandEffect, { type: "heal" | "damage" | "attack" }>;
+export type AbilityEffect = Extract<CommandEffect, { type: "heal" | "damage" | "attack" | "shield" }>;
 
 /**
  * Was in einer Runde aufgedeckt und aufgelöst wurde, in Auflösungsreihenfolge.
  * Im Kampf feuern erst alle Schiffe (`attack`), dann wirkt der summierte Schaden (`hit`).
  */
 export type RoundEvent =
+  /** Auch das Flaggschiff in Runde 1. */
   | { kind: "deploy"; side: Side; cardId: ShipId; target: SlotTarget }
   | { kind: "pass"; side: Side }
+  /** Die Admiralsfähigkeit, gleich nach den Deploys aufgedeckt: `target` ist das gewählte Schiff bzw. der Slot des Trugbilds. */
+  | { kind: "power"; side: Side; power: PowerId; target: SlotRef }
+  /** Trugbild: erscheint nach `power` im gewählten Strike-Slot und verschwindet am Rundenende (`vanish`). */
+  | { kind: "decoy"; ship: ShipRef }
+  /** Pendulum: markiert nach den Deploys ein gegnerisches Schiff; die Markierung folgt ihm, die Railgun feuert in der nächsten Runde. */
+  | { kind: "mark"; side: Side; ship: ShipRef }
   /** Grundmanöver nach dem Deploy: `ship` ist die Stelle davor; das Schiff feuert in dieser Runde nicht. */
   | { kind: "maneuver"; side: Side; ship: ShipRef; to: SlotTarget }
+  /** Phasentausch statt `maneuver`: Die Mirage (`a`) und das Schiff `b` tauschen die Plätze (Stellung davor) und feuern beide. */
+  | { kind: "swap"; side: Side; a: ShipRef; b: ShipRef }
   /** `target` ist der Slot nach dem Manöver, beim Torpedo der gewählte Slot der Gegnerseite. */
   | { kind: "command"; side: Side; cardId: CommandId; target: SlotRef | null }
   | { kind: "effect"; side: Side; cardId: CommandId; ship: ShipRef; effect: CommandEffect; after: ShipStats }
@@ -110,27 +137,52 @@ export type RoundEvent =
   /**
    * Fähigkeit eines Schiffs (`source`) an einem Schiff: der Schuss der Plasma Frigate beim Deploy (`damage`),
    * die Reparatur der Repair Drone im Cleanup (`heal`), der dauerhafte ATK-Bonus des Scrap Raiders an sich
-   * selbst, sobald in seiner Lane Gegner zerstört wurden (`attack`, gleich nach den `destroyed`-Ereignissen).
+   * selbst, sobald in seiner Lane Gegner zerstört wurden (`attack`, gleich nach den `destroyed`-Ereignissen),
+   * der Wächterschild der Bastion für sie und das Schiff vor ihr nach den Manövern (`shield`).
    */
   | { kind: "ability"; source: ShipRef; ship: ShipRef; effect: AbilityEffect; after: ShipStats }
-  /** Titan Carrier beim Deploy: Seine Drohne startet in den freien Slot `ship` derselben Lane. */
+  /** Drohnenstart: Titan Carrier beim Deploy (freier Slot derselben Lane), Hive am Rundenende (freier Strike-Slot). */
   | { kind: "spawn"; source: ShipRef; ship: ShipRef }
-  | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number; after: ShipStats }
+  /** Railgun der Pendulum zu Kampfbeginn auf das markierte Schiff; `blocked`, wenn es gedeckt war (dann kein Schaden). */
+  | { kind: "railgun"; source: ShipRef; target: ShipRef; amount: number; after: ShipStats; blocked: boolean }
+  /** Taktvorsprung: Das Schiff fiel durch einen Schuss, der vor allen anderen kam, und feuert nicht mehr. */
+  | { kind: "silenced"; ship: ShipRef }
+  /** Ein Schuss im Kampf; `focus`/`swarm`/`headStart`: gelenkt bzw. beschleunigt von der Admiralsfähigkeit. */
+  | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number; after: ShipStats; focus?: true; swarm?: true; headStart?: true }
+  /** Gegenfeuer nach dem Kampf: `ship` hat `source` getroffen und nimmt dafür Schaden. */
+  | { kind: "counterfire"; source: ShipRef; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }
-  | { kind: "destroyed"; ship: ShipRef };
+  | { kind: "destroyed"; ship: ShipRef }
+  /** Das Trugbild verschwindet am Rundenende (sofern es nicht zerstört wurde). */
+  | { kind: "vanish"; ship: ShipRef };
 
 /**
  * Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`.
- * `addBot` setzt den Computergegner auf den freien Platz, statt auf einen Menschen zu warten.
+ * `chooseAdmiral` wählt den eigenen Admiral, einmal und vor Runde 1, auch schon, solange der Gegner fehlt.
+ * `addBot` setzt den Computergegner auf den freien Platz, statt auf einen Menschen zu warten; er wählt sofort.
  * `surrender` gibt das Match auf, jederzeit, auch nach abgegebenem Zug; der Gegner gewinnt sofort.
  */
-export type ClientMessage = { type: "submit"; plan: TurnPlan } | { type: "addBot" } | { type: "surrender" };
+export type ClientMessage =
+  | { type: "chooseAdmiral"; admiral: AdmiralId }
+  | { type: "submit"; plan: TurnPlan }
+  | { type: "addBot" }
+  | { type: "surrender" };
 
 /** Fehler werden als Code übertragen, der Client formuliert sie in seiner Sprache. */
 export type ErrorCode =
   | "match_full"
   | "match_over"
   | "opponent_missing"
+  | "admiral_required"
+  | "admiral_already_chosen"
+  | "opponent_choosing"
+  | "flagship_required"
+  | "flagship_not_allowed"
+  | "power_and_maneuver"
+  | "power_target_invalid"
+  | "mark_unavailable"
+  | "mark_target_invalid"
+  | "swap_not_allowed"
   | "already_submitted"
   | "ship_not_in_hand"
   | "too_many_ships"

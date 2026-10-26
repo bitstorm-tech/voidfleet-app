@@ -1,11 +1,14 @@
-// Was man vom Gegner weiß, oben rechts unter den Icon-Knöpfen: ob er seinen Zug schon beendet hat, wie viele
+// Was man vom Gegner weiß, oben rechts unter den Icon-Knöpfen: sein Admiral, sobald beide gewählt haben (Porträt,
+// Name, Flaggschiff und Admiralsfähigkeit, ihre Texte im Tooltip), ob er seinen Zug schon beendet hat, wie viele
 // Schiffs- und Befehlskarten er auf der Hand und noch im Deck hat und welche Befehle er noch spielen kann — jeder
 // Befehl mit den Kopien, die er noch nicht aufgedeckt hat (`deckCopies` minus gespielte). Ob eine davon auf der
 // Hand liegt, im Deck steckt oder beim vollen Handlimit verfallen ist, bleibt verdeckt. Angriffe stehen oben,
 // weil sie beim Planen am meisten zählen; der Effekttext steht im Tooltip.
 
+import { ADMIRALS, type AdmiralId } from "../../../shared/admirals.ts";
 import { COMMAND_ORDER, COMMANDS, deckCopies, type CommandId } from "../../../shared/cards.ts";
 import type { OpponentView } from "../../../shared/protocol.ts";
+import { admiralPortrait } from "../data/admirals.ts";
 import { cardColor } from "../data/cardColors.ts";
 import { toCssChannels } from "../data/palette.ts";
 import { t } from "../i18n/index.ts";
@@ -17,6 +20,8 @@ const COUNTS = ["shipHandSize", "commandHandSize", "shipDeckSize", "commandDeckS
 export class OpponentPanel {
   private readonly panel: HTMLElement;
   private readonly state: HTMLElement;
+  private readonly admiral: HTMLElement;
+  private shownAdmiral: AdmiralId | null = null;
   private readonly counts: HTMLElement[];
   private readonly commands = new Map<CommandId, { item: HTMLElement; count: HTMLElement }>();
 
@@ -26,6 +31,12 @@ export class OpponentPanel {
       "beforeend",
       `<section class="opponent-panel" hidden>
         <header><span class="opponent-title"></span><span class="opponent-state"></span></header>
+        <div class="opponent-admiral" hidden>
+          <img class="portrait" alt="" />
+          <div class="identity"><b></b><span></span></div>
+          <span class="ability flagship"></span>
+          <span class="ability power"></span>
+        </div>
         <div class="opponent-cards">
           <span></span><span class="column"></span><span class="column"></span>
           <span class="row"></span><b></b><b></b>
@@ -37,6 +48,7 @@ export class OpponentPanel {
     );
     this.panel = container.querySelector(".opponent-panel")!;
     this.state = this.panel.querySelector(".opponent-state")!;
+    this.admiral = this.panel.querySelector(".opponent-admiral")!;
     this.panel.querySelector(".opponent-title")!.textContent = text.title;
     const [ships, commands] = this.panel.querySelectorAll(".opponent-cards .column");
     ships!.textContent = text.ships;
@@ -59,12 +71,17 @@ export class OpponentPanel {
     }
   }
 
-  /** Ohne Gegner bleibt das Feld ausgeblendet. */
-  show(opponent: OpponentView | null): void {
+  /**
+   * Ohne Gegner bleibt das Feld ausgeblendet. Seinen Admiral nennt der Server erst, wenn beide gewählt haben; solange
+   * man selbst noch wählt (`chosen` false), ist also offen, ob er schon gewählt hat.
+   */
+  show(opponent: OpponentView | null, chosen: boolean): void {
     this.panel.hidden = opponent === null;
     if (opponent === null) return;
-    this.state.textContent = opponent.submitted ? t.opponent.ready : t.opponent.planning;
+    const waiting = chosen ? t.opponent.choosing : t.opponent.hidden;
+    this.state.textContent = opponent.admiral === null ? waiting : opponent.submitted ? t.opponent.ready : t.opponent.planning;
     this.state.classList.toggle("ready", opponent.submitted);
+    this.showAdmiral(opponent.admiral);
     COUNTS.forEach((key, index) => (this.counts[index]!.textContent = String(opponent[key])));
     for (const card of LISTED) {
       const left = deckCopies(card) - opponent.playedCommands.filter((id) => id === card.id).length;
@@ -72,5 +89,23 @@ export class OpponentPanel {
       count.textContent = `${left}×`;
       item.classList.toggle("spent", left === 0);
     }
+  }
+
+  private showAdmiral(admiral: AdmiralId | null): void {
+    this.admiral.hidden = admiral === null;
+    if (admiral === null || admiral === this.shownAdmiral) return;
+    this.shownAdmiral = admiral;
+    const { flagship, power } = ADMIRALS[admiral];
+    this.admiral.style.setProperty("--admiral-rgb", `var(--${admiral})`);
+    this.admiral.querySelector("img")!.src = admiralPortrait(admiral);
+    const [name, epithet] = this.admiral.querySelectorAll(".identity > *");
+    name!.textContent = t.admirals[admiral].name;
+    epithet!.textContent = t.admirals[admiral].epithet;
+    const flagshipLine = this.admiral.querySelector<HTMLElement>(".flagship")!;
+    flagshipLine.textContent = `${t.ships[flagship].name} · ${t.admirals[admiral].ability}`;
+    flagshipLine.title = t.ships[flagship].effect;
+    const powerLine = this.admiral.querySelector<HTMLElement>(".power")!;
+    powerLine.textContent = t.powers[power].name;
+    powerLine.title = t.powers[power].effect;
   }
 }

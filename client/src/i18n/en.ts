@@ -1,8 +1,9 @@
 // Englisch ist die Ausgangssprache: Diese Datei legt Schlüssel und Parameter
 // fest, jede weitere Sprache muss `Messages` vollständig erfüllen.
 
+import { ABILITY_VALUES, type AdmiralId, type PowerId, type PowerTarget } from "../../../shared/admirals.ts";
 import type { LaneType, Side } from "../../../shared/board.ts";
-import type { CommandId, CommandType, ShipClass, ShipId, TargetMode } from "../../../shared/cards.ts";
+import { shipById, type CommandId, type CommandType, type ShipClass, type ShipId, type TargetMode } from "../../../shared/cards.ts";
 import type { ErrorCode, MatchResult } from "../../../shared/protocol.ts";
 import type { AnimationSpeed } from "../settings.ts";
 
@@ -10,6 +11,17 @@ export interface CardText {
   name: string;
   effect: string;
 }
+
+/** Name und Beiname eines Admirals und der Name der Fähigkeit seines Flaggschiffs; deren Text steht beim Schiff (`ships`). */
+export interface AdmiralText {
+  name: string;
+  epithet: string;
+  ability: string;
+}
+
+const { guardianShield, spearhead, maxDrones, hiveBudget, railgun, counterfire, focusFire, swarmStrike } = ABILITY_VALUES;
+/** HP und ATK eines Flaggschiffs aus den Kartendaten, für die Regeln. */
+const stats = (id: ShipId) => `${shipById(id).hp} HP, ${shipById(id).atk} ATK`;
 
 /** Ein Kapitel der Spielregeln; `caption` beschriftet die Illustration des Kapitels. */
 export interface RulesSection {
@@ -87,10 +99,31 @@ export const en = {
     overdrive: (bonus: number) => `Overdrive +${bonus}`,
     overdriveHint: (bonus: number) => `Overdrive: all combat ships +${bonus} ATK`,
     checklist: {
+      flagship: "Deploy your flagship",
       ships: (planned: number, max: number) => (max > 1 ? `Deploy ships (${planned}/${max})` : "Deploy a ship"),
       command: "Play a command",
-      maneuver: "Maneuver a ship",
+      maneuver: "Maneuver or ability",
+      mark: "Target lock",
     },
+    /** Die Fähigkeitskarte neben den Befehlen. */
+    power: "Admiral ability",
+    powerHint: "instead of the maneuver",
+    /** Der Knopf der Pendulum über der Fähigkeitskarte und was er in der Feuerrunde zeigt. */
+    markButton: "Target lock",
+    markHint: "Pendulum: lock onto an enemy ship. Next round the railgun hits it at the start of combat, if it's exposed.",
+    marked: (ship: string) => `Locked: ${ship}`,
+    railgun: (ship: string) => `Railgun → ${ship}`,
+    railgunHint: (amount: number) => `The railgun hits the locked ship for ${amount} at the start of combat, if it's exposed.`,
+    shotLost: "The Pendulum moves — the shot is lost.",
+    lockLost: "The Pendulum moves — the lock is lost.",
+    underFire: (ship: string) => `Enemy railgun on ${ship}`,
+  },
+  admiralSelect: {
+    title: "Choose your admiral",
+    hint: "Your choice stays hidden until both have chosen. The admiral ability replaces the maneuver, every round. If your flagship falls, you lose.",
+    flagship: "Flagship",
+    power: "Admiral ability",
+    choose: "Choose",
   },
   settings: {
     title: "Settings",
@@ -112,8 +145,8 @@ export const en = {
       goal: {
         heading: "Goal of the game",
         paragraphs: [
-          "Voidfleet is a duel between two fleets. You win by destroying every combat ship your opponent has: whoever ends a round with no combat ship left — neither on the board nor in hand — loses. Support ships (Repair Drone, Signal Booster) don't count; a fleet of nothing but support ships is beaten.",
-          "The check happens at the very end of a round, after both players have drawn new cards. So a player whose last ship has just been destroyed stays in the game as long as they still hold a combat ship to deploy. If both fleets are beaten in the same round, the match is a draw.",
+          "Voidfleet is a duel between two fleets, each led by an admiral and their flagship. You win by destroying the enemy flagship: whoever loses their flagship loses the match. If both flagships fall in the same round, the match is a draw.",
+          "Before round 1 each player secretly picks one of five admirals. The admiral brings a flagship — a ship outside the decks with an ability of its own — and an admiral ability you can use every round instead of the maneuver (see “Admirals and flagships”).",
           "Both players plan their moves at the same time, without seeing each other's choice, and there is no time limit: a turn may take as long as you like. There is no energy or mana — every card in your hand is playable right away.",
           "So that no match drags on forever, Overdrive kicks in from round 8: every combat ship on both sides gets +1 ATK, and the bonus grows by one every 4 rounds (round 12, 16, …). Repairs can't keep up with that forever.",
         ],
@@ -122,12 +155,31 @@ export const en = {
       turn: {
         heading: "Your turn",
         paragraphs: [
-          "Each round you plan up to three things and then click “End turn”: one ship from your hand onto a free slot of your side, one command from your hand, and one maneuver of a ship already on the board to another free slot. All three are optional — you may also pass with an empty turn.",
-          "In round 1 you set up your fleet: up to two ships instead of one, plus a command. From round 2 on it's one ship per round.",
-          "A command may target a ship you deploy in the same turn, for example to overcharge it or shield it immediately. Planned ships appear on the board as translucent ghosts; a command on a ghost is resolved as if the ship already stood there.",
+          "Each round you plan up to three things and then click “End turn”: one ship from your hand onto a free slot of your side, one command from your hand, and either one maneuver of a ship already on the board to another free slot or your admiral ability. All three are optional — you may also pass with an empty turn. Admiral Kerr may lock a target with the Pendulum on top.",
+          "In round 1 you set up your fleet: your flagship, plus up to two ships instead of one, plus a command. The flagship is mandatory — “End turn” only works once it is planned. From round 2 on it's one ship per round.",
+          "A command may target a ship you deploy in the same turn — your flagship too —, for example to overcharge it or shield it immediately. Planned ships appear on the board as translucent ghosts; a command on a ghost is resolved as if the ship already stood there.",
           "Nothing is final until you end your turn: click a selected card, a ghost ship or the maneuvering ship to take it back. Your opponent only ever sees your turn once both have submitted.",
         ],
         caption: "Placing a ship: tap the card, then one of the glowing slots on your side.",
+      },
+      admirals: {
+        heading: "Admirals and flagships",
+        paragraphs: [
+          "Before round 1 both players choose their admiral at the same time and in secret; you only learn your opponent's choice once both have picked, and then round 1 begins. Each admiral stands for a style of play and brings a flagship and an admiral ability.",
+          "The flagship isn't part of any deck. In round 1 you deploy it in addition to your up to two ships, following the normal placement rules; it counts toward the lane and fleet limit. Otherwise it is a regular combat ship of its class: it fires, maneuvers and can receive your commands. If it is destroyed, you lose. On the board flagships stand out: a little bigger, with a ring in their admiral's color beneath them and a crown next to the hull bar.",
+          "The admiral ability is available every round, but it takes the place of the maneuver: each turn you either maneuver a ship or use the ability, never both — planning one drops the other. Tap the ability card next to your commands, then one of the glowing targets; tap the card again or press Escape to take it back. Abilities are revealed right after the deploys. Their mark follows a ship that moves; an ability on one of your ships may also target a ship you deploy this turn.",
+        ],
+      },
+      roster: {
+        heading: "The five admirals",
+        paragraphs: [
+          `Admiral Osei, The Wall, commands the Bastion (Battleship, ${stats("bastion")}). Guardian Shield: after the maneuvers, the Bastion and the ship in the Strike slot directly in front of her each gain +${guardianShield} shield for the round. Counterfire: choose one of your ships; every enemy ship except a flagship that hits it in combat takes ${counterfire} damage per hit afterwards.`,
+          `Admiral Vance, The Hammer, commands the Vanguard (Cruiser, ${stats("vanguard")}). Spearhead: the combat ship in the Strike slot directly in front of her has +${spearhead} ATK. Focus Fire: choose an enemy ship; as long as it is exposed in combat, all your ships fire at it, each hit dealing +${focusFire} damage.`,
+          `Admiral Halvorsen, The Swarm, commands the Hive (Battleship, ${stats("hive")}). Brood Chamber: at the end of every round the Hive launches a Drone into the nearest free Strike slot — at most ${maxDrones} of your Drones at a time and ${hiveBudget} per match. Swarm Strike needs one of your Drones on the board: choose an enemy ship other than the flagship, covered or not; all your Drones fire at it, each hit dealing +${swarmStrike} damage.`,
+          `Admiral Moreau, The Phantom, commands the Mirage (Fighter, ${stats("mirage")}). Phase Shift: the Mirage's maneuver may also target one of your occupied slots — then both ships swap places and both still fire. Decoy: choose a free Strike slot of yours; a Decoy (1 HP) stands there for this round. It never attacks, covers the Command slot behind it and draws fire by the class rules. Flagships see through it: they never shoot at it, and it doesn't cover against them. At the end of the round it dissolves.`,
+          `Admiral Kerr, The Clockmaker, commands the Pendulum (Battleship, ${stats("pendulum")}). Railgun: in a round in which her railgun doesn't fire, Kerr may lock onto an enemy ship. Next round the railgun hits it for ${railgun} at the start of combat if it is exposed; if it is covered, the shot is blocked. If the Pendulum moves in either round, the shot is lost. Locked ships carry a crosshair on both sides of the board. Head Start: choose one of your combat ships; it fires before everyone else, and whatever it destroys no longer fires.`,
+        ],
+        caption: "The admirals with their flagship, its ability and the admiral ability.",
       },
       board: {
         heading: "The board",
@@ -142,7 +194,7 @@ export const en = {
       movement: {
         heading: "Moving ships",
         paragraphs: [
-          "Once per round you may maneuver one of your ships already on the board to any free slot of your side, in the other lane or the same one: tap the ship, then a glowing slot. Within the lane that is how you tuck a Repair Drone in behind a Strike ship, for example. The price: a maneuvering ship doesn't fire this round. It can still be shot at and still covers or is covered from its new position, and a command played on it follows it to the new slot.",
+          "Once per round — unless you use your admiral ability instead — you may maneuver one of your ships already on the board to any free slot of your side, in the other lane or the same one: tap the ship, then a glowing slot. Within the lane that is how you tuck a Repair Drone in behind a Strike ship, for example. The price: a maneuvering ship doesn't fire this round. It can still be shot at and still covers or is covered from its new position, and a command played on it follows it to the new slot. Only the Mirage may maneuver onto one of your occupied slots: both ships swap places and keep firing.",
           "Commands move ships as well: Flanking Maneuver switches a ship to the other lane, Intercept pulls a Command ship forward into the Strike lane with +2 ATK, Recall retreats a Strike ship into the Command lane and repairs 2 HP. Ships moved by a command keep firing.",
           "Commands always move to the other lane. Maneuver and movement command can't move the same ship and can't land on the same slot. The slot a ship leaves stays blocked for the rest of the round — it only frees up next round, also for ships you deploy. Deployed ships and both destinations together count toward the limit of 4 ships per lane.",
           "Moving carries a risk: Barrage deals 3 damage to every enemy ship that changed slots this round, no matter how. And a Torpedo targets a slot, not a ship: it hits whoever stands there after all moves, so dodging it — or walking into it — is part of the game.",
@@ -162,7 +214,8 @@ export const en = {
           "Every ship with attack above 0 fires once per round, unless it maneuvered this round or was disabled by EMP Blast. Ships pick their targets automatically by class among the exposed enemy ships: Fighters shoot the ship with the fewest HP, Battleships the ship with the highest ATK, Cruisers the ship opposite them (same slot number, otherwise the nearest). On a tie, the ship with the lower slot number is hit.",
           "All shots are simultaneous: a ship destroyed in this combat still fires. The ships of one side take aim one after the other in slot order (Strike before Command) and skip targets that their own earlier shots have already destroyed, so no shot is wasted. If no target is left, the remaining shots of that side fizzle.",
           "Damage goes to the shield first and only then to the hull. A ship's own shield (Iron Dreadnought: 2) doesn't regenerate; the extra shield from Emergency Shields lasts for the round only. A ship with 0 HP is destroyed and removed — after the Effects phase, after combat, and after self-damage in Cleanup.",
-          "The attack value already includes everything: round bonuses from commands, the Scrap Raider's bonus, the Signal Booster aura and Overdrive. Support ships never attack, no matter the bonus.",
+          "The attack value already includes everything: round bonuses from commands, the Scrap Raider's bonus, the Signal Booster aura, the Vanguard's Spearhead and Overdrive. Support ships never attack, no matter the bonus.",
+          "Admirals bend these rules: the Pendulum's railgun fires before anyone else, Head Start lets one ship shoot before the rest, Focus Fire and Swarm Strike override the targeting by class, and Counterfire strikes back once all shots are fired.",
         ],
         caption: "Targeting by class: Fighters pick the lowest HP, Battleships the highest ATK, Cruisers the ship opposite them.",
       },
@@ -171,7 +224,8 @@ export const en = {
         paragraphs: [
           "Ships have hull points (HP), attack (ATK) and sometimes a shield. There are four classes; the class decides how the ship picks its target in combat. Your ship deck holds two copies of each ship.",
           "Some ships have an ability. On deploy, once both sides have placed their ships: a Titan Carrier launches its Drone into the nearest free slot of its lane (Drones count toward neither the lane nor the fleet limit; there is no Drone only if every slot of the lane is taken), then every Plasma Frigate deals 3 damage to a random enemy ship in the lane of the same name (Strike against Strike, Command against Command), ignoring cover — a fresh Drone can be hit too. A ship destroyed that way neither maneuvers nor receives your command.",
-          "The Drone (1 HP, 1 ATK, Fighter) isn't in any deck; it counts as a combat ship, but toward neither the lane nor the fleet limit. It only launches if there is room — also for the destinations of your maneuver and movement command this round. The Scrap Raider permanently gains +1 ATK whenever an enemy ship in the lane of the same name is destroyed, however it falls; it keeps the bonus when it moves. The Repair Drone repairs in Cleanup, the Signal Booster boosts its lane.",
+          "The Drone (1 HP, 1 ATK, Fighter) isn't in any deck; it counts as a combat ship, but toward neither the lane nor the fleet limit. Titan Carriers launch it on deploy, the Hive at the end of the round. It only launches if there is room — also for the destinations of your maneuver and movement command this round. The Scrap Raider permanently gains +1 ATK whenever an enemy ship in the lane of the same name is destroyed, however it falls; it keeps the bonus when it moves. The Repair Drone repairs in Cleanup, the Signal Booster boosts its lane.",
+          "The gallery also shows the five flagships and the Decoy of Admiral Moreau; neither is part of a deck.",
         ],
       },
       commands: {
@@ -191,20 +245,23 @@ export const en = {
       controls: {
         heading: "Controls",
         paragraphs: [
-          "Tap a card in your hand, then a glowing slot or ship on the board; the status line at the top tells you what the selected card needs. Tapping the card again takes it back, as does tapping a ghost ship. To maneuver, tap one of your ships on the board without a card selected, then the destination slot; tap the ship again or press Escape to cancel.",
+          "Tap a card in your hand, then a glowing slot or ship on the board; the status line at the top tells you what the selected card needs. Tapping the card again takes it back, as does tapping a ghost ship. In round 1 your flagship stands at the front of your ship hand with a golden frame. To maneuver, tap one of your ships on the board without a card selected, then the destination slot; tap the ship again or press Escape to cancel. Your admiral ability is the card to the left of your commands, Admiral Kerr's target lock the button above it. The checklist below “End turn” shows which parts of your turn are planned, still open or impossible.",
           "While you plan, the board previews the round as if your opponent did nothing: arcs show which ship fires at which, hull bars blink with the damage a ship would take, and a skull marks every ship that would be destroyed — your planned ships included. Chance, like the Plasma Frigate's shot, isn't included. The panel at the top right shows what you know about your opponent: whether they have ended their turn, how many cards they hold and have left in their decks, and how many copies of each command they haven't played yet.",
           "“End turn” submits your plan. While the round is resolved you can skip the animation; the log button at the top right lists every event of the match. Scroll to zoom the board and drag to pan while zoomed in. Sound, radio chatter, animation speed and language live in the settings next to this dialog; the flag next to it surrenders the match after a confirmation, and your opponent wins immediately.",
         ],
       },
     } satisfies Record<string, RulesSection>,
     phases: {
-      deploy: { name: "Deploy", text: "Both players' new ships land on their slots; Titan Carriers launch Drones, Plasma Frigates fire." },
-      maneuver: { name: "Maneuvers", text: "Maneuvering ships switch slots and hold fire." },
+      deploy: {
+        name: "Deploy",
+        text: "New ships land, in round 1 the flagships too. Admiral abilities are revealed (a Decoy appears), Titan Carriers launch Drones, Plasma Frigates fire, the Pendulum locks on.",
+      },
+      maneuver: { name: "Maneuvers", text: "Maneuvering ships switch slots and hold fire, the Mirage swaps places. Then the Bastion raises its Guardian Shield." },
       effects: { name: "Effects", text: "Commands take effect, by type; damage last. Destroyed ships are removed." },
-      combat: { name: "Combat", text: "All ships fire at once at exposed targets; destroyed ships are removed." },
-      cleanup: { name: "Cleanup", text: "Self-damage from Overcharge, Repair Drones repair, round effects expire." },
+      combat: { name: "Combat", text: "Railgun first, then Head Start, then all other ships at once at exposed targets; Counterfire strikes back last. Destroyed ships are removed." },
+      cleanup: { name: "Cleanup", text: "Self-damage from Overcharge, Repair Drones repair, round effects expire, the Decoy dissolves, the Hive launches a Drone." },
       draw: { name: "Draw", text: "Everyone draws a ship and a command (hand limit 6)." },
-      check: { name: "Check", text: "A player without combat ships on board and in hand loses." },
+      check: { name: "Check", text: "Whoever has lost their flagship loses; if both fell, it's a draw." },
     },
     figures: {
       you: "You",
@@ -221,8 +278,9 @@ export const en = {
       overdrive: (bonus: number) => (bonus === 0 ? "no Overdrive" : `+${bonus} ATK`),
       rounds: (from: number, to: number | null) => (to === null ? `from round ${from}` : `rounds ${from}–${to}`),
       maneuver: "Maneuver",
-      turnParts: ["1 ship", "1 command", "1 maneuver"],
-      roundOne: "Round 1: 2 ships",
+      turnParts: ["1 ship", "1 command", "maneuver or ability"],
+      or: "or",
+      roundOne: "Round 1: flagship + 2 ships",
     },
     classes: {
       fighter: "fires at the exposed enemy ship with the fewest HP.",
@@ -239,6 +297,8 @@ export const en = {
       attack: "Attacks",
     } satisfies Record<CommandType, string>,
     copies: (count: number) => `${count}× in deck`,
+    flagship: (admiral: string) => `Flagship of ${admiral}`,
+    token: "Token, not in any deck",
   },
   dialog: {
     close: "Close",
@@ -261,6 +321,9 @@ export const en = {
     connecting: "Connecting to the server …",
     submitted: "Turn ended — waiting for the opponent.",
     waitingForOpponent: (link: string) => `Waiting for the opponent — share this link: ${link}`,
+    chooseAdmiral: (link: string | null) => (link ? `Choose your admiral. Invite an opponent with this link: ${link}` : "Choose your admiral."),
+    opponentChoosing: "The opponent is choosing their admiral …",
+    flagshipFirst: (flagship: string) => `Round 1: deploy your flagship ${flagship} — tap its card at the front of your hand, then a glowing slot. “End turn” only works once it is planned.`,
     fleet: (count: number, max: number) => `Fleet ${count}/${max}`,
     noFreeSlot: (ship: string, perLane: number, perSide: number) =>
       `no free slot for ${ship} (max. ${perLane} per lane, ${perSide} per side, planned ships included).`,
@@ -273,7 +336,18 @@ export const en = {
     chooseDestination: (command: string, ship: string) =>
       `${command}: tap a glowing slot for ${ship}. Click the card again to take it back.`,
     chooseManeuver: (ship: string) => `Maneuver: tap a glowing slot for ${ship}; it won't fire this round. Tap the ship again or press Esc to cancel.`,
+    chooseSwap: (ship: string) =>
+      `Maneuver: tap a glowing slot for ${ship} — or one of your ships to swap places with it (Phase Shift, both keep firing). Tap the ${ship} again or press Esc to cancel.`,
     maneuver: (ship: string) => `maneuver of ${ship}`,
+    swap: (ship: string, partner: string) => `Phase Shift of ${ship} and ${partner}`,
+    choosePowerTarget: (power: string) => `${power}: tap a glowing target. Tap the ability again or press Esc to cancel.`,
+    noPowerTarget: (power: string) => `no target for ${power} right now.`,
+    noDrone: (power: string) => `${power} needs one of your Drones on the board.`,
+    power: (power: string, target: string) => `${power} on ${target}`,
+    powerReplacesManeuver: (power: string, ship: string) => `${power} replaces the maneuver of ${ship}.`,
+    maneuverReplacesPower: (power: string) => `The maneuver replaces ${power}.`,
+    chooseMark: "Target lock: tap an enemy ship — next round the Pendulum's railgun hits it, if it's exposed. Tap the button again or press Esc to cancel.",
+    mark: (ship: string) => `target lock on ${ship}`,
     planned: (cards: string) => `${cards} ready. Click “End turn”, or tap a card, a ghost ship or the maneuvering ship to take it back.`,
     idle: "Tap a ship or command card, or one of your ships on the board to maneuver it. Click “End turn” without a card to pass.",
     resolving: "Both turns are revealed — resolving the round …",
@@ -281,6 +355,9 @@ export const en = {
   },
   opponent: {
     title: "Opponent",
+    choosing: "choosing an admiral …",
+    /** Solange man selbst noch wählt, bleibt die Wahl des Gegners verdeckt, auch ob er schon gewählt hat. */
+    hidden: "choice hidden",
     planning: "planning …",
     ready: "turn ended",
     ships: "Ships",
@@ -295,9 +372,9 @@ export const en = {
     lines: radioLines as RadioLines,
   },
   result: {
-    won: { title: "Victory", subtitle: "The enemy fleet is destroyed." },
-    lost: { title: "Defeat", subtitle: "Your fleet is destroyed." },
-    draw: { title: "Draw", subtitle: "Both fleets are destroyed." },
+    won: { title: "Victory", subtitle: (flagship: string) => `The enemy flagship ${flagship} is destroyed.` },
+    lost: { title: "Defeat", subtitle: (flagship: string) => `Your flagship ${flagship} is destroyed.` },
+    draw: { title: "Draw", subtitle: (own: string, enemy: string) => `Both flagships are destroyed: your ${own} and the enemy ${enemy}.` },
     surrendered: { won: "The opponent has surrendered.", lost: "You surrendered." } satisfies Record<Exclude<MatchResult, "draw">, string>,
     rounds: (round: number) => `Decided in round ${round}`,
     viewBoard: "View board",
@@ -309,6 +386,11 @@ export const en = {
     slot: (side: Side, lane: string, slot: number) => `${side === "player" ? "your" : "enemy"} ${lane} slot ${slot}`,
     ship: (ship: string, slot: string) => `${ship} (${slot})`,
     deploy: (who: string, ship: string, slot: string) => `Deploy: ${who} — ${ship} on ${slot}`,
+    deployFlagship: (who: string, ship: string, slot: string) => `Deploy: ${who} — flagship ${ship} on ${slot}`,
+    power: (who: string, power: string, target: string) => `Ability: ${who} — ${power} on ${target}`,
+    decoy: (ship: string) => `Ability: ${ship} appears`,
+    mark: (who: string, ship: string) => `Target lock: ${who} — the Pendulum locks onto ${ship}`,
+    swap: (who: string, ship: string, partner: string) => `Phase Shift: ${who} — ${ship} and ${partner} swap places and keep firing`,
     pass: (who: string) => `Deploy: ${who} — no ship`,
     maneuver: (who: string, ship: string, slot: string) => `Maneuver: ${who} — ${ship} moves to ${slot} and holds fire this round`,
     command: (who: string, command: string) => `Command: ${who} — ${command}`,
@@ -322,18 +404,29 @@ export const en = {
     move: (command: string, ship: string, slot: string) => `Effect: ${command} — ${ship} moves to ${slot}`,
     repair: (source: string, ship: string, amount: number) => `Cleanup: ${source} repairs ${ship} for ${amount}`,
     abilityDamage: (source: string, ship: string, amount: number) => `Deploy: ${source} hits ${ship} for ${amount}`,
+    guardianShield: (source: string, ship: string, amount: number) => `Guardian Shield: ${source} gives ${ship} +${amount} shield this round`,
     spawn: (source: string, ship: string) => `Deploy: ${source} launches ${ship}`,
+    brood: (source: string, ship: string) => `Brood Chamber: ${source} launches ${ship}`,
     scrap: (ship: string, delta: number) => `Salvage: ${ship} permanently +${delta} ATK`,
     draw: (command: string, who: string, ships: number, commands: number) =>
       `Effect: ${command} — ${who} +${ships} ship, +${commands} command`,
     noEffect: (command: string, who: string) => `Effect: ${command} (${who}) has no effect`,
     miss: (command: string, slot: string) => `Effect: ${command} fizzles in ${slot}`,
-    attack: (attacker: string, target: string, amount: number) => `Combat: ${attacker} fires at ${target} (${amount})`,
+    railgun: (source: string, target: string, amount: number) => `Railgun: ${source} hits ${target} for ${amount}`,
+    railgunBlocked: (source: string, target: string) => `Railgun: the shot of ${source} at ${target} is blocked — the target is covered`,
+    attack: (attacker: string, target: string, amount: number, power: string | null) =>
+      `Combat: ${attacker} fires at ${target} (${amount}${power ? `, ${power}` : ""})`,
+    silenced: (ship: string) => `Head Start: ${ship} is destroyed before it can fire`,
+    counterfire: (ship: string, source: string, amount: number) => `Counterfire: ${ship} takes ${amount} for hitting ${source}`,
     selfDamage: (ship: string, amount: number) => `Cleanup: ${ship} takes ${amount} self-damage`,
     destroyed: (ship: string) => `Destroyed: ${ship}`,
+    flagshipDestroyed: (ship: string) => `Destroyed: flagship ${ship}!`,
+    vanish: (ship: string) => `Cleanup: ${ship} dissolves`,
   },
   banner: {
     command: (who: string, command: string) => `${who}: ${command}`,
+    markTarget: (ship: string) => `locks onto ${ship}`,
+    blocked: "blocked — the target is covered",
     noEffect: "no effect",
     miss: (slot: string) => `fizzles in ${slot}`,
     draw: (ships: number, commands: number) => `+${ships} ship, +${commands} command`,
@@ -346,11 +439,25 @@ export const en = {
     disabled: "Disabled",
     holdFire: "Holds fire",
     miss: "Miss",
+    silenced: "Silenced",
+    locked: "Locked",
+    blocked: "Blocked",
+    decoy: "Decoy",
   },
   errors: {
     match_full: "This match is already full.",
     match_over: "The match is over.",
     opponent_missing: "The opponent hasn't joined yet.",
+    admiral_required: "Choose your admiral first.",
+    admiral_already_chosen: "You have already chosen your admiral.",
+    opponent_choosing: "The opponent is still choosing their admiral.",
+    flagship_required: "Deploy your flagship in round 1.",
+    flagship_not_allowed: "The flagship is only deployed in round 1.",
+    power_and_maneuver: "Use either the maneuver or your admiral ability, not both.",
+    power_target_invalid: "Your admiral ability can't target that.",
+    mark_unavailable: "The Pendulum can't lock onto a target this round.",
+    mark_target_invalid: "The Pendulum can only lock onto an enemy ship.",
+    swap_not_allowed: "Only the Mirage can swap places with one of your ships.",
     already_submitted: "You have already ended your turn this round.",
     ship_not_in_hand: "This ship card isn't in your hand.",
     too_many_ships: "You can't deploy that many ships this round.",
@@ -396,9 +503,55 @@ export const en = {
     scrap_raider: { name: "Scrap Raider", effect: "When an enemy ship in the same lane is destroyed: +1 ATK permanently." },
     signal_booster: { name: "Signal Booster", effect: "All other allied ships in the same lane have +1 ATK, as long as the Signal Booster is there." },
     titan_carrier: { name: "Titan Carrier", effect: "On Deploy: Spawn a Drone (1 HP, 1 ATK) in the same lane." },
-    drone: { name: "Drone", effect: "Launched by the Titan Carrier on deploy; not part of any deck." },
+    drone: { name: "Drone", effect: "Launched by the Titan Carrier on deploy and by the Hive at the end of the round; not part of any deck." },
     void_interceptor: { name: "Void Interceptor", effect: "Pure damage, no tricks." },
+    decoy: {
+      name: "Decoy",
+      effect: "Admiral Moreau's hologram: stands for one round, never attacks, covers the Command slot behind it and draws fire. Flagships see through it; destroyed, it leaves no scrap.",
+    },
+    bastion: {
+      name: "Bastion",
+      effect: `After the maneuvers, she and the ship in the Strike slot directly in front of her each gain +${guardianShield} shield for the round.`,
+    },
+    vanguard: { name: "Vanguard", effect: `The combat ship in the Strike slot directly in front of her has +${spearhead} ATK.` },
+    hive: {
+      name: "Hive",
+      effect: `End of each round: launches a Drone into the nearest free Strike slot — at most ${maxDrones} Drones at a time and ${hiveBudget} per match.`,
+    },
+    mirage: { name: "Mirage", effect: "Her maneuver may also target one of your occupied slots: both ships swap places and both still fire." },
+    pendulum: {
+      name: "Pendulum",
+      effect: `In a round her railgun doesn't fire, she may lock onto an enemy ship. Next round the railgun hits it for ${railgun} if it's exposed. If she moves in either round, the shot is lost.`,
+    },
   } satisfies Record<ShipId, CardText>,
+  admirals: {
+    osei: { name: "Admiral Osei", epithet: "The Wall", ability: "Guardian Shield" },
+    vance: { name: "Admiral Vance", epithet: "The Hammer", ability: "Spearhead" },
+    halvorsen: { name: "Admiral Halvorsen", epithet: "The Swarm", ability: "Brood Chamber" },
+    moreau: { name: "Admiral Moreau", epithet: "The Phantom", ability: "Phase Shift" },
+    kerr: { name: "Admiral Kerr", epithet: "The Clockmaker", ability: "Railgun" },
+  } satisfies Record<AdmiralId, AdmiralText>,
+  admiralTitle: (name: string, epithet: string) => `${name} – ${epithet}`,
+  powers: {
+    counterfire: {
+      name: "Counterfire",
+      effect: `Choose one of your ships. Every enemy ship except a flagship that hits it in combat takes ${counterfire} damage per hit afterwards.`,
+    },
+    focus_fire: { name: "Focus Fire", effect: `Choose an enemy ship. As long as it's exposed, all your ships fire at it, each hit +${focusFire} damage.` },
+    swarm_strike: {
+      name: "Swarm Strike",
+      effect: `Choose an enemy ship other than the flagship, even a covered one. All your Drones fire at it, each hit +${swarmStrike} damage.`,
+    },
+    decoy: { name: "Decoy", effect: "Choose a free Strike slot. A Decoy (1 HP) stands there this round: it covers the slot behind it and draws fire. Flagships see through it." },
+    head_start: { name: "Head Start", effect: "Choose one of your combat ships. It fires before everyone else, and whatever it destroys no longer fires." },
+  } satisfies Record<PowerId, CardText>,
+  powerTargets: {
+    own_ship: "Choose Ally",
+    own_combat_ship: "Choose Combat Ally",
+    enemy_ship: "Choose Enemy",
+    enemy_ship_not_flagship: "Choose Enemy",
+    free_own_strike_slot: "Choose Strike Slot",
+  } satisfies Record<PowerTarget, string>,
   commands: {
     emergency_shields: { name: "Emergency Shields", effect: "Chosen allied ship gains Shield 3 this round." },
     emp_blast: { name: "EMP Blast", effect: "The enemy ship with the highest ATK cannot attack this round." },

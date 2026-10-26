@@ -2,6 +2,7 @@
 // dann die in den Einstellungen gewählte, sonst die erste unterstützte
 // Browsersprache, sonst Englisch. Ein Wechsel lädt die Seite neu.
 
+import type { AdmiralId } from "../../../shared/admirals.ts";
 import type { Card } from "../../../shared/cards.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { de } from "./de.ts";
@@ -38,6 +39,12 @@ export function switchLocale(next: Locale): void {
 
 export function cardText(card: Card): CardText {
   return card.kind === "ship" ? t.ships[card.id] : t.commands[card.id];
+}
+
+/** Name und Beiname, etwa „Admiral Osei – Die Mauer“. */
+export function admiralTitle(admiral: AdmiralId): string {
+  const { name, epithet } = t.admirals[admiral];
+  return t.admiralTitle(name, epithet);
 }
 
 export function upper(text: string): string {

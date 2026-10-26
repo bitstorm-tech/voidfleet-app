@@ -1,14 +1,17 @@
 // Erzeugt die Kartenillustrationen über fal.ai (Flux Pro 1.1) und legt sie als
-// `assets/images/cards/<id>.jpg` ab. Vorhandene Bilder werden übersprungen.
+// `assets/images/cards/<id>.jpg` ab, dazu die Porträts der Admirale als `assets/images/admirals/<id>.jpg`.
+// Vorhandene Bilder werden übersprungen.
 //
-//   FAL_KEY=… bun tools/generateCardArt.ts            # alle fehlenden Karten
+//   FAL_KEY=… bun tools/generateCardArt.ts            # alle fehlenden Bilder
 //   FAL_KEY=… bun tools/generateCardArt.ts --force    # alle neu
-//   FAL_KEY=… bun tools/generateCardArt.ts recall emp_blast   # nur diese (immer neu)
+//   FAL_KEY=… bun tools/generateCardArt.ts recall osei   # nur diese Karten bzw. Admirale (immer neu)
 
-import { COMMANDS, SHIPS, TOKENS, type Card, type CommandType, type ShipClass } from "../../shared/cards.ts";
+import { ADMIRAL_IDS, type AdmiralId } from "../../shared/admirals.ts";
+import { COMMANDS, FLAGSHIPS, SHIPS, TOKENS, type Card, type CommandType, type ShipClass } from "../../shared/cards.ts";
 
 const MODEL = "fal-ai/flux-pro/v1.1";
 const OUT_DIR = `${import.meta.dir}/../assets/images/cards`;
+const PORTRAIT_DIR = `${import.meta.dir}/../assets/images/admirals`;
 /** Kartenformat 5:7 (140×196 im UI), Maße als Vielfache von 32. */
 const IMAGE_SIZE = { width: 736, height: 1024 };
 const PARALLEL = 4;
@@ -27,6 +30,16 @@ const SHIP_ACCENT: Record<ShipClass, string> = {
   cruiser: "glowing cobalt blue accents",
   battleship: "steel grey armor with cool blue lights",
   support: "glowing emerald green accents",
+};
+
+/** Flaggschiffe tragen die Farbe ihres Admirals (wie im UI) und die weiß-goldene Zierlinie; das Trugbild ist ein Hologramm. */
+const CARD_ACCENT: Partial<Record<Card["id"], string>> = {
+  bastion: "with glowing amber accents and a white-gold command trim",
+  vanguard: "with glowing crimson red accents and a white-gold command trim",
+  hive: "with glowing violet accents and a white-gold command trim",
+  mirage: "with glowing turquoise accents and a white-gold command trim",
+  pendulum: "with glowing steel-blue accents, brass details and a white-gold command trim",
+  decoy: "rendered entirely in translucent turquoise hologram light",
 };
 
 const COMMAND_ACCENT: Record<CommandType, string> = {
@@ -58,6 +71,19 @@ const SUBJECTS: Record<Card["id"], string> = {
     "A rounded technical support vessel bristling with communication dish antennas and relay masts, one large central parabolic dish with pulsing signal rings radiating from it, white and gunmetal hull, three-quarter view",
   drone:
     "A tiny unmanned attack drone with a compact wedge-shaped body, stubby wings and a single glowing engine, launching out of the open glowing hangar bay of a huge carrier in the dark background, three-quarter front view",
+  decoy:
+    "A holographic decoy projection of a sleek angular fighter ship, built only from bright glowing edges and faint see-through facets with thin scan lines, small flickering glitch fragments drifting off it, three-quarter front view",
+  // Flaggschiffe der Admirale
+  bastion:
+    "A colossal flying fortress battleship, squat, broad and heavy, its bow a towering curved armored wall like a giant shield set with glowing shield emitter lenses, terraced layers of armor decks with battlements and round corner towers topped by shield pylons with glowing crystals, a raised command keep at the stern with lit windows, only a few small turrets, three-quarter front view",
+  vanguard:
+    "A long, slender, aggressive flagship cruiser shaped like a spearhead, a long armored ram prow with glowing blade edges, two heavy cannons beneath the ram and forward-facing twin turrets, swept-back armor blades along its flanks, a powerful cluster of engines, charging forward, three-quarter front view",
+  hive:
+    "A massive carrier flagship with a rounded, slightly organic two-chambered hull like a giant seed pod, no flat flight deck, its curved back covered by a dense honeycomb of open hexagonal cells, every cell lit bright violet from within like glowing brood chambers, side pods with hexagonal hangar openings and small drone fighters docked on them, a hexagonal command tower with lit windows, a plain unmarked hull, three-quarter view",
+  mirage:
+    "A sleek, flat and narrow stealth flagship made of sharp angular facets, a dark hull with an iridescent turquoise sheen, glowing seams along its edges, swept diamond-shaped wings with a sawtooth trailing edge, two canted holographic projector fins, a faceted raised bridge, three-quarter front view",
+  pendulum:
+    "A railgun flagship battleship in three-quarter side view, a very long railgun forming its spine and projecting far beyond the bow, the railgun ringed with glowing electromagnetic coils and brass collars, a huge brass toothed gear ring encircling the middle of the hull like a clockwork gimbal, a brass pendulum counterweight with a round bob hanging beneath the keel, a raised bridge with a round clock-face window",
   // Befehle
   orbital_strike:
     "A blinding orbital beam strikes down from above onto a warship, an impact explosion of light and debris, seen from the side at a distance",
@@ -87,33 +113,61 @@ const SUBJECTS: Record<Card["id"], string> = {
     "A wall of flak bursts and tracer fire filling a corridor of space, a warship caught mid-turn as it swerves through the curtain of explosions, its engine trail bending",
 };
 
+/** Porträts der Admirale für die Auswahlkarten, im Stil der Kartenbilder; Uniform in der Farbe des Admirals. */
+const PORTRAIT_STYLE =
+  "Stylized science-fiction character portrait for a collectible card game, same art style as the ship cards: " +
+  "clean graphic shapes with faceted low-poly inspired planes and flat cel-like shading, bold readable silhouette. " +
+  "Head and shoulders, three-quarter view, one central figure filling the frame. " +
+  "Deep dark space background with faint violet nebula haze and sparse stars, dramatic colored rim lighting. " +
+  "Vertical portrait composition. " +
+  "No text, no letters, no numbers, no logos, no user interface, no frame, no border, no watermark.";
+
+const PORTRAITS: Record<AdmiralId, string> = {
+  osei:
+    "Fleet admiral Osei, a calm, steadfast veteran: a West African man in his sixties with dark skin, close-cropped grey hair and a short grey beard, an unshakable composed gaze, wearing a high-collared dark naval uniform with glowing amber piping and white-gold epaulettes, a shield-shaped amber crest on his chest, warm amber rim light",
+  vance:
+    "Fleet admiral Vance, combative and hard: a Latina woman in her forties with tan skin, a fierce challenging stare and a thin scar through one eyebrow, dark hair shaved at the sides and pulled back tight, wearing an armored dark uniform with crimson red accents and white-gold epaulettes, a spearhead insignia on her collar, crimson rim light",
+  halvorsen:
+    "Fleet admiral Halvorsen, coolly calculating: a stern Scandinavian woman around sixty, weathered pale skin with visible wrinkles and crow's feet, silver-blond hair pulled into a tight severe bun, piercing ice-blue eyes, thin pressed lips, a cold appraising stare, a plain face without makeup, wearing a sleek dark uniform with violet accents and white-gold epaulettes, a hexagonal honeycomb insignia on her chest, three small drones with violet lights hovering in the dark behind her, violet rim light",
+  moreau:
+    "Fleet admiral Moreau, inscrutable: a French man of North African descent in his forties with olive-brown skin, a neatly trimmed dark beard and a faint enigmatic smile, half of his face lit by cold turquoise hologram light and the other half in deep shadow, wearing a dark high-collared uniform with turquoise accents and white-gold epaulettes, translucent holographic fragments flickering around him",
+  kerr:
+    "Fleet admiral Kerr, precise and meticulous: an elderly Japanese man in his sixties with neatly combed silver hair and a trimmed silver mustache, a brass clockwork monocle with tiny visible gears over his right eye, a focused, exacting gaze, wearing a dark uniform with steel-blue accents, brass buttons and white-gold epaulettes, a gear and clock-hands insignia on his chest, steel-blue rim light",
+};
+
 function prompt(card: Card): string {
   const accent =
-    card.kind === "ship"
-      ? `with ${SHIP_ACCENT[card.shipClass]}`
-      : `dominated by ${COMMAND_ACCENT[card.commandType]} light`;
+    CARD_ACCENT[card.id] ??
+    (card.kind === "ship" ? `with ${SHIP_ACCENT[card.shipClass]}` : `dominated by ${COMMAND_ACCENT[card.commandType]} light`);
   return `${SUBJECTS[card.id]}, ${accent}. ${STYLE}`;
 }
 
-async function generate(card: Card, seed: number, apiKey: string): Promise<void> {
+interface Job {
+  id: string;
+  prompt: string;
+  seed: number;
+  path: string;
+}
+
+async function generate(job: Job, apiKey: string): Promise<void> {
   const response = await fetch(`https://fal.run/${MODEL}`, {
     method: "POST",
     headers: { Authorization: `Key ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt: prompt(card),
+      prompt: job.prompt,
       image_size: IMAGE_SIZE,
       num_images: 1,
       output_format: "jpeg",
       safety_tolerance: "4",
-      seed,
+      seed: job.seed,
     }),
   });
-  if (!response.ok) throw new Error(`${card.id}: fal antwortet ${response.status} ${await response.text()}`);
+  if (!response.ok) throw new Error(`${job.id}: fal antwortet ${response.status} ${await response.text()}`);
   const result = (await response.json()) as { images: { url: string }[] };
   const image = await fetch(result.images[0]!.url);
-  if (!image.ok) throw new Error(`${card.id}: Download fehlgeschlagen (${image.status})`);
-  await Bun.write(`${OUT_DIR}/${card.id}.jpg`, await image.arrayBuffer());
-  console.log(`✓ ${card.id}`);
+  if (!image.ok) throw new Error(`${job.id}: Download fehlgeschlagen (${image.status})`);
+  await Bun.write(job.path, await image.arrayBuffer());
+  console.log(`✓ ${job.id}`);
 }
 
 const apiKey = process.env.FAL_KEY;
@@ -122,25 +176,25 @@ if (!apiKey) throw new Error("FAL_KEY fehlt in der Umgebung.");
 const args = process.argv.slice(2);
 const force = args.includes("--force");
 const requested = new Set(args.filter((arg) => !arg.startsWith("--")));
-// Tokens hinten anhängen: Der Seed folgt dem Index, die übrigen Karten behalten ihr Bild.
-const all: readonly Card[] = [...SHIPS, ...COMMANDS, ...TOKENS];
-const unknown = [...requested].filter((id) => !all.some((card) => card.id === id));
-if (unknown.length) throw new Error(`Unbekannte Karten: ${unknown.join(", ")}`);
+// Fester Seed je Bild, damit ein erneuter Lauf dasselbe Bild liefert. Er folgt dem Index; neue Karten kommen
+// deshalb hinten an (Tokens, dann Flaggschiffe), die übrigen behalten ihr Bild. Porträts zählen ab 2000.
+const all: readonly Card[] = [...SHIPS, ...COMMANDS, ...TOKENS, ...FLAGSHIPS];
+const jobs: Job[] = [
+  ...all.map((card, index) => ({ id: card.id, prompt: prompt(card), seed: 1000 + index, path: `${OUT_DIR}/${card.id}.jpg` })),
+  ...ADMIRAL_IDS.map((id, index) => ({ id, prompt: `${PORTRAITS[id]}. ${PORTRAIT_STYLE}`, seed: 2000 + index, path: `${PORTRAIT_DIR}/${id}.jpg` })),
+];
+const unknown = [...requested].filter((id) => !jobs.some((job) => job.id === id));
+if (unknown.length) throw new Error(`Unbekannte Karten oder Admirale: ${unknown.join(", ")}`);
 
-const queue = all.filter((card, index) => {
-  if (requested.size) return requested.has(card.id);
-  return force || !Bun.file(`${OUT_DIR}/${card.id}.jpg`).size;
-});
+const queue = jobs.filter((job) => (requested.size ? requested.has(job.id) : force || !Bun.file(job.path).size));
 console.log(`${queue.length} Bild(er) über ${MODEL} …`);
 
 const failed: string[] = [];
 await Promise.all(
   Array.from({ length: PARALLEL }, async () => {
-    for (let card = queue.shift(); card; card = queue.shift()) {
-      // Fester Seed je Karte, damit ein erneuter Lauf dasselbe Bild liefert.
-      const seed = 1000 + all.findIndex((c) => c.id === card!.id);
-      await generate(card, seed, apiKey).catch((error) => {
-        failed.push(card!.id);
+    for (let job = queue.shift(); job; job = queue.shift()) {
+      await generate(job, apiKey).catch((error) => {
+        failed.push(job!.id);
         console.error(`✗ ${(error as Error).message}`);
       });
     }

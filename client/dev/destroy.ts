@@ -1,9 +1,10 @@
 // Vorschau der Zerstörungsanimation ohne Server: alle acht Schiffe stehen auf dem
 // Brett und gehen nacheinander unter, dann landen sie neu. `?slow=4` bremst die
-// ganze Szene um den Faktor, `?ship=<id>` zeigt nur dieses Schiff in Dauerschleife.
+// ganze Szene um den Faktor, `?ship=<id>` zeigt nur dieses Schiff in Dauerschleife
+// (auch Drohne, Trugbild und Flaggschiffe), `?flagships` die fünf Flaggschiffe und das Trugbild.
 
 import { Board } from "../../shared/board.ts";
-import { SHIPS, type ShipCard, TOKENS } from "../../shared/cards.ts";
+import { FLAGSHIPS, SHIPS, shipById, type ShipCard, TOKENS } from "../../shared/cards.ts";
 import { loadSounds } from "../src/audio/sounds.ts";
 import { destroyShip } from "../src/scene/destruction.ts";
 import { MatchScene } from "../src/scene/matchScene.ts";
@@ -26,17 +27,18 @@ const view = new MatchScene(canvas, new Board());
 await Promise.all([...loadShipModels(view.scene), ...loadSounds()]);
 const params = new URLSearchParams(location.search);
 const slow = Number(params.get("slow") ?? 1);
-const only = [...SHIPS, ...TOKENS].find((ship) => ship.id === params.get("ship"));
+const only = [...SHIPS, ...TOKENS, ...FLAGSHIPS].find((ship) => ship.id === params.get("ship"));
+const flagships = params.has("flagships");
 const realDelta = view.engine.getDeltaTime.bind(view.engine);
 view.engine.getDeltaTime = () => realDelta() / slow;
 
+const CARDS: ShipCard[] = only ? [only] : flagships ? [...FLAGSHIPS, shipById("decoy")] : [...SHIPS];
 const PADS: SlotPad[] = only
   ? [view.pad("enemy", "strike", 3)]
   : [
       view.pad("player", "strike", 1), view.pad("player", "strike", 3), view.pad("player", "command", 2), view.pad("player", "command", 4),
       view.pad("enemy", "strike", 2), view.pad("enemy", "strike", 4), view.pad("enemy", "command", 1), view.pad("enemy", "command", 3),
-    ];
-const CARDS: ShipCard[] = only ? [only] : [...SHIPS];
+    ].slice(0, CARDS.length);
 
 async function deployAll(): Promise<void> {
   await Promise.all(

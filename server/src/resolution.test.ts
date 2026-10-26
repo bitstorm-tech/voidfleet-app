@@ -1,8 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { Board, overdriveBonus, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import { commandById, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
-import type { RoundEvent } from "../../shared/protocol.ts";
-import { resolveCleanup, resolveCombat, resolveDeployAbilities, resolveEffects, resolveManeuver, type Commander, type PlayedCommand } from "../../shared/resolution.ts";
+import { canMark, railgunFires } from "../../shared/powers.ts";
+import type { RoundEvent, SlotTarget } from "../../shared/protocol.ts";
+import {
+  resolveCleanup,
+  resolveCombat,
+  resolveDeployAbilities,
+  resolveEffects,
+  resolveManeuver,
+  resolveTurns,
+  shipRef,
+  type Commander,
+  type PlayedCommand,
+  type Turn,
+} from "../../shared/resolution.ts";
 
 function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: ShipId): Slot {
   return board.place(board.lane(side, lane), slotIndex, shipById(id))!;
@@ -26,6 +38,18 @@ function round(board: Board, commands: PlayedCommand[] = []): RoundEvent[] {
   return events;
 }
 
+/** Eine ganze Runde über `resolveTurns`; eine Seite ohne Angaben passt. */
+function resolve(board: Board, player: Partial<Turn> = {}, enemy: Partial<Turn> = {}): RoundEvent[] {
+  const turn = (side: Side, parts: Partial<Turn>): Turn => ({ commander: commander(side), ships: [], flagship: null, command: null, maneuver: null, power: null, mark: null, ...parts });
+  return resolveTurns(board, [turn("player", player), turn("enemy", enemy)], null);
+}
+
+const at = (lane: LaneType, slotIndex: number): SlotTarget => ({ lane, slotIndex });
+
+function attacksBy(events: RoundEvent[], side: Side) {
+  return events.flatMap((event) => (event.kind === "attack" && event.attacker.side === side ? [event] : []));
+}
+
 describe("Fähigkeiten beim Deploy", () => {
   test("der Titan Carrier setzt eine Drohne in den nächsten freien Slot seiner Lane", () => {
     const board = new Board();
@@ -33,7 +57,7 @@ describe("Fähigkeiten beim Deploy", () => {
     const carrier = place(board, "player", "strike", 2, "titan_carrier");
     const events: RoundEvent[] = [];
     resolveDeployAbilities(board, [carrier], [], Math.random, events);
-    expect(board.lane("player", "strike").slots[1]!.state).toEqual({ cardId: "drone", hp: 1, scrapBonus: 0, shield: 0 });
+    expect(board.lane("player", "strike").slots[1]!.state).toEqual({ cardId: "drone", hp: 1, scrapBonus: 0, shield: 0, marked: false });
     expect(events).toEqual([
       {
         kind: "spawn",
@@ -103,6 +127,15 @@ describe("Fähigkeiten beim Deploy", () => {
 });
 
 describe("Scrap Raider", () => {
+  test("Ein zerstörtes Trugbild zählt nicht: Ein Hologramm hinterlässt keinen Schrott", () => {
+    const board = new Board();
+    const raider = place(board, "player", "strike", 0, "scrap_raider");
+    place(board, "enemy", "strike", 0, "decoy");
+    const events = round(board);
+    expect(events).toContainEqual({ kind: "destroyed", ship: { side: "enemy", lane: "strike", slotIndex: 0, cardId: "decoy" } });
+    expect(raider.scrapBonus).toBe(0);
+  });
+
   test("bekommt dauerhaft +1 ATK für jeden Gegner, der in der gleichnamigen Lane zerstört wird", () => {
     const board = new Board();
     const raider = place(board, "player", "strike", 0, "scrap_raider");
@@ -512,5 +545,314 @@ describe("Overdrive", () => {
       ["iron_dreadnought", shipById("iron_dreadnought").atk + 2],
     ]);
     expect(target.hp + target.shield).toBe(hp("iron_dreadnought") + shipById("iron_dreadnought").shield - shipById("void_interceptor").atk - 2);
+  });
+});
+
+describe("Flaggschiffe", () => {
+  test("Wächterschild: Nach den Manövern bekommen die Bastion und das Schiff vor ihr 2 Schild für die Runde", () => {
+    const board = new Board();
+    const bastion = place(board, "player", "command", 2, "bastion");
+    const guard = place(board, "player", "strike", 2, "horizon_cruiser");
+    const other = place(board, "player", "strike", 0, "horizon_cruiser");
+    place(board, "enemy", "strike", 2, "plasma_frigate");
+    const events = resolve(board);
+    expect(events.filter((event) => event.kind === "ability")).toEqual([
+      { kind: "ability", source: shipRef(bastion), ship: shipRef(bastion), effect: { type: "shield", amount: 2 }, after: { hp: hp("bastion"), shield: 2 } },
+      { kind: "ability", source: shipRef(bastion), ship: shipRef(guard), effect: { type: "shield", amount: 2 }, after: { hp: hp("horizon_cruiser"), shield: 2 } },
+    ]);
+    // Der Schild fängt 2 der 3 Schaden der Plasma Frigate ab und verfällt im Cleanup.
+    expect([guard.hp, guard.shield, other.shield, bastion.shield]).toEqual([hp("horizon_cruiser") - 1, 0, 0, 0]);
+  });
+
+  test("Wächterschild: Steht die Bastion vorne, bekommt nur sie den Schild", () => {
+    const board = new Board();
+    const bastion = place(board, "player", "strike", 1, "bastion");
+    place(board, "player", "command", 1, "horizon_cruiser");
+    expect(resolve(board).filter((event) => event.kind === "ability")).toMatchObject([{ ship: shipRef(bastion), effect: { type: "shield", amount: 2 } }]);
+  });
+
+  test("Speerspitze: Steht die Vanguard hinten, hat das Kampfschiff im Strike-Slot direkt vor ihr +1 ATK", () => {
+    const board = new Board();
+    const vanguard = place(board, "player", "command", 1, "vanguard");
+    const front = place(board, "player", "strike", 1, "horizon_cruiser");
+    const beside = place(board, "player", "strike", 2, "horizon_cruiser");
+    expect([front.attack, beside.attack, vanguard.attack]).toEqual([3, 2, 3]);
+    const forward = board.lane("player", "strike").slots[3]!;
+    resolveManeuver(vanguard, forward, []);
+    expect([front.attack, forward.attack]).toEqual([2, 3]);
+
+    const support = new Board();
+    place(support, "player", "command", 0, "vanguard");
+    expect(place(support, "player", "strike", 0, "repair_drone").attack).toBe(0);
+  });
+
+  test("Brutkammer: Nach dem Cleanup startet die Hive eine Drohne in den freien Strike-Slot, der ihr am nächsten liegt", () => {
+    const board = new Board();
+    const hive = place(board, "player", "command", 2, "hive");
+    place(board, "player", "strike", 2, "horizon_cruiser");
+    const events = resolve(board);
+    expect(events.at(-1)).toEqual({ kind: "spawn", source: shipRef(hive), ship: { side: "player", lane: "strike", slotIndex: 1, cardId: "drone" } });
+    expect(board.hiveLaunches).toEqual({ player: 1, enemy: 0 });
+  });
+
+  test("Brutkammer: höchstens 2 Drohnen auf der Seite, auch die des Titan Carriers, und 10 im ganzen Match", () => {
+    const board = new Board();
+    place(board, "player", "command", 2, "hive");
+    place(board, "player", "strike", 5, "drone");
+    const drones = () => board.ships("player").filter((slot) => slot.card!.id === "drone").length;
+    resolve(board);
+    expect(drones()).toBe(2);
+    expect(resolve(board).some((event) => event.kind === "spawn")).toBe(false);
+    board.lane("player", "strike").slots[5]!.clear();
+    board.hiveLaunches.player = 10;
+    expect(resolve(board).some((event) => event.kind === "spawn")).toBe(false);
+    expect(drones()).toBe(1);
+  });
+
+  test("Phasentausch entfällt, wenn der Partner schon beim Deploy fällt: Die Mirage bleibt stehen und feuert, ein Befehl auf den Partner verpufft", () => {
+    const board = new Board();
+    const mirage = place(board, "player", "command", 2, "mirage");
+    place(board, "player", "strike", 0, "void_interceptor").hp = 2;
+    const turn = (side: Side, parts: Partial<Turn>): Turn => ({ commander: commander(side), ships: [], flagship: null, command: null, maneuver: null, power: null, mark: null, ...parts });
+    // Die Plasma Frigate des Gegners schießt beim Deploy auf das einzige Schiff gegenüber, den Tauschpartner.
+    const events = resolveTurns(
+      board,
+      [
+        turn("player", { maneuver: { ship: at("command", 2), destination: at("strike", 0) }, command: { card: commandById("overcharge"), target: at("strike", 0), destination: null } }),
+        turn("enemy", { ships: [{ card: shipById("plasma_frigate"), target: at("strike", 0) }] }),
+      ],
+      () => 0,
+    );
+    expect(events.some((event) => event.kind === "swap" || event.kind === "maneuver")).toBe(false);
+    expect(board.lane("player", "command").slots[2]).toBe(mirage);
+    expect(mirage.card!.id).toBe("mirage");
+    expect(events).toContainEqual({ kind: "noEffect", side: "player", cardId: "overcharge" });
+    expect(events.some((event) => event.kind === "attack" && event.attacker.cardId === "mirage")).toBe(true);
+    expect(events.some((event) => event.kind === "selfDamage")).toBe(false);
+  });
+
+  test("Phasentausch: Die Mirage tauscht mit einem eigenen Schiff die Plätze samt Zustand; beide feuern, keins gilt als bewegt", () => {
+    const board = new Board();
+    place(board, "player", "strike", 1, "mirage").hp = 9;
+    place(board, "player", "command", 4, "iron_dreadnought");
+    place(board, "enemy", "strike", 1, "titan_carrier");
+    const events = resolve(
+      board,
+      { maneuver: { ship: at("strike", 1), destination: at("command", 4) }, command: { card: commandById("emergency_shields"), target: at("command", 4), destination: null } },
+      { command: { card: commandById("barrage"), target: null, destination: null } },
+    );
+    expect(events).toContainEqual({
+      kind: "swap",
+      side: "player",
+      a: { side: "player", lane: "strike", slotIndex: 1, cardId: "mirage" },
+      b: { side: "player", lane: "command", slotIndex: 4, cardId: "iron_dreadnought" },
+    });
+    expect(events.some((event) => event.kind === "maneuver")).toBe(false);
+    // Der Schild folgt dem Dreadnought, das Sperrfeuer findet kein bewegtes Schiff.
+    expect(events).toContainEqual({ kind: "command", side: "player", cardId: "emergency_shields", target: { side: "player", ...at("strike", 1) } });
+    expect(events).toContainEqual({ kind: "noEffect", side: "enemy", cardId: "barrage" });
+    expect(attacksBy(events, "player").map((event) => event.attacker.cardId)).toEqual(["iron_dreadnought", "mirage"]);
+    expect(board.lane("player", "strike").slots[1]!.state).toEqual({ cardId: "iron_dreadnought", hp: hp("iron_dreadnought"), shield: 2, scrapBonus: 0, marked: false });
+    // Der Titan Carrier zielt auf das höchste ATK: die Mirage.
+    expect(board.lane("player", "command").slots[4]!.state).toEqual({ cardId: "mirage", hp: 8, shield: 0, scrapBonus: 0, marked: false });
+  });
+
+  test("Railgun: Die Markierung kommt nach den Deploys, die Railgun feuert in der nächsten Runde vor allen Schüssen", () => {
+    const board = new Board();
+    const pendulum = place(board, "player", "command", 2, "pendulum");
+    place(board, "player", "strike", 2, "repair_drone");
+    const target = place(board, "enemy", "strike", 4, "titan_carrier");
+    const marking = resolve(board, { mark: at("strike", 4) });
+    expect(marking).toContainEqual({ kind: "mark", side: "player", ship: shipRef(target) });
+    expect(marking.some((event) => event.kind === "railgun")).toBe(false);
+    expect([target.marked, railgunFires(board, "player"), canMark(board, "player")]).toEqual([true, true, false]);
+
+    const before = target.hp;
+    const firing = resolve(board).filter((event) => event.kind === "railgun" || event.kind === "attack");
+    expect(firing[0]).toEqual({ kind: "railgun", source: shipRef(pendulum), target: shipRef(target), amount: 6, after: { hp: before - 6, shield: 0 }, blocked: false });
+    expect([target.marked, canMark(board, "player")]).toEqual([false, true]);
+  });
+
+  test("Railgun: Ist das markierte Schiff zu Kampfbeginn gedeckt, ist der Schuss blockiert; ein Trugbild deckt nicht gegen sie", () => {
+    const board = new Board();
+    place(board, "player", "command", 2, "pendulum");
+    place(board, "player", "strike", 2, "repair_drone");
+    const target = place(board, "enemy", "command", 3, "signal_booster");
+    target.marked = true;
+    const covered = resolve(board, {}, { ships: [{ card: shipById("horizon_cruiser"), target: at("strike", 3) }] });
+    expect(covered.find((event) => event.kind === "railgun")).toMatchObject({ amount: 0, blocked: true, after: { hp: hp("signal_booster") } });
+    expect(target.marked).toBe(false);
+
+    board.lane("enemy", "strike").slots[3]!.clear();
+    target.marked = true;
+    const decoyed = resolve(board, {}, { power: { id: "decoy", target: at("strike", 3) } });
+    expect(decoyed.find((event) => event.kind === "railgun")).toMatchObject({ amount: 6, blocked: false });
+  });
+
+  test("Railgun: Bewegt sich die Pendulum in der Markierungs- oder in der Feuerrunde, fällt der Schuss aus", () => {
+    const board = new Board();
+    place(board, "player", "command", 2, "pendulum");
+    const target = place(board, "enemy", "strike", 4, "titan_carrier");
+    const marking = resolve(board, { mark: at("strike", 4), maneuver: { ship: at("command", 2), destination: at("command", 3) } });
+    expect(marking.some((event) => event.kind === "mark")).toBe(true);
+    expect(target.marked).toBe(false);
+
+    target.marked = true;
+    const firing = resolve(board, { maneuver: { ship: at("command", 3), destination: at("command", 2) } });
+    expect(firing.some((event) => event.kind === "railgun")).toBe(false);
+    expect(target.marked).toBe(false);
+  });
+
+  test("Railgun: Die Markierung folgt dem Schiff; ein Ziel, das die Railgun zerstört, feuert in dieser Runde noch", () => {
+    const board = new Board();
+    place(board, "player", "command", 2, "pendulum");
+    place(board, "enemy", "strike", 4, "titan_carrier");
+    resolve(board, { mark: at("strike", 4) }, { maneuver: { ship: at("strike", 4), destination: at("command", 4) } });
+    expect(board.lane("enemy", "command").slots[4]!.marked).toBe(true);
+
+    const fragile = new Board();
+    place(fragile, "player", "command", 2, "pendulum");
+    const own = place(fragile, "player", "strike", 2, "horizon_cruiser");
+    place(fragile, "enemy", "strike", 2, "void_interceptor").marked = true;
+    const events = resolve(fragile);
+    expect(events.find((event) => event.kind === "railgun")).toMatchObject({ after: { hp: hp("void_interceptor") - 6 } });
+    expect(attacksBy(events, "enemy")).toMatchObject([{ attacker: { cardId: "void_interceptor" }, target: shipRef(own) }]);
+    expect(events.some((event) => event.kind === "silenced")).toBe(false);
+    expect(own.hp).toBe(hp("horizon_cruiser") - 3);
+  });
+});
+
+describe("Admiralsfähigkeiten", () => {
+  test("Gegenfeuer: Wer das Schiff im Kampf trifft, nimmt danach je Treffer 1 Schaden, ein Flaggschiff nicht", () => {
+    const board = new Board();
+    const guard = place(board, "player", "strike", 2, "iron_dreadnought");
+    const near = place(board, "enemy", "strike", 2, "horizon_cruiser");
+    const far = place(board, "enemy", "strike", 1, "horizon_cruiser");
+    const vanguard = place(board, "enemy", "command", 0, "vanguard");
+    const events = resolve(board, { power: { id: "counterfire", target: at("strike", 2) } });
+    expect(events).toContainEqual({ kind: "power", side: "player", power: "counterfire", target: { side: "player", ...at("strike", 2) } });
+    expect(attacksBy(events, "enemy").map((event) => event.attacker.cardId)).toEqual(["horizon_cruiser", "horizon_cruiser", "vanguard"]);
+    expect(events.filter((event) => event.kind === "counterfire")).toEqual([
+      { kind: "counterfire", source: shipRef(guard), ship: shipRef(far), amount: 1, after: { hp: hp("horizon_cruiser") - 1, shield: 0 } },
+      { kind: "counterfire", source: shipRef(guard), ship: shipRef(near), amount: 1, after: { hp: hp("horizon_cruiser") - 1, shield: 0 } },
+    ]);
+    // Den Treffer des Dreadnoughts nimmt die Vanguard, Gegenfeuer nicht.
+    expect(vanguard.hp).toBe(hp("vanguard") - 2);
+  });
+
+  test("Fokusfeuer: Alle eigenen Schiffe feuern auf das ungedeckte Ziel, je Treffer +1; ist es zerstört, feuern die übrigen normal", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "horizon_cruiser");
+    place(board, "player", "strike", 1, "iron_dreadnought");
+    place(board, "player", "strike", 2, "void_interceptor");
+    place(board, "enemy", "strike", 5, "scrap_raider");
+    place(board, "enemy", "strike", 0, "titan_carrier");
+    const events = resolve(board, { power: { id: "focus_fire", target: at("strike", 5) } });
+    expect(attacksBy(events, "player").map((event) => [event.attacker.cardId, event.target.cardId, event.amount, event.focus ?? false])).toEqual([
+      ["horizon_cruiser", "scrap_raider", 3, true],
+      ["iron_dreadnought", "scrap_raider", 3, true],
+      ["void_interceptor", "titan_carrier", 3, false],
+    ]);
+  });
+
+  test("Fokusfeuer wirkt nicht, wenn das Ziel zu Kampfbeginn gedeckt ist", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "horizon_cruiser");
+    place(board, "enemy", "strike", 3, "titan_carrier");
+    const covered = place(board, "enemy", "command", 3, "signal_booster");
+    const events = resolve(board, { power: { id: "focus_fire", target: at("command", 3) } });
+    expect(attacksBy(events, "player").map((event) => [event.target.cardId, event.amount, event.focus ?? false])).toEqual([["titan_carrier", 2, false]]);
+    expect(covered.hp).toBe(hp("signal_booster"));
+  });
+
+  test("Schwarmangriff: Die eigenen Drohnen feuern auf das Ziel, auch durch Deckung, je Treffer +1, solange es steht", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "drone");
+    place(board, "player", "strike", 1, "drone");
+    place(board, "player", "strike", 2, "horizon_cruiser");
+    place(board, "enemy", "strike", 3, "titan_carrier");
+    place(board, "enemy", "command", 3, "signal_booster").hp = 2;
+    const events = resolve(board, { power: { id: "swarm_strike", target: at("command", 3) } });
+    expect(attacksBy(events, "player").map((event) => [event.attacker.cardId, event.target.cardId, event.amount, event.swarm ?? false])).toEqual([
+      ["drone", "signal_booster", 2, true],
+      ["drone", "titan_carrier", 1, false],
+      ["horizon_cruiser", "titan_carrier", 2, false],
+    ]);
+  });
+
+  test("Trugbild: erscheint nach den Deploys im gewählten Strike-Slot, deckt den Slot dahinter und wird beschossen wie ein Schiff", () => {
+    const board = new Board();
+    const hidden = place(board, "player", "command", 3, "repair_drone");
+    place(board, "enemy", "strike", 0, "void_interceptor");
+    const events = resolve(board, { power: { id: "decoy", target: at("strike", 3) } });
+    const decoy = { side: "player", lane: "strike", slotIndex: 3, cardId: "decoy" } as const;
+    expect(events.slice(0, 4)).toEqual([
+      { kind: "pass", side: "player" },
+      { kind: "pass", side: "enemy" },
+      { kind: "power", side: "player", power: "decoy", target: { side: "player", ...at("strike", 3) } },
+      { kind: "decoy", ship: decoy },
+    ]);
+    expect(attacksBy(events, "enemy")).toMatchObject([{ target: decoy }]);
+    expect(events).toContainEqual({ kind: "destroyed", ship: decoy });
+    expect(events.some((event) => event.kind === "vanish")).toBe(false);
+    expect(hidden.hp).toBe(hp("repair_drone"));
+  });
+
+  test("Trugbild: verschwindet am Rundenende und zählt als Token zu keiner Grenze", () => {
+    const board = new Board();
+    for (const index of [0, 1, 2, 3]) place(board, "player", "strike", index, "horizon_cruiser");
+    const events = resolve(board, { power: { id: "decoy", target: at("strike", 4) } });
+    expect(events.at(-1)).toEqual({ kind: "vanish", ship: { side: "player", lane: "strike", slotIndex: 4, cardId: "decoy" } });
+    expect(board.lane("player", "strike").slots[4]!.isOccupied).toBe(false);
+    expect(board.lane("player", "strike").shipCount).toBe(4);
+  });
+
+  test("Trugbild: Flaggschiffe durchschauen es; sie beschießen es nicht, und es deckt nicht gegen sie", () => {
+    const board = new Board();
+    place(board, "player", "command", 3, "repair_drone");
+    place(board, "enemy", "strike", 0, "void_interceptor");
+    place(board, "enemy", "strike", 3, "vanguard");
+    const events = resolve(board, { power: { id: "decoy", target: at("strike", 3) } });
+    expect(attacksBy(events, "enemy").map((event) => [event.attacker.cardId, event.target.cardId])).toEqual([
+      ["void_interceptor", "decoy"],
+      ["vanguard", "repair_drone"],
+    ]);
+  });
+
+  test("Taktvorsprung: Das Schiff feuert vor allen anderen; wer dabei fällt und noch stand, feuert nicht mehr", () => {
+    const board = new Board();
+    const quick = place(board, "player", "strike", 0, "void_interceptor");
+    place(board, "enemy", "strike", 0, "void_interceptor").hp = 3;
+    place(board, "enemy", "strike", 1, "horizon_cruiser");
+    const events = resolve(board, { power: { id: "head_start", target: at("strike", 0) } });
+    expect(events.filter((event) => event.kind === "attack" || event.kind === "silenced")).toMatchObject([
+      { kind: "attack", attacker: { side: "player", cardId: "void_interceptor" }, target: { side: "enemy", slotIndex: 0 }, headStart: true },
+      { kind: "silenced", ship: { side: "enemy", lane: "strike", slotIndex: 0, cardId: "void_interceptor" } },
+      { kind: "attack", attacker: { side: "enemy", cardId: "horizon_cruiser" }, target: shipRef(quick) },
+    ]);
+    expect(quick.hp).toBe(hp("void_interceptor") - 2);
+  });
+
+  test("Taktvorsprung auf beiden Seiten: Diese Schiffe feuern zuerst und gleichzeitig", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "void_interceptor").hp = 3;
+    place(board, "player", "strike", 1, "horizon_cruiser");
+    place(board, "enemy", "strike", 0, "void_interceptor").hp = 3;
+    const headStart = { power: { id: "head_start" as const, target: at("strike", 0) } };
+    const events = resolve(board, headStart, headStart);
+    expect(events.filter((event) => event.kind === "attack" || event.kind === "silenced")).toMatchObject([
+      { kind: "attack", attacker: { side: "player", cardId: "void_interceptor" }, headStart: true },
+      { kind: "attack", attacker: { side: "enemy", cardId: "void_interceptor" }, headStart: true },
+    ]);
+    expect(events.filter((event) => event.kind === "destroyed")).toHaveLength(2);
+  });
+
+  test("Die Marke einer Fähigkeit folgt dem Schiff, wenn es sich in der Runde bewegt", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "horizon_cruiser");
+    place(board, "enemy", "strike", 0, "titan_carrier");
+    place(board, "enemy", "strike", 3, "scrap_raider");
+    const events = resolve(board, { power: { id: "focus_fire", target: at("strike", 3) } }, { maneuver: { ship: at("strike", 3), destination: at("strike", 5) } });
+    expect(attacksBy(events, "player")).toMatchObject([{ target: { lane: "strike", slotIndex: 5, cardId: "scrap_raider" }, amount: 3, focus: true }]);
   });
 });

@@ -1,9 +1,12 @@
-// Kopfzeile (Runde, Overdrive ab Runde 8, Status), Log-Panel, Befehls-Banner, Ankündigung einer neuen Runde sowie der Aktionsknopf
-// (Submit, Überspringen oder Computergegner, je nach Lage) mit der Checkliste des Zugs darunter als DOM-Overlay.
+// Kopfzeile (Runde, Overdrive ab Runde 8, Status), Log-Panel, Banner für Befehle, Fähigkeiten und Admirale,
+// Ankündigung einer neuen Runde sowie der Aktionsknopf (Submit, Überspringen oder Computergegner, je nach Lage)
+// mit der Checkliste des Zugs darunter als DOM-Overlay.
 
+import type { AdmiralId } from "../../../shared/admirals.ts";
 import { overdriveBonus, type Side } from "../../../shared/board.ts";
 import { playUiSound } from "../audio/uiSounds.ts";
-import type { TurnPartState } from "../game/match.ts";
+import { admiralPortrait } from "../data/admirals.ts";
+import type { TurnPartState, TurnProgress } from "../game/match.ts";
 import { t } from "../i18n/index.ts";
 
 export class Hud {
@@ -61,17 +64,22 @@ export class Hud {
     this.showAction("submit");
   }
 
-  /** Füllt die Checkliste; `null` blendet sie aus, ohne dass der Knopf darüber springt. */
-  setChecklist(progress: Record<"ships" | "command" | "maneuver", TurnPartState> | null, deploys: { planned: number; max: number }): void {
+  /**
+   * Füllt die Checkliste: in Runde 1 zuerst das Flaggschiff, für Admiral Kerr zuletzt die Zielerfassung, wenn die
+   * Pendulum markieren darf. `null` blendet sie aus, ohne dass der Knopf darüber springt.
+   */
+  setChecklist(progress: TurnProgress | null, deploys: { planned: number; max: number }): void {
     this.checklist.classList.toggle("inactive", progress === null);
     if (progress === null) return;
-    const items: [string, TurnPartState][] = [
+    const items: [string, TurnPartState | null][] = [
+      [t.hud.checklist.flagship, progress.flagship],
       [t.hud.checklist.ships(deploys.planned, deploys.max), progress.ships],
       [t.hud.checklist.command, progress.command],
       [t.hud.checklist.maneuver, progress.maneuver],
+      [t.hud.checklist.mark, progress.mark],
     ];
     this.checklist.replaceChildren(
-      ...items.map(([text, state]) => Object.assign(document.createElement("li"), { textContent: text, className: state })),
+      ...items.flatMap(([text, state]) => (state ? [Object.assign(document.createElement("li"), { textContent: text, className: state })] : [])),
     );
   }
 
@@ -103,10 +111,20 @@ export class Hud {
     this.logText.scrollTop = this.logText.scrollHeight;
   }
 
-  /** Kündigt einen aufgedeckten Befehl an; blendet sich per CSS-Animation selbst wieder aus. */
-  showBanner(title: string, subtitle: string | null, side: Side): void {
-    this.banner.replaceChildren(Object.assign(document.createElement("strong"), { textContent: title }));
-    if (subtitle) this.banner.append(Object.assign(document.createElement("span"), { textContent: subtitle }));
+  /**
+   * Kündigt einen aufgedeckten Befehl oder eine Fähigkeit an, die einer Admiralsfähigkeit mit dem Porträt des
+   * Admirals in seiner Farbe; blendet sich per CSS-Animation selbst wieder aus.
+   */
+  showBanner(title: string, subtitle: string | null, side: Side, admiral: AdmiralId | null = null): void {
+    const text = document.createElement("div");
+    text.append(Object.assign(document.createElement("strong"), { textContent: title }));
+    if (subtitle) text.append(Object.assign(document.createElement("span"), { textContent: subtitle }));
+    this.banner.replaceChildren(text);
+    if (admiral) {
+      const portrait = Object.assign(document.createElement("img"), { className: "banner-portrait", src: admiralPortrait(admiral), alt: "" });
+      portrait.style.setProperty("--admiral-rgb", `var(--${admiral})`);
+      this.banner.prepend(portrait);
+    }
     this.banner.dataset.side = side;
     restartAnimation(this.banner);
   }

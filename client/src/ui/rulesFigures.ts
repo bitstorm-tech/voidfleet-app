@@ -1,11 +1,13 @@
 // Illustrationen des Regel-Dialogs: Brett mit Deckungsregel und Zielwahl je Klasse als
-// Inline-SVG, Phasenfolge, Overdrive-Verlauf und die Teile eines Zugs als DOM. Beschriftet
-// aus `t.rules.figures`; Farben kommen aus den CSS-Variablen der Palette (`styles.css`).
+// Inline-SVG, Phasenfolge, Overdrive-Verlauf und die Teile eines Zugs als DOM (Schiff, Befehl,
+// Manöver oder Admiralsfähigkeit). Beschriftet aus `t.rules.figures`; Farben kommen aus den
+// CSS-Variablen der Palette (`styles.css`).
 
 import { overdriveBonus } from "../../../shared/board.ts";
 import { commandById, shipById } from "../../../shared/cards.ts";
 import { t } from "../i18n/index.ts";
 import { createCard } from "./cardView.ts";
+import { createPowerCard } from "./powerCard.ts";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const labels = t.rules.figures;
@@ -171,14 +173,19 @@ export function overdriveFigure(): HTMLElement {
   return container;
 }
 
-/** Die drei Teile eines Zugs: Schiffskarte, Befehlskarte und das Manöver-Symbol. */
+/** Die drei Teile eines Zugs: Schiffskarte, Befehlskarte und das Manöver-Symbol oder die Admiralsfähigkeit. */
 export function turnFigure(): HTMLElement {
   const container = Object.assign(document.createElement("div"), { className: "rules-turn" });
-  const part = (content: Element, label: string) => {
+  const frame = (content: Element) => {
+    const element = Object.assign(document.createElement("div"), { className: "frame" });
+    element.append(content);
+    return element;
+  };
+  const part = (frames: readonly Element[], label: string) => {
     const wrapper = Object.assign(document.createElement("div"), { className: "part" });
-    const frame = Object.assign(document.createElement("div"), { className: "frame" });
-    frame.append(content);
-    wrapper.append(frame, Object.assign(document.createElement("span"), { textContent: label }));
+    const row = Object.assign(document.createElement("div"), { className: "frames" });
+    row.append(...frames);
+    wrapper.append(row, Object.assign(document.createElement("span"), { textContent: label }));
     return wrapper;
   };
   const plus = () => Object.assign(document.createElement("span"), { className: "plus", textContent: "+" });
@@ -187,12 +194,13 @@ export function turnFigure(): HTMLElement {
   maneuverIcon.append(slot(20, 120, 100, 50, "player"), slot(20, 26, 100, 50, "player"), ship(70, 145, "player", true), ship(70, 51, "player"));
   maneuverIcon.append(svgElement("path", { d: "M100,118 C130,90 130,56 112,52", class: "move", "marker-end": "url(#rules-arrowhead)" }));
   const [shipPart, commandPart, maneuverPart] = labels.turnParts;
+  const or = Object.assign(document.createElement("span"), { className: "or", textContent: labels.or });
   container.append(
-    part(createCard(shipById("void_interceptor")), shipPart!),
+    part([frame(createCard(shipById("void_interceptor")))], shipPart!),
     plus(),
-    part(createCard(commandById("overcharge")), commandPart!),
+    part([frame(createCard(commandById("overcharge")))], commandPart!),
     plus(),
-    part(maneuverIcon, maneuverPart!),
+    part([frame(maneuverIcon), or, frame(createPowerCard("kerr"))], maneuverPart!),
   );
   container.append(Object.assign(document.createElement("span"), { className: "note", textContent: labels.roundOne }));
   return container;

@@ -45,9 +45,22 @@ const SHIP_STATS = {
   void_interceptor: { shipClass: "fighter", hp: 5, atk: 3, shield: 0 },
 } satisfies Record<string, ShipStats>;
 
-/** Schiffe, die nicht im Deck liegen, sondern erst auf dem Brett entstehen: die Drohne des Titan Carriers. */
+/**
+ * Schiffe, die nicht im Deck liegen, sondern erst auf dem Brett entstehen: die Drohne (Titan Carrier, Hive)
+ * und das Trugbild der Admiralsfähigkeit des Phantoms (steht eine Runde, greift nicht an, gibt Deckung).
+ */
 const TOKEN_STATS = {
   drone: { shipClass: "fighter", hp: 1, atk: 1, shield: 0 },
+  decoy: { shipClass: "support", hp: 1, atk: 0, shield: 0 },
+} satisfies Record<string, ShipStats>;
+
+/** Flaggschiffe: liegen in keinem Deck; jeder Admiral bringt seins mit (`admirals.ts`) und legt es in Runde 1 zusätzlich. */
+const FLAGSHIP_STATS = {
+  bastion: { shipClass: "battleship", hp: 20, atk: 1, shield: 0 },
+  vanguard: { shipClass: "cruiser", hp: 16, atk: 3, shield: 0 },
+  hive: { shipClass: "battleship", hp: 18, atk: 1, shield: 0 },
+  mirage: { shipClass: "fighter", hp: 17, atk: 3, shield: 0 },
+  pendulum: { shipClass: "battleship", hp: 20, atk: 2, shield: 0 },
 } satisfies Record<string, ShipStats>;
 
 const COMMAND_STATS = {
@@ -66,7 +79,7 @@ const COMMAND_STATS = {
   barrage: { commandType: "debuff", targetMode: "auto_moved" },
 } satisfies Record<string, CommandStats>;
 
-export type ShipId = keyof typeof SHIP_STATS | keyof typeof TOKEN_STATS;
+export type ShipId = keyof typeof SHIP_STATS | keyof typeof TOKEN_STATS | keyof typeof FLAGSHIP_STATS;
 export type CommandId = keyof typeof COMMAND_STATS;
 
 /**
@@ -96,6 +109,8 @@ function shipCards(stats: Record<string, ShipStats>): ShipCard[] {
 export const SHIPS: readonly ShipCard[] = shipCards(SHIP_STATS);
 /** Schiffe, die nur durch Fähigkeiten aufs Brett kommen (`TOKEN_STATS`). */
 export const TOKENS: readonly ShipCard[] = shipCards(TOKEN_STATS);
+/** Die Flaggschiffe der Admirale (`FLAGSHIP_STATS`). */
+export const FLAGSHIPS: readonly ShipCard[] = shipCards(FLAGSHIP_STATS);
 
 export const COMMANDS: readonly CommandCard[] = Object.entries(COMMAND_STATS).map(([id, stats]) => ({
   kind: "command",
@@ -103,7 +118,7 @@ export const COMMANDS: readonly CommandCard[] = Object.entries(COMMAND_STATS).ma
   ...stats,
 }));
 
-const SHIPS_BY_ID = new Map([...SHIPS, ...TOKENS].map((card) => [card.id, card]));
+const SHIPS_BY_ID = new Map([...SHIPS, ...TOKENS, ...FLAGSHIPS].map((card) => [card.id, card]));
 const COMMANDS_BY_ID = new Map(COMMANDS.map((card) => [card.id, card]));
 
 export function shipById(id: ShipId): ShipCard {
@@ -134,8 +149,13 @@ export function isToken(card: Card): boolean {
   return card.id in TOKEN_STATS;
 }
 
-/** Kopien je Karte im Nachziehstapel: jedes Schiff zweimal, die Konter Torpedo und Sperrfeuer auch, jeder andere Befehl einmal, Tokens nie. */
+/** Ob das Schiff ein Flaggschiff ist (`FLAGSHIP_STATS`): Fällt es, hat seine Seite verloren. */
+export function isFlagship(card: Card): boolean {
+  return card.id in FLAGSHIP_STATS;
+}
+
+/** Kopien je Karte im Nachziehstapel: jedes Schiff zweimal, die Konter Torpedo und Sperrfeuer auch, jeder andere Befehl einmal, Tokens und Flaggschiffe nie. */
 export function deckCopies(card: Card): number {
-  if (isToken(card)) return 0;
+  if (isToken(card) || isFlagship(card)) return 0;
   return card.kind === "ship" || card.id === "torpedo" || card.id === "barrage" ? 2 : 1;
 }

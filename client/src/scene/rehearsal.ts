@@ -1,17 +1,21 @@
 // Generalprobe hinter dem Ladebildschirm: Babylon übersetzt einen Shader erst, wenn etwas zum ersten
 // Mal gezeichnet wird, und das Bild stockt dabei. Deshalb wird beim Laden alles einmal gezeigt, was im
-// Spiel vorkommt — Schiffe mit Treffer-Blitz und Zielvorschau, Geister, glühende Wracks, die Bögen der
-// Zielvorschau und alle Effekte — und danach
-// wieder entsorgt. Die Shader bleiben übersetzt, weil `Effect.PersistentMode` sie nie freigibt (`matchScene.ts`).
+// Spiel vorkommt — Schiffe samt Flaggschiffen (Ring, Krone) und Trugbild mit Treffer-Blitz und Zielvorschau,
+// Geister, glühende Wracks, alle Marken am Boden, die Bögen der Zielvorschau und alle Effekte samt Railgun-Strahl
+// und Schildblase — und danach wieder entsorgt. Die Shader bleiben übersetzt, weil `Effect.PersistentMode` sie nie freigibt (`matchScene.ts`).
 // Die Effekte bleiben dabei stumm, auch wenn ein Klick auf den Ladebildschirm den Ton schon freigegeben hat.
 
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { SHIPS, TOKENS } from "../../../shared/cards.ts";
+import { FLAGSHIPS, SHIPS, TOKENS } from "../../../shared/cards.ts";
 import { muteSounds } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
 import { HIT_NAMES } from "./effects.ts";
+import type { MarkerKind } from "./markers.ts";
 import type { MatchScene } from "./matchScene.ts";
 import { ShipView } from "./ship.ts";
+
+/** Die Marken, die zu einem Schiff dazukommen; den Ring tragen die Flaggschiffe von selbst. */
+const MARKERS: readonly Exclude<MarkerKind, "halo">[] = ["lock", "counterfire", "focus_fire", "swarm_strike", "head_start"];
 
 /** Mitten auf dem Brett, damit alles im Bild liegt: Manches übersetzt Babylon erst beim Zeichnen. */
 const STAGE = new Vector3(0, 0.5, 2.5);
@@ -21,7 +25,7 @@ export async function rehearse(view: MatchScene): Promise<void> {
   const color = color3("player");
   muteSounds(true);
   const ships: ShipView[] = [];
-  for (const card of [...SHIPS, ...TOKENS]) {
+  for (const card of [...SHIPS, ...TOKENS, ...FLAGSHIPS]) {
     const ship = new ShipView(scene, card, false);
     const ghost = new ShipView(scene, card, true);
     const wrecked = new ShipView(scene, card, false);
@@ -35,6 +39,7 @@ export async function rehearse(view: MatchScene): Promise<void> {
     ghost.setDoomed(true);
     ships.push(ship, ghost, wrecked);
   }
+  ships[0]!.setMarkers(MARKERS.map((kind, index) => ({ kind, color, planned: index === 0 })));
   for (const ship of ships) ship.root.position.copyFrom(STAGE);
   const lines = (["player", "enemy"] as const).map((side) => ({ from: view.pad(side, "strike", 0), to: view.pad(side, "command", 5), side }));
   view.targetLines.show(lines);
@@ -45,6 +50,8 @@ export async function rehearse(view: MatchScene): Promise<void> {
     ...HIT_NAMES.map((name) => effects.hit(STAGE, STAGE.add(new Vector3(-3, 0, 0)), color, name)),
     effects.detonate(STAGE, color, 1, "fire"),
     effects.detonate(STAGE, color, 1, "energy"),
+    effects.beam(STAGE.add(new Vector3(-3, 0, 0)), STAGE, color),
+    effects.bubble(STAGE, color, 2),
   ];
   // Auch alles, was noch ausgeblendet ist (leuchtende Slots, Bogenpfeil), wird dabei übersetzt.
   await scene.whenReadyAsync();

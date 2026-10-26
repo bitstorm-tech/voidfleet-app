@@ -31,7 +31,17 @@ CELLS = {
     "titan_carrier": 20,
     "repair_drone": 9,
     "signal_booster": 11,
+    "bastion": 22,
+    "vanguard": 18,
+    "hive": 20,
+    "mirage": 14,
+    "pendulum": 22,
+    "decoy": 12,
 }
+# Hologramme (das Trugbild) zerfallen in Licht-Splitter: Die Schnitte bleiben offen (keine Schnittflächen, kein
+# verkohltes Wrack-Material), die Stücke bleiben dünne, flach schattierte Scherben aus dem Material des Hologramms,
+# und auch kleine Splitter bleiben erhalten.
+HOLOGRAMS = {"decoy"}
 # Winkel, ab dem Kanten hart schattiert werden (das Wrack hat keinen Bevel-Modifier).
 SHARP_ANGLE = math.radians(32)
 # Splitter mit weniger Flächen verschwinden; sie wären auf dem Brett ohnehin nur Pixel.
@@ -104,9 +114,9 @@ def seeds(mesh, count, rng):
     return [c + (center - c) * 0.08 for c in chosen]
 
 
-def cut(base, point, others, wreck_index):
+def cut(base, point, others, wreck_index, min_faces=MIN_FACES):
     """Die Voronoi-Zelle von `point`: alles jenseits der Mittelsenkrechten zu `others` wird abgeschnitten,
-    die Schnittflächen geschlossen. Liefert None, wenn nichts übrig bleibt."""
+    die Schnittflächen geschlossen (ohne `wreck_index` bleiben sie offen). Liefert None, wenn nichts übrig bleibt."""
     bm = base.copy()
     for other in sorted(others, key=lambda o: (o - point).length):
         normal = other - point
@@ -121,10 +131,10 @@ def cut(base, point, others, wreck_index):
         geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
         result = bmesh.ops.bisect_plane(bm, geom=geom, dist=1e-5, plane_co=co, plane_no=normal, clear_outer=True)
         edges = [e for e in result["geom_cut"] if isinstance(e, bmesh.types.BMEdge)]
-        if edges:
+        if edges and wreck_index is not None:
             for face in bmesh.ops.holes_fill(bm, edges=edges, sides=0)["faces"]:
                 face.material_index = wreck_index
-    if len(bm.faces) < MIN_FACES:
+    if len(bm.faces) < min_faces:
         bm.free()
         return None
     return bm
@@ -189,10 +199,11 @@ def build(obj, cells=None, seed=None):
         bpy.data.objects.remove(old)
         bpy.data.meshes.remove(mesh)
     materials = list(obj.data.materials)
-    style = "scrap" if ship_id == "scrap_raider" else "plating"
-    wreck = wreck_material(ship_id, style)
-    materials.append(wreck)
-    wreck_index = len(materials) - 1
+    hologram = ship_id in HOLOGRAMS
+    wreck_index = None
+    if not hologram:
+        materials.append(wreck_material(ship_id, "scrap" if ship_id == "scrap_raider" else "plating"))
+        wreck_index = len(materials) - 1
     tiles = [vf.TILE.get(m.name, 1.5) for m in materials]
 
     base = bmesh.new()
@@ -201,7 +212,7 @@ def build(obj, cells=None, seed=None):
     collection = wrecks_collection()
     pieces = []
     for k, point in enumerate(points):
-        bm = cut(base, point, [p for p in points if p is not point], wreck_index)
+        bm = cut(base, point, [p for p in points if p is not point], wreck_index, 4 if hologram else MIN_FACES)
         if bm is None:
             continue
         box_uvs(bm, tiles)
@@ -214,7 +225,10 @@ def build(obj, cells=None, seed=None):
         bm.free()
         for mat in materials:
             mesh.materials.append(mat)
-        mesh.shade_smooth()
+        if hologram:
+            mesh.shade_flat()
+        else:
+            mesh.shade_smooth()
         piece = bpy.data.objects.new(mesh.name, mesh)
         piece.location = origin
         collection.objects.link(piece)

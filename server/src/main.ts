@@ -4,6 +4,7 @@
 
 import type { ServerWebSocket } from "bun";
 import index from "../../client/index.html";
+import type { AdmiralId } from "../../shared/admirals.ts";
 import type { ClientMessage, ServerMessage, TurnPlan } from "../../shared/protocol.ts";
 import { Match, type Seat } from "./match.ts";
 
@@ -53,6 +54,15 @@ function onSubmit(socket: Socket, room: Room, seat: Seat, plan: TurnPlan): void 
     for (const player of room.match.players) {
       send(room.sockets[player.seat], { type: "round", round, events: room.match.eventsFor(player.seat, events) });
     }
+  }
+  broadcastState(room);
+}
+
+function onChooseAdmiral(socket: Socket, room: Room, seat: Seat, admiral: AdmiralId): void {
+  const error = room.match.chooseAdmiral(seat, admiral);
+  if (error) {
+    send(socket, { type: "error", code: error });
+    return;
   }
   broadcastState(room);
 }
@@ -117,9 +127,20 @@ const server = Bun.serve({
       if (seat === null) return;
       const message = JSON.parse(String(raw)) as ClientMessage;
       const room = roomFor(socket.data.matchId);
-      if (message.type === "submit") onSubmit(socket, room, seat, message.plan);
-      else if (message.type === "surrender") onSurrender(socket, room, seat);
-      else onAddBot(socket, room);
+      switch (message.type) {
+        case "chooseAdmiral":
+          onChooseAdmiral(socket, room, seat, message.admiral);
+          break;
+        case "submit":
+          onSubmit(socket, room, seat, message.plan);
+          break;
+        case "surrender":
+          onSurrender(socket, room, seat);
+          break;
+        case "addBot":
+          onAddBot(socket, room);
+          break;
+      }
     },
     close(socket) {
       const room = rooms.get(socket.data.matchId);

@@ -24,8 +24,8 @@ const ANNOUNCEMENTS: Partial<Record<CommandId, { player?: RadioCue; enemy?: Radi
   flanking_maneuver: { player: "flanking" },
 };
 
-/** Eigene Fähigkeiten: Die Plasma Frigate feuert, die Repair Drone repariert, der Scrap Raider plündert. */
-const ABILITIES: Record<AbilityEffect["type"], RadioCue> = { damage: "frigate_fire", heal: "repair", attack: "scrap" };
+/** Eigene Fähigkeiten: Die Plasma Frigate feuert, die Repair Drone repariert, der Scrap Raider plündert, die Bastion hebt den Wächterschild. */
+const ABILITIES: Record<AbilityEffect["type"], RadioCue> = { damage: "frigate_fire", heal: "repair", attack: "scrap", shield: "shields_up" };
 
 /** Der Spruch, mit dem ein Schritt beginnt; ein Befehl ohne Wirkung wird nicht angekündigt. */
 export function announcement(step: readonly RoundEvent[]): RadioCue | null {
@@ -35,6 +35,7 @@ export function announcement(step: readonly RoundEvent[]): RadioCue | null {
     case "draw":
     case "miss":
       return ANNOUNCEMENTS[first.cardId]?.[first.side] ?? null;
+    // Titan Carrier beim Deploy, Hive am Rundenende.
     case "spawn":
       return first.source.side === "player" ? "drone_launch" : null;
     case "ability":

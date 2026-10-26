@@ -107,6 +107,26 @@ def material(name, color, metallic=0.4, roughness=0.5, emission=None, strength=0
     return mat
 
 
+def iridescent(mat, thickness=420.0, ior=1.5):
+    """Dünnschicht-Schimmer (Thin Film) auf einem Material; der glTF-Export schreibt ihn als KHR_materials_iridescence
+    und liest den Faktor aus der Knotengruppe „glTF Material Output“. Ihr (unverbundener) Eingang „Occlusion“ hält
+    den Exporter davon ab, das Material zu vereinfachen (inline) und die Gruppe dabei zu verlieren."""
+    nodes = mat.node_tree.nodes
+    bsdf = next(n for n in nodes if n.type == "BSDF_PRINCIPLED")
+    bsdf.inputs["Thin Film Thickness"].default_value = thickness
+    bsdf.inputs["Thin Film IOR"].default_value = ior
+    group = bpy.data.node_groups.get("glTF Material Output")
+    if group is None:
+        group = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
+        for name in ("Occlusion", "Iridescence Factor", "Iridescence Thickness Minimum"):
+            group.interface.new_socket(name, in_out="INPUT", socket_type="NodeSocketFloat")
+    node = nodes.new("ShaderNodeGroup")
+    node.node_tree = group
+    node.inputs["Iridescence Factor"].default_value = 1.0
+    node.inputs["Iridescence Thickness Minimum"].default_value = thickness
+    return mat
+
+
 GUNMETAL = (0.3, 0.33, 0.38)
 DARK = (0.09, 0.095, 0.105)
 STEEL = (0.62, 0.64, 0.66)
@@ -268,7 +288,7 @@ def _finish(bm):
 
 
 def _append(bm, part, matrix=None, flip=False):
-    """Kopiert die Flächen von `part` nach `bm` (optional transformiert) und gibt sie zurück."""
+    """Kopiert die Flächen von `part` samt Materialindex nach `bm` (optional transformiert) und gibt sie zurück."""
     vmap = {v: bm.verts.new(matrix @ v.co if matrix else v.co) for v in part.verts}
     faces = []
     for f in part.faces:
@@ -276,9 +296,11 @@ def _append(bm, part, matrix=None, flip=False):
         if flip:
             verts.reverse()
         try:
-            faces.append(bm.faces.new(verts))
+            face = bm.faces.new(verts)
         except ValueError:
-            pass
+            continue
+        face.material_index = f.material_index
+        faces.append(face)
     return faces
 
 
@@ -397,6 +419,22 @@ def segment(a, b, r, n=10):
     rot = Vector((0, 1, 0)).rotation_difference(d.normalized()).to_matrix().to_4x4()
     bmesh.ops.transform(bm, matrix=Matrix.Translation(a) @ rot, verts=bm.verts)
     return bm
+
+
+def sweep(points, shape):
+    """Profil (x, z) entlang einer Punktfolge ziehen (Leisten, Zierlinien): x zeigt zur Seite der Bahn,
+    z nach oben; an Knicken steht der Querschnitt auf der gemittelten Richtung."""
+    pts = [Vector(p) for p in points]
+    rings = []
+    for i, p in enumerate(pts):
+        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        side = t.cross(Vector((0, 0, 1)))
+        if side.length < 1e-6:
+            side = t.cross(Vector((0, 1, 0)))
+        side.normalize()
+        up = side.cross(t)
+        rings.append([p + side * x + up * z for x, z in shape])
+    return loft(rings)
 
 
 def pipe(points, r, n=10, joints=True):

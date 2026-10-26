@@ -1,16 +1,19 @@
 // Ein Match auf dem Server: zwei Sitzplätze, ein Brett, Decks und Hände.
 // Der Server ist autoritativ: Er prüft die Züge, hält sie bis zum Aufdecken
 // geheim und löst die Runde auf, sobald beide abgegeben haben. Die Phasen der
-// Runde stehen in `shared/resolution.ts`. Statt eines zweiten Menschen kann der
+// Runde stehen in `shared/resolution.ts`. Vor Runde 1 wählt jeder verdeckt seinen
+// Admiral (`shared/admirals.ts`). Statt eines zweiten Menschen kann der
 // Computergegner (`bot.ts`) einen Platz einnehmen; er zieht, sobald der Mensch abgibt.
 // Intern sitzt Seat 0 auf der "player"-Seite des Bretts und Seat 1 auf der
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
-import { canTargetLane, needsTarget, targetsEnemySlot, type CommandCard, type CommandId, type ShipCard } from "../../shared/cards.ts";
-import { Board, isSameSlot, maxDeploys, opposite, otherLane, overdriveBonus, type BoardSnapshot, type Side } from "../../shared/board.ts";
-import type { ErrorCode, MatchResult, OpponentView, PlayerView, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
+import { ADMIRAL_IDS, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
+import { canTargetLane, needsTarget, shipById, targetsEnemySlot, type CommandCard, type CommandId, type ShipCard } from "../../shared/cards.ts";
+import { Board, isSameSlot, maxDeploys, opposite, otherLane, overdriveBonus, type Side } from "../../shared/board.ts";
+import { canMark, markTargets, powerTargets, type PlannedArrival } from "../../shared/powers.ts";
+import type { ErrorCode, MatchResult, OpponentView, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { resolveTurns, type Commander, type Turn } from "../../shared/resolution.ts";
-import { planBotTurn } from "./bot.ts";
+import { planBotTurn, type BotView } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
 
 export type Seat = 0 | 1;
@@ -23,8 +26,9 @@ const STARTING_COMMANDS = 3;
 
 const SEAT_SIDE: Record<Seat, Side> = { 0: "player", 1: "enemy" };
 
-function mirrorBoard(seat: Seat, board: BoardSnapshot): BoardSnapshot {
-  return seat === 0 ? board : { player: board.enemy, enemy: board.player };
+/** Ein Wert je Seite (Brett, Hive-Zähler) aus Sicht des Sitzes: Für Seat 1 tauschen die Seiten. */
+function mirrorSides<T>(seat: Seat, { player, enemy }: Record<Side, T>): Record<Side, T> {
+  return seat === 0 ? { player, enemy } : { player: enemy, enemy: player };
 }
 
 /** Spiegelt ein Ereignis für Seat 1: Jedes `side`-Feld, auch in verschachtelten Schiffen, wechselt die Seite. */
@@ -42,6 +46,8 @@ class Player implements Commander {
   readonly commandHand: CommandCard[];
   /** Die aufgedeckten Befehle in der Reihenfolge, in der er sie gespielt hat; der Gegner sieht sie (`OpponentView`). */
   readonly playedCommands: CommandId[] = [];
+  /** Vor Runde 1 gewählt (`Match.chooseAdmiral`), beim Computergegner sofort. */
+  admiral: AdmiralId | null = null;
   plan: TurnPlan | null = null;
 
   /** Der Computergegner hat kein Token; er wird nie über einen Socket angesprochen. */
@@ -64,6 +70,11 @@ class Player implements Commander {
     return this.token === null;
   }
 
+  /** Das Flaggschiff seines Admirals, das er in Runde 1 zusätzlich legt. */
+  get flagshipCard(): ShipCard {
+    return shipById(ADMIRALS[this.admiral!].flagship);
+  }
+
   /** 1 Schiff + 1 Befehl nachziehen. Ist die Handhälfte voll, verfällt die Karte. */
   drawForRound(): void {
     drawInto(this.shipHand, this.shipDeck);
@@ -77,26 +88,29 @@ class Player implements Commander {
     };
   }
 
-  /** Kein Kampfschiff (ATK > 0) mehr, weder auf dem Feld noch auf der Hand. */
-  isDefeated(board: Board): boolean {
-    return !board.ships(this.side).some((slot) => isCombat(slot.card!)) && !this.shipHand.some(isCombat);
-  }
-
   /** Deckt den abgegebenen Zug auf: Seine Karten verlassen die Hand, der Befehl ist ab jetzt für den Gegner sichtbar. */
   reveal(): Turn {
-    const { ships, command, maneuver } = this.plan!;
+    const { ships, flagship, command, maneuver, power, mark } = this.plan!;
     const deploys = ships.map(({ handIndex, target }) => ({ card: this.shipHand[handIndex]!, target }));
     // Von hinten entfernen, damit die übrigen Hand-Indizes gültig bleiben.
     for (const index of ships.map((ship) => ship.handIndex).sort((a, b) => b - a)) this.shipHand.splice(index, 1);
-    if (command === null) return { commander: this, ships: deploys, command: null, maneuver };
-    const [card] = this.commandHand.splice(command.handIndex, 1);
-    this.playedCommands.push(card!.id);
-    return { commander: this, ships: deploys, command: { card: card!, target: command.target, destination: command.destination }, maneuver };
+    const card = command && this.commandHand.splice(command.handIndex, 1)[0]!;
+    if (card) this.playedCommands.push(card.id);
+    return {
+      commander: this,
+      ships: deploys,
+      flagship: flagship && { card: this.flagshipCard, target: flagship },
+      command: command && { card: card!, target: command.target, destination: command.destination },
+      maneuver,
+      power: power && { id: ADMIRALS[this.admiral!].power, target: power.target },
+      mark,
+    };
   }
 
-  /** Was der Gegner von diesem Spieler weiß. */
-  get publicView(): OpponentView {
+  /** Was der Gegner von diesem Spieler weiß; den Admiral erst, wenn beide gewählt haben. */
+  publicView(admiralsChosen: boolean): OpponentView {
     return {
+      admiral: admiralsChosen ? this.admiral : null,
       submitted: this.plan !== null,
       shipHandSize: this.shipHand.length,
       commandHandSize: this.commandHand.length,
@@ -108,7 +122,6 @@ class Player implements Commander {
 }
 
 const isSupport = (card: ShipCard) => card.shipClass === "support";
-const isCombat = (card: ShipCard) => card.atk > 0;
 
 function drawManyWhere(deck: Deck<ShipCard>, count: number, predicate: (card: ShipCard) => boolean): ShipCard[] {
   return Array.from({ length: count }, () => deck.drawWhere(predicate)!);
@@ -131,7 +144,7 @@ export class Match {
   /** Wer aufgegeben hat; null, wenn das Match auf dem Brett entschieden wurde oder noch läuft. */
   surrenderedBy: Side | null = null;
 
-  /** `random` (Zahlen in [0, 1)) entscheidet über das Ziel der Plasma Frigate; Tests geben ihn fest vor. */
+  /** `random` (Zahlen in [0, 1)) entscheidet über das Ziel der Plasma Frigate und den Admiral des Computergegners; Tests geben ihn fest vor. */
   constructor(
     readonly id: string,
     private readonly random: () => number = Math.random,
@@ -143,9 +156,11 @@ export class Match {
     return known ? known.seat : this.seatPlayer(token);
   }
 
-  /** Setzt den Computergegner auf den freien Platz; null, wenn das Match voll ist. */
+  /** Setzt den Computergegner auf den freien Platz; er wählt seinen Admiral sofort, zufällig. null, wenn das Match voll ist. */
   addBot(): Seat | null {
-    return this.seatPlayer(null);
+    const seat = this.seatPlayer(null);
+    if (seat !== null) this.players[seat]!.admiral = ADMIRAL_IDS[Math.floor(this.random() * ADMIRAL_IDS.length)]!;
+    return seat;
   }
 
   private seatPlayer(token: string | null): Seat | null {
@@ -155,11 +170,26 @@ export class Match {
     return seat;
   }
 
+  /** Wählt den Admiral des Sitzes, einmal und vor Runde 1, auch schon, solange der Gegner fehlt. */
+  chooseAdmiral(seat: Seat, admiral: AdmiralId): ErrorCode | null {
+    const player = this.players[seat]!;
+    if (player.admiral !== null) return "admiral_already_chosen";
+    player.admiral = admiral;
+    return null;
+  }
+
+  /** Runde 1 beginnt, sobald beide Spieler ihren Admiral gewählt haben; erst dann sieht jeder den des anderen. */
+  get started(): boolean {
+    return this.players.length === 2 && this.players.every((player) => player.admiral !== null);
+  }
+
   /** Nimmt den Zug an. Gibt einen Fehlercode zurück, wenn er nicht gilt. */
   submit(seat: Seat, plan: TurnPlan): ErrorCode | null {
     const player = this.players[seat]!;
-    if (this.players.length < 2) return "opponent_missing";
     if (this.winner !== null) return "match_over";
+    if (player.admiral === null) return "admiral_required";
+    if (this.players.length < 2) return "opponent_missing";
+    if (!this.started) return "opponent_choosing";
     if (player.plan !== null) return "already_submitted";
     const error = this.validate(player, plan);
     if (error) return error;
@@ -167,9 +197,16 @@ export class Match {
     player.plan = plan;
     // Der Computergegner zieht, sobald der Mensch abgegeben hat; den fremden Plan kennt er nicht.
     for (const bot of this.players) {
-      if (bot.isBot && bot.plan === null) bot.plan = planBotTurn(this.board, bot, this.round);
+      if (bot.isBot && bot.plan === null) bot.plan = planBotTurn(this.board, this.botView(bot.seat), this.round);
     }
     return null;
+  }
+
+  /** Was der Computergegner auf diesem Sitz beim Planen weiß: eigene Karten und, was jeder vom Gegner sieht. */
+  botView(seat: Seat): BotView {
+    const player = this.players[seat]!;
+    const opponent = this.players[seat === 0 ? 1 : 0]!;
+    return { side: player.side, admiral: player.admiral!, shipHand: player.shipHand, commandHand: player.commandHand, opponent: opponent.publicView(true) };
   }
 
   /** Gibt das Match auf: Der Gegner gewinnt sofort, ein abgegebener Zug verfällt. */
@@ -184,25 +221,37 @@ export class Match {
   }
 
   private validate(player: Player, plan: TurnPlan): ErrorCode | null {
+    const { board } = this;
+    const side = player.side;
     if (plan.ships.length > maxDeploys(this.round)) return "too_many_ships";
-    // Die Schiffe, die in dieser Runde gelegt werden, landen vor Manöver und Befehlen und belegen ihre Slots;
-    // jeder Deploy zählt die vorigen zur Lane- und Flottengrenze.
-    const deploys = plan.ships.map((ship) => ship.target);
+    if (this.round === 1 && plan.flagship === null) return "flagship_required";
+    if (this.round > 1 && plan.flagship !== null) return "flagship_not_allowed";
+    // Die Schiffe, die in dieser Runde gelegt werden (in Runde 1 zuerst das Flaggschiff), landen vor Manöver
+    // und Befehlen und belegen ihre Slots; jeder Deploy zählt die vorigen zur Lane- und Flottengrenze.
+    const arrivals: PlannedArrival[] = plan.flagship ? [{ card: player.flagshipCard, target: plan.flagship }] : [];
     for (const [i, { handIndex, target }] of plan.ships.entries()) {
-      if (player.shipHand[handIndex] === undefined || plan.ships.slice(0, i).some((other) => other.handIndex === handIndex)) {
-        return "ship_not_in_hand";
-      }
-      if (!this.board.canPlace(this.board.lane(player.side, target.lane), target.slotIndex, deploys.slice(0, i))) return "slot_unavailable";
+      const card = player.shipHand[handIndex];
+      if (card === undefined || plan.ships.slice(0, i).some((other) => other.handIndex === handIndex)) return "ship_not_in_hand";
+      arrivals.push({ card, target });
+    }
+    const deploys = arrivals.map((arrival) => arrival.target);
+    for (const [i, target] of deploys.entries()) {
+      if (!board.canPlace(board.lane(side, target.lane), target.slotIndex, deploys.slice(0, i))) return "slot_unavailable";
+    }
+    // Das Grundmanöver geht in einen freien Slot; nur die Mirage darf in einen belegten und tauscht dann (Phasentausch).
+    let swap = false;
+    if (plan.maneuver) {
+      const { ship, destination } = plan.maneuver;
+      const slot = board.lane(side, ship.lane).slots[ship.slotIndex];
+      if (!slot?.isOccupied) return "maneuver_not_own_ship";
+      const to = board.lane(side, destination.lane).slots[destination.slotIndex];
+      swap = to !== undefined && to !== slot && to.isOccupied;
+      if (swap && slot.card!.id !== "mirage") return "swap_not_allowed";
+      if (!swap && !board.canMove(slot, destination, deploys)) return "maneuver_destination_unavailable";
     }
     // Manöver und Bewegungsbefehl dürfen nicht im selben Slot landen und zusammen mit den Deploys die
     // Lane-Grenze nicht überschreiten; `canMove` prüft das beim Befehl mit allen Ankünften.
-    const maneuver = plan.maneuver?.destination ?? null;
-    if (plan.maneuver) {
-      const { ship, destination } = plan.maneuver;
-      const slot = this.board.lane(player.side, ship.lane).slots[ship.slotIndex];
-      if (!slot?.isOccupied) return "maneuver_not_own_ship";
-      if (!this.board.canMove(slot, destination, deploys)) return "maneuver_destination_unavailable";
-    }
+    let moved: SlotTarget | null = null;
     if (plan.command) {
       const { handIndex, target } = plan.command;
       const card = player.commandHand[handIndex];
@@ -211,17 +260,30 @@ export class Match {
       if (!needsTarget(card) && target !== null) return "target_not_allowed";
       // Der Torpedo zielt auf einen Slot der Gegnerseite, auch einen leeren; alle übrigen auf ein eigenes Schiff.
       const enemySlot = targetsEnemySlot(card);
-      const slot = target && this.board.lane(enemySlot ? opposite(player.side) : player.side, target.lane).slots[target.slotIndex];
+      const slot = target && board.lane(enemySlot ? opposite(side) : side, target.lane).slots[target.slotIndex];
       if (target && enemySlot && !slot) return "target_not_enemy_slot";
       if (target && !enemySlot && !slot?.isOccupied && !deploys.some((deploy) => isSameSlot(target, deploy))) return "target_not_own_ship";
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
       const { destination } = plan.command;
       if (card.moves && destination === null) return "destination_required";
       if (!card.moves && destination !== null) return "destination_not_allowed";
-      if (card.moves && target && plan.maneuver && isSameSlot(target, plan.maneuver.ship)) return "maneuver_conflict";
+      // Das Grundmanöver bewegt sein Schiff, der Phasentausch auch das Schiff im Ziel-Slot; keins davon verlegt der Befehl.
+      const maneuvered = plan.maneuver ? [plan.maneuver.ship, ...(swap ? [plan.maneuver.destination] : [])] : [];
+      if (card.moves && target && maneuvered.some((ship) => isSameSlot(ship, target))) return "maneuver_conflict";
       // Bewegt sich ein gelegtes Schiff, ist `from` sein noch leerer Slot; `canMove` zählt Deploys nur in der Ziel-Lane.
-      const to = target && destination !== null ? { lane: otherLane(target.lane), slotIndex: destination } : null;
-      if (slot && to && !this.board.canMove(slot, to, [...deploys, maneuver])) return "destination_unavailable";
+      moved = target && destination !== null ? { lane: otherLane(target.lane), slotIndex: destination } : null;
+      const maneuver = swap ? null : (plan.maneuver?.destination ?? null);
+      if (slot && moved && !board.canMove(slot, moved, [...deploys, maneuver])) return "destination_unavailable";
+    }
+    // Die Admiralsfähigkeit statt des Grundmanövers; das Trugbild erscheint nicht, wo der Befehl ein Schiff hinbringt.
+    if (plan.power) {
+      if (plan.maneuver) return "power_and_maneuver";
+      const targets = powerTargets(board, side, ADMIRALS[player.admiral!].power, arrivals, moved ? [moved] : []);
+      if (!targets.some((target) => isSameSlot(target, plan.power!.target))) return "power_target_invalid";
+    }
+    if (plan.mark) {
+      if (!canMark(board, side)) return "mark_unavailable";
+      if (!markTargets(board, side).some((target) => isSameSlot(target, plan.mark!))) return "mark_target_invalid";
     }
     return null;
   }
@@ -231,9 +293,9 @@ export class Match {
   }
 
   /**
-   * Deckt beide Züge auf und löst die Runde in Phasen auf (`resolveTurns`): Deploy samt Fähigkeiten, Manöver,
-   * Effects, Combat, Cleanup. Danach ziehen beide nach, und es wird geprüft, ob eine Flotte
-   * vernichtet ist; sonst beginnt die nächste Runde. Gibt die Ereignisse aus Sicht von Seat 0 zurück.
+   * Deckt beide Züge auf und löst die Runde in Phasen auf (`resolveTurns`). Danach ziehen beide nach, und es
+   * wird geprüft, ob ein Flaggschiff gefallen ist; sonst beginnt die nächste Runde. Gibt die Ereignisse aus
+   * Sicht von Seat 0 zurück.
    */
   resolveRound(): RoundEvent[] {
     const events = resolveTurns(this.board, this.players.map((player) => player.reveal()), this.random);
@@ -250,8 +312,9 @@ export class Match {
     return events;
   }
 
+  /** Wessen Flaggschiff gefallen ist, hat verloren; fallen beide in derselben Runde, ist es unentschieden. */
   private decideWinner(): Side | "draw" | null {
-    const [first, second] = this.players.map((player) => player.isDefeated(this.board));
+    const [first, second] = this.players.map((player) => this.board.flagship(player.side) === null);
     if (first && second) return "draw";
     if (first) return this.players[1]!.side;
     if (second) return this.players[0]!.side;
@@ -270,13 +333,15 @@ export class Match {
     return {
       matchId: this.id,
       round: this.round,
-      board: mirrorBoard(seat, this.board.snapshot()),
+      admiral: player.admiral,
+      board: mirrorSides(seat, this.board.snapshot()),
+      hiveLaunches: mirrorSides(seat, this.board.hiveLaunches),
       shipHand: player.shipHand.map((card) => card.id),
       commandHand: player.commandHand.map((card) => card.id),
       shipDeckSize: player.shipDeck.size,
       commandDeckSize: player.commandDeck.size,
       submittedPlan: player.plan,
-      opponent: opponent?.publicView ?? null,
+      opponent: opponent?.publicView(this.started) ?? null,
       result: this.resultFor(seat),
       surrendered: this.surrenderedBy !== null,
     };

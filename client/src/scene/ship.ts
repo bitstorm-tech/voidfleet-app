@@ -1,6 +1,9 @@
 // Ein Schiff auf dem Brett. Die Nase zeigt nach lokal +Z, die Ausrichtung
 // bestimmt allein der Elternknoten (der Anker des SlotPads). Beim Planen zeigt es die
 // Zielvorschau: auf den Balken den drohenden Verlust, neben ihnen einen Totenkopf, wenn es fällt.
+// Flaggschiffe sind etwas größer, tragen einen Ring in der Farbe ihres Admirals am Boden und eine Krone
+// rechts neben dem Hüllenbalken; am Boden liegen auch die Marken von Fähigkeiten und Zielerfassung
+// (`markers.ts`). Das Trugbild flackert als Hologramm, baut sich auf und löst sich wieder auf.
 // Die Modelle kommen als glTF aus `tools/ships/` (Blender); alle Dateien werden
 // beim Start geladen (`loadShipModels`) und pro Schiff instanziiert. Zu jedem Modell gehört ein Wrack
 // aus Bruchstücken, das bei der Zerstörung an seine Stelle tritt (`destruction.ts`).
@@ -23,19 +26,28 @@ import type { Observer } from "@babylonjs/core/Misc/observable";
 import type { Scene } from "@babylonjs/core/scene";
 // Registriert `renderOverlay` auf Mesh: zeichnet das Modell in einer Farbe darüber (Treffer-Blitz).
 import "@babylonjs/core/Rendering/outlineRenderer";
-import type { ShipCard, ShipClass } from "../../../shared/cards.ts";
+import { isFlagship, type ShipCard, type ShipClass } from "../../../shared/cards.ts";
 import type { ShipStats } from "../../../shared/protocol.ts";
 import { loopSound } from "../audio/sounds.ts";
+import { flagshipAdmiral } from "../data/admirals.ts";
 import { color3, PALETTE, toCss } from "../data/palette.ts";
 import { allShipModels, shipModel, wreckModel } from "../data/shipModels.ts";
 import type { SoundId } from "../data/sounds.ts";
 import { randomInCone } from "./effects.ts";
 import { Maneuver } from "./maneuver.ts";
-import { easeInOutSine, easeOutCubic, tween } from "./tween.ts";
+import { FloorMarker, type Footprint, type MarkerKind, type MarkerSpec } from "./markers.ts";
+import { SHIP_ANCHOR_HEIGHT } from "./slotPad.ts";
+import { easeInCubic, easeInOutSine, easeOutCubic, tween } from "./tween.ts";
 
 /** Schiffe sind für den Hangar modelliert und auf dem Brett zu groß. */
 const BOARD_SCALE = 0.6;
 const MODEL_SCALE = 0.5;
+/**
+ * Flaggschiffe heben sich durch ihre Größe ab: Ihre Modelle sind schon gut ein Fünftel größer gebaut, dazu dieser
+ * Faktor. Die Bastion, das breiteste, bleibt so knapp 2 breit (Slots liegen 2,2 auseinander) und reicht mit einem
+ * Schiff in der anderen Lane nicht über deren Abstand von 3,4.
+ */
+const FLAGSHIP_SCALE = 1.1;
 /** Die Balken schweben mindestens so hoch, bei hohen Aufbauten knapp über dem Modell. */
 const BAR_MIN_HEIGHT = 1.15;
 const BAR_MARGIN = 0.3;
@@ -87,6 +99,18 @@ const PREVIEW_PULSE = 1.4;
 const PREVIEW_MIN_VISIBILITY = 0.25;
 /** Kantenlänge des Totenkopfs; er steht links neben dem Hüllenbalken. */
 const SKULL_SIZE = 0.62;
+/** Die Krone eines Flaggschiffs steht rechts neben dem Hüllenbalken. */
+const CROWN_SIZE = 0.62;
+/** Hologramm des Trugbilds: Deckkraft schwankt um diesen Wert, ab und zu setzt das Bild kurz aus und springt seitlich. */
+const HOLOGRAM_ALPHA = 0.82;
+const HOLOGRAM_FLICKER = 0.18;
+const HOLOGRAM_GLITCH = 0.025;
+const HOLOGRAM_JITTER = 0.09;
+/** Aufbau und Auflösen des Trugbilds (ms). */
+const MATERIALIZE_DURATION = 750;
+const DEMATERIALIZE_DURATION = 650;
+/** Phasentausch: so lange schrumpft das Schiff zu einem Lichtpunkt und wächst am neuen Ort wieder (ms). */
+const PHASE_DURATION = 320;
 
 const containers = new Map<string, AssetContainer>();
 
@@ -122,7 +146,16 @@ export class ShipView {
   private readonly shieldLoss: Mesh;
   /** Totenkopf der Zielvorschau; auf Höhe der Balken, aber auch an Geistern, die keine Balken haben. */
   private readonly skull: Mesh;
+  /** Boden unter dem Schiff in Welteinheiten: Ring des Flaggschiffs, Marken von Fähigkeiten und Zielerfassung. */
+  private readonly floor: TransformNode;
+  private readonly markers = new Map<MarkerKind, FloorMarker>();
+  /** Grundfläche des Modells; die Marken am Boden umschließen sie. */
+  private footprint: Footprint = { width: 0, length: 0 };
   private readonly pulse: Observer<Scene>;
+  /** Flackern des Trugbilds; null bei allen anderen Schiffen. */
+  private readonly hologram: Observer<Scene> | null;
+  /** Deckkraft des Trugbilds beim Auf- und Abbau, unter dem Flackern. */
+  private hologramFade = 1;
   private current: ShipStats;
   /** HP und Schild nach der Runde laut Zielvorschau, null: das Schiff fällt; ohne Vorschau undefined. */
   private preview: ShipStats | null | undefined;
@@ -145,6 +178,12 @@ export class ShipView {
 
     this.modelRoot = new TransformNode("model", scene);
     this.modelRoot.parent = this.root;
+    if (isFlagship(card)) this.modelRoot.scaling.setAll(FLAGSHIP_SCALE);
+
+    this.floor = new TransformNode("floor", scene);
+    this.floor.parent = this.root;
+    this.floor.position.y = -SHIP_ANCHOR_HEIGHT / BOARD_SCALE;
+    this.floor.scaling.setAll(1 / BOARD_SCALE);
 
     this.statusBars = new TransformNode("status", scene);
     this.statusBars.parent = this.root;
@@ -179,6 +218,12 @@ export class ShipView {
     });
 
     this.addModel();
+    const admiral = flagshipAdmiral(card.id);
+    if (admiral) {
+      this.markers.set("halo", new FloorMarker(scene, this.floor, this.footprint, { kind: "halo", color: color3(admiral) }));
+      if (!isGhost) this.createCrown();
+    }
+    this.hologram = card.id === "decoy" ? scene.onBeforeRenderObservable.add(() => this.flicker()) : null;
     this.current = { hp: card.hp, shield: card.shield };
     this.updateBars();
   }
@@ -201,6 +246,35 @@ export class ShipView {
   /** Totenkopf links neben dem Hüllenbalken: Laut Zielvorschau fällt das Schiff in dieser Runde. */
   setDoomed(value: boolean): void {
     this.skull.setEnabled(value);
+  }
+
+  /**
+   * Die Marken am Boden (Fähigkeiten, Zielerfassung), genau diese; der Ring eines Flaggschiffs bleibt. Eine Marke,
+   * die schon liegt, bleibt liegen, damit ihre Drehung beim Neuzeichnen nicht springt.
+   */
+  setMarkers(specs: readonly MarkerSpec[]): void {
+    for (const [kind, marker] of this.markers) {
+      const spec = specs.find((candidate) => candidate.kind === kind);
+      if (kind === "halo" || (spec && sameSpec(spec, marker.spec))) continue;
+      marker.dispose();
+      this.markers.delete(kind);
+    }
+    for (const spec of specs) {
+      if (!this.markers.has(spec.kind)) this.markers.set(spec.kind, new FloorMarker(this.scene, this.floor, this.footprint, spec));
+    }
+  }
+
+  /** Legt eine Marke dazu und lässt sie auf das Schiff herabfallen (Rundenwiedergabe). */
+  async addMarker(spec: MarkerSpec): Promise<void> {
+    this.markers.get(spec.kind)?.dispose();
+    const marker = new FloorMarker(this.scene, this.floor, this.footprint, spec);
+    this.markers.set(spec.kind, marker);
+    await marker.appear();
+  }
+
+  removeMarker(kind: MarkerKind): void {
+    this.markers.get(kind)?.dispose();
+    this.markers.delete(kind);
   }
 
   /** Dämpft die Statusbalken, solange das Schiff wegen seines Manövers nicht feuert. */
@@ -226,6 +300,7 @@ export class ShipView {
    */
   async arrive(distance: number, obstacle: number | null): Promise<void> {
     this.statusBars.setEnabled(false);
+    this.floor.setEnabled(false);
     const descentStart = obstacle === null ? 0 : -obstacle + DESCENT_START;
     await this.fly(ARRIVAL_DURATION, (progress) => {
       const z = -distance * (1 - easeOutCubic(progress));
@@ -237,6 +312,7 @@ export class ShipView {
       this.modelRoot.rotation.x = DESCENT_PITCH * Math.sin(Math.PI * altitude);
     });
     this.statusBars.setEnabled(true);
+    this.floor.setEnabled(true);
   }
 
   /**
@@ -245,6 +321,8 @@ export class ShipView {
    */
   async maneuver(): Promise<void> {
     const flight = new Maneuver(this.root.position, this.card.shipClass);
+    // Die Marken am Boden landen mit dem Schiff, statt mitzufliegen.
+    this.floor.setEnabled(false);
     await this.fly(flight.duration, (progress) => {
       const pose = flight.pose(progress);
       this.root.position.set(pose.x, pose.y, pose.z);
@@ -254,6 +332,36 @@ export class ShipView {
     this.root.position.setAll(0);
     this.root.rotation.setAll(0);
     this.modelRoot.rotation.setAll(0);
+    this.floor.setEnabled(true);
+  }
+
+  /** Phasentausch, erste Hälfte: Das Schiff schrumpft zu einem Lichtpunkt. */
+  async phaseOut(): Promise<void> {
+    await tween(this.scene, PHASE_DURATION, (progress) => this.root.scaling.setAll(BOARD_SCALE * Math.max(1 - easeInCubic(progress), 0.01)));
+  }
+
+  /** Phasentausch, zweite Hälfte: Am neuen Anker wächst es wieder auf seine Größe. */
+  async phaseIn(): Promise<void> {
+    await tween(this.scene, PHASE_DURATION, (progress) => this.root.scaling.setAll(BOARD_SCALE * Math.max(easeOutCubic(progress), 0.01)));
+  }
+
+  /** Das Trugbild baut sich auf: Es wächst von der Platte nach oben und flackert dabei ins Bild. */
+  async materialize(): Promise<void> {
+    this.statusBars.setEnabled(false);
+    await tween(this.scene, MATERIALIZE_DURATION, (progress) => {
+      this.modelRoot.scaling.set(1, Math.max(easeOutCubic(progress), 0.01), 1);
+      this.hologramFade = progress < 1 ? progress * (Math.random() < 0.3 ? 0.3 : 1) : 1;
+    });
+    this.statusBars.setEnabled(true);
+  }
+
+  /** Das Trugbild löst sich auf: Es sinkt flackernd in sich zusammen. */
+  async dematerialize(): Promise<void> {
+    this.statusBars.setEnabled(false);
+    await tween(this.scene, DEMATERIALIZE_DURATION, (progress) => {
+      this.modelRoot.scaling.set(1 + 0.3 * progress, Math.max(1 - easeInCubic(progress), 0.01), 1 + 0.3 * progress);
+      this.hologramFade = (1 - progress) * (Math.random() < 0.35 ? 0.2 : 1);
+    });
   }
 
   /** Ein Flug im Takt der Bewegungen: Das Triebwerk folgt dem Schiff im Stereobild und verklingt nach der Landung. */
@@ -281,8 +389,11 @@ export class ShipView {
 
   // --- Zerstörung ---
 
+  /** Balken, Totenkopf, Krone und Marken verschwinden, sobald der Todeskampf beginnt. */
   hideStatus(): void {
     this.statusBars.setEnabled(false);
+    this.skull.setEnabled(false);
+    this.floor.setEnabled(false);
   }
 
   /**
@@ -333,6 +444,8 @@ export class ShipView {
 
   dispose(): void {
     this.scene.onBeforeRenderObservable.remove(this.pulse);
+    if (this.hologram) this.scene.onBeforeRenderObservable.remove(this.hologram);
+    for (const marker of this.markers.values()) marker.dispose();
     this.root.dispose(false, false);
     // Geist-Kopien klonen beim `clone()` auch ihre Texturen; die gehören dann ebenfalls diesem Schiff.
     for (const material of this.ownedMaterials) material.dispose(false, true);
@@ -346,10 +459,14 @@ export class ShipView {
       for (const mesh of node.getChildMeshes()) this.prepareMesh(mesh);
       if (node instanceof AbstractMesh) this.prepareMesh(node);
     }
-    // Höchsten Punkt des Modells in den Raum des Schiffs zurückrechnen, damit die Balken frei bleiben.
+    // Höchsten Punkt des Modells in den Raum des Schiffs zurückrechnen, damit die Balken frei bleiben; die
+    // Grundfläche in Welteinheiten bestimmt die Größe der Marken am Boden.
     this.root.computeWorldMatrix(true);
-    const { max } = this.modelRoot.getHierarchyBoundingVectors();
-    const top = Vector3.TransformCoordinates(max, this.root.getWorldMatrix().clone().invert()).y;
+    const toShip = this.root.getWorldMatrix().clone().invert();
+    const { min, max } = this.modelRoot.getHierarchyBoundingVectors();
+    const size = Vector3.TransformCoordinates(max, toShip).subtract(Vector3.TransformCoordinates(min, toShip)).scale(BOARD_SCALE);
+    this.footprint = { width: Math.abs(size.x), length: Math.abs(size.z) };
+    const top = Vector3.TransformCoordinates(max, toShip).y;
     this.statusBars.position.y = Math.max(BAR_MIN_HEIGHT, top + BAR_MARGIN);
     this.skull.position.set(-(TRACK_WIDTH + SKULL_SIZE) / 2 - 0.08, this.statusBars.position.y - 0.05, 0);
   }
@@ -357,6 +474,26 @@ export class ShipView {
   private prepareMesh(mesh: AbstractMesh): void {
     mesh.isPickable = false;
     if (this.isGhost && mesh.material) mesh.material = this.ghostMaterial(mesh.material);
+  }
+
+  /** Hologramm: Die Deckkraft schwankt, ab und zu setzt das Bild aus und springt seitlich. */
+  private flicker(): void {
+    const glitch = Math.random() < HOLOGRAM_GLITCH;
+    const alpha = (glitch ? 0.25 : HOLOGRAM_ALPHA + HOLOGRAM_FLICKER * (Math.random() - 0.5)) * this.hologramFade;
+    for (const mesh of this.modelRoot.getChildMeshes()) mesh.visibility = alpha;
+    this.modelRoot.position.x = glitch ? (Math.random() - 0.5) * HOLOGRAM_JITTER : 0;
+  }
+
+  /** Krone in der Zierfarbe der Flaggschiffe, rechts neben dem Hüllenbalken. */
+  private createCrown(): void {
+    const crown = CreatePlane("crown", { size: CROWN_SIZE }, this.scene);
+    crown.material = crownMaterial(this.scene);
+    crown.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    crown.isPickable = false;
+    crown.renderingGroupId = 1;
+    crown.alphaIndex = 3;
+    crown.parent = this.statusBars;
+    crown.position.set((TRACK_WIDTH + CROWN_SIZE) / 2 + 0.08, -0.05, 0);
   }
 
   /**
@@ -426,6 +563,55 @@ export class ShipView {
     bar.scaling.x = to - from;
     bar.position.x = BAR_WIDTH * ((from + to) / 2 - 0.5);
   }
+}
+
+function sameSpec(a: MarkerSpec, b: MarkerSpec): boolean {
+  return a.kind === b.kind && a.color.equals(b.color) && !a.planned === !b.planned;
+}
+
+const crownMaterials = new WeakMap<Scene, StandardMaterial>();
+
+/** Ein Material für alle Kronen der Szene: goldene Krone mit dunklem Rand auf transparentem Grund. */
+function crownMaterial(scene: Scene): StandardMaterial {
+  let material = crownMaterials.get(scene);
+  if (material) return material;
+  const size = 128;
+  const texture = new DynamicTexture("crown", { width: size, height: size }, scene);
+  texture.hasAlpha = true;
+  const context = texture.getContext();
+  context.clearRect(0, 0, size, size);
+  // Fünf Zacken mit Kugeln, darunter das Band.
+  context.beginPath();
+  context.moveTo(14, 96);
+  context.lineTo(10, 38);
+  context.lineTo(38, 62);
+  context.lineTo(64, 24);
+  context.lineTo(90, 62);
+  context.lineTo(118, 38);
+  context.lineTo(114, 96);
+  context.closePath();
+  context.fillStyle = toCss(PALETTE.flagshipTrim);
+  context.strokeStyle = "rgb(40 28 8 / 0.9)";
+  context.lineWidth = 6;
+  context.stroke();
+  context.fill();
+  context.fillRect(14, 100, 100, 14);
+  context.strokeRect(14, 100, 100, 14);
+  for (const [x, y] of [[10, 36], [64, 22], [118, 36]] as const) {
+    context.beginPath();
+    context.arc(x, y, 8, 0, 2 * Math.PI);
+    context.fill();
+  }
+  texture.update();
+
+  material = new StandardMaterial("crown", scene);
+  material.diffuseTexture = texture;
+  material.useAlphaFromDiffuseTexture = true;
+  material.emissiveColor = Color3.White();
+  material.disableLighting = true;
+  material.disableDepthWrite = true;
+  crownMaterials.set(scene, material);
+  return material;
 }
 
 const skullMaterials = new WeakMap<Scene, StandardMaterial>();

@@ -1,15 +1,20 @@
-"""Die Schiffe von Voidfleet samt der Drohne des Titan Carriers, je eine Funktion pro Karten-ID (siehe shared/cards.ts).
+"""Die Schiffe von Voidfleet samt der Tokens (Drohne, Trugbild) und der Flaggschiffe der Admirale, je eine Funktion
+pro Karten-ID (siehe shared/cards.ts).
 
 Größen in Blender-Einheiten; auf dem Brett wirkt MODEL_SCALE × BOARD_SCALE aus ship.ts.
-Jäger ~6, Kreuzer ~6-7.5, Schlachtschiffe ~8.5, Unterstützer ~5 Einheiten lang.
-Vorn ist -Y, oben +Z; `mirror=True` spiegelt ein Teil an der Längsachse.
+Jäger ~6, Kreuzer ~6-7.5, Schlachtschiffe ~8.5, Unterstützer ~5, Flaggschiffe 10-11 (die Mirage ~9) Einheiten lang.
+Vorn ist -Y, oben +Z; `mirror=True` spiegelt ein Teil an der Längsachse. Der Slot liegt auf dem Brett bei z = -1,4.
 """
 
 import math
 
-from vf import (WHITE, Ship, antenna, box, dish, greebles, hoop, inset, keel, loft, missile_pod, ngon, octagon,
+import bmesh
+from mathutils import Vector
+from mathutils.bvhtree import BVHTree
+
+from vf import (WHITE, Ship, antenna, box, dish, greebles, hexagon, hoop, inset, iridescent, keel, loft, material, missile_pod, ngon, octagon,
                 palette, pd_turret, pipe, plate, post, radar, rbox, rect, revolve, rounded, sec, segment, smooth, sphere,
-                superellipse, tip, tube, turret, vents, windows)
+                superellipse, sweep, tip, tube, turret, vents, windows)
 
 FIGHTER_ACCENT, FIGHTER_GLOW = (0.8, 0.14, 0.05), (1.0, 0.35, 0.1)
 CRUISER_ACCENT, CRUISER_GLOW = (0.1, 0.3, 0.9), (0.25, 0.55, 1.0)
@@ -784,6 +789,736 @@ def signal_booster():
     s.add(box(0.5, 0.06, 0.06), m["glow"], at=(0, -2.3, 0.3))
     return s.finish()
 
+
+# ---------------------------------------------------------------- Flaggschiffe der Admirale
+#
+# Gemeinsames Kennzeichen: die weiß-goldene Kommando-Zierlinie entlang des Rumpfs, eine Wappenplatte
+# auf dem Rücken, eine erhöhte Brücke mit Fensterlichtern und Leuchten in der Admiralsfarbe (wie im UI).
+# Größer als die Deckschiffe: 10-11 Einheiten lang, die Mirage als Jäger etwa 9.
+
+
+def linear(code):
+    """UI-Farbe (sRGB, "#RRGGBB") als lineares RGB, wie es die Materialien erwarten."""
+    rgb = [int(code[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    return tuple(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb)
+
+
+TRIM = linear("#F4D68C")
+OSEI, VANCE, HALVORSEN, MOREAU, KERR = (linear(c) for c in ("#E8A33A", "#E2483D", "#9D5CF2", "#33D1C6", "#5B8DFF"))
+
+
+def flagship_palette(ship, color, accent, hull=BATTLESHIP_HULL, tile=1.0, **extra):
+    """Materialsatz eines Flaggschiffs: Düsen und Leuchtfeuer (`glow`, Stärke 20) in der Admiralsfarbe, dazu
+    `signal` für die Kennzeichen: leuchtet genau in der UI-Farbe des Admirals (das Spiel hat kein Tone-Mapping und
+    für Schiffe keinen Bloom, Stärke 20 brennt dort fast weiß aus); dazu die weiß-goldene Zierlinie (`trim`)."""
+    m = palette(ship, accent, color, hull=hull, tile=tile, **extra)
+    m["signal"] = material(f"{ship}_signal", tuple(c * 0.3 for c in color), 0.0, 0.4, emission=color, strength=1.0)
+    m["trim"] = material(f"{ship}_trim", TRIM, 0.9, 0.3, emission=TRIM, strength=0.8)
+    return m
+
+
+def grow(points, d):
+    """Konvexes Polygon (x, y) um d nach außen versetzt."""
+    n = len(points)
+    sign = 1 if sum(points[i][0] * points[(i + 1) % n][1] - points[(i + 1) % n][0] * points[i][1] for i in range(n)) > 0 else -1
+    out = []
+    for i in range(n):
+        p0, p1, p2 = Vector(points[i - 1]), Vector(points[i]), Vector(points[(i + 1) % n])
+        e1, e2 = (p1 - p0).normalized(), (p2 - p1).normalized()
+        n1, n2 = Vector((e1.y, -e1.x)) * sign, Vector((e2.y, -e2.x)) * sign
+        b = (n1 + n2).normalized()
+        out.append(tuple(p1 + b * d / max(b.dot(n1), 0.3)))
+    return out
+
+
+def trim_loop(s, m, outline, z, w=0.07, h=0.07, d=0.02):
+    """Zierlinie rund um ein Deck (Umriss x, y auf Höhe z), knapp außen auf der Kante."""
+    pts = [(x, y, z) for x, y in grow(outline, d)]
+    s.add(sweep(pts + pts[:2], rect(w, h)), m["trim"])
+
+
+def trim_line(s, m, points, w=0.07, h=0.07, mirror=True):
+    """Zierlinie entlang einer Punktfolge (x, y, z), gespiegelt auf beide Flanken."""
+    s.add(sweep(points, rect(w, h)), m["trim"], mirror=mirror)
+
+
+def lifted(s, dz):
+    """Hebt das ganze Schiff an: Sein tiefster Punkt soll über dem Slot bleiben (Blender-z -1,4 auf dem Brett)."""
+    bmesh.ops.translate(s.bm, verts=s.bm.verts, vec=(0, 0, dz))
+    return s
+
+
+def flank(rings, z, dx=0.03, at=(0, 0, 0)):
+    """Punkte auf der Steuerbord-Flanke eines Lofts (Ringe wie aus `smooth`) in Höhe z, um dx nach außen versetzt:
+    die Bahn einer Zierlinie, die dem Rumpf folgt; `at` ist der Versatz, mit dem der Rumpf eingefügt wurde."""
+    ox, oy, oz = at
+    out = []
+    for ring in rings:
+        if not isinstance(ring, list):
+            continue
+        hits = [a.lerp(b, (z - oz - a.z) / (b.z - a.z)) for a, b in zip(ring, ring[1:] + ring[:1])
+                if (a.z - z + oz) * (b.z - z + oz) <= 0 and a.z != b.z]
+        hits = [p for p in hits if p.x > 0]
+        if hits:
+            p = max(hits, key=lambda p: p.x)
+            out.append((p.x + ox + dx, p.y + oy, z))
+    return out
+
+
+def slab(outline, thickness, bend=0.0):
+    """Gewölbte Platte quer zur Längsachse: Umriss (x, z) ab y = 0 nach hinten, die Seiten um bend·x² zurückgezogen."""
+    return loft([[Vector((x, d + bend * x * x, z)) for x, z in outline] for d in (0.0, thickness)])
+
+
+def emblem(s, m, at, outline, symbol, rot=(0, 0, 0)):
+    """Wappenplatte auf dem Rücken: dunkle Platte mit Goldrand, darauf das Zeichen des Admirals als Polygone
+    (x, y) in Gold (`trim`) oder einem anderen Material der Palette."""
+    x, y, z = at
+    s.add(plate(grow(outline, 0.07), 0.08, "xy"), m["trim"], at=(x, y, z + 0.04), rot=rot)
+    base = plate(outline, 0.1, "xy")
+    inset(base, 0.06, 0.015, 0.2)
+    s.add(base, m["dark"], at=(x, y, z + 0.06), rot=rot)
+    for k, (points, mat) in enumerate(symbol):
+        s.add(plate(points, 0.05, "xy"), m[mat], at=(x, y, z + 0.12 + 0.015 * k), rot=rot)
+
+
+def crystal(r, h):
+    """Doppelpyramide (Emitterkristall) um den Ursprung, Spitzen in ±z."""
+    return loft([Vector((0, 0, -h)), [Vector((r * math.cos(a), r * math.sin(a), 0)) for a in (k * math.pi / 2 for k in range(4))], Vector((0, 0, h))])
+
+
+def bridge(s, m, at, decks, per_deck=5, beacon=0.12, rake=0.0):
+    """Erhöhte Kommandobrücke: Decks mit Fensterreihen vorn und seitlich (jedes um `rake` nach achtern versetzt),
+    umlaufendes Fensterband und Zierlinie am obersten Deck, Mast mit Leuchtfeuer in der Admiralsfarbe;
+    liefert die Oberkante."""
+    x, y, z = at
+    for k, (w, l, h) in enumerate(decks):
+        yk = y + k * rake
+        s.add(rbox(w, l, h, 0.03, 1), m["hull"], at=(x, yk, z + h / 2))
+        s.add(box(w * 1.05, l * 1.05, 0.03), m["steel"], at=(x, yk, z + h))
+        windows(s, m, (x - w * 0.36, yk - l / 2 - 0.01, z + h * 0.6), (x + w * 0.36, yk - l / 2 - 0.01, z + h * 0.6), per_deck, (0.05, 0.03, 0.05))
+        windows(s, m, (x + w / 2 + 0.01, yk - l * 0.3, z + h * 0.6), (x + w / 2 + 0.01, yk + l * 0.3, z + h * 0.6), max(per_deck - 2, 2), (0.03, 0.05, 0.05), mirror=True)
+        z += h
+    w, l, h = decks[-1]
+    y += (len(decks) - 1) * rake
+    s.add(box(w * 1.02, l * 1.02, h * 0.22), m["window"], at=(x, y, z - h * 0.45))
+    trim_loop(s, m, [(x + px, y + py) for px, py in rect(w * 1.06, l * 1.06)], z + 0.03, 0.06, 0.06, 0.0)
+    s.add(post(10, 0.05, 0.035, 0.0, 0.9), m["steel"], at=(x, y + l * 0.15, z))
+    s.add(box(w * 0.7, 0.05, 0.05), m["steel"], at=(x, y + l * 0.15, z + 0.5))
+    s.add(sphere(beacon, 1), m["glow"], at=(x, y + l * 0.15, z + 0.9 + beacon * 0.6))
+    return z
+
+
+def bastion():
+    """Admiral Osei, „die Mauer“: fliegende Festung mit gewölbter Schildwand am Bug, Terrassen aus Panzerdecks
+    über einem gestuften Sockel, vier Schildpylonen mit Bernstein-Emittern und nur wenigen kleinen Geschützen."""
+    s = Ship("bastion")
+    m = flagship_palette(s.name, OSEI, (0.5, 0.46, 0.4))
+    # Rumpf: kastiger Hauptkörper, darunter zwei schmaler werdende Stufen (umgekehrte Stufenpyramide) und ein Kiel
+    s.add(loft([
+        sec(-4.2, octagon(3.8, 1.1, 0.4)),
+        sec(-3.4, octagon(4.8, 1.3, 0.3)),
+        sec(2.9, octagon(4.8, 1.3, 0.3)),
+        sec(4.3, octagon(3.6, 1.1, 0.4)),
+    ]), m["hull"], at=(0, 0, 0.2))
+    step = [(0.0, -3.7), (1.7, -3.3), (2.05, -2.2), (2.05, 2.6), (1.55, 3.7), (-1.55, 3.7), (-2.05, 2.6), (-2.05, -2.2), (-1.7, -3.3)]
+    for k, (sx, sy, z, t) in enumerate(((1.0, 1.0, -0.66, 0.5), (0.6, 0.78, -1.12, 0.44))):
+        part = plate([(x * sx, y * sy + 0.3 * k) for x, y in step], t, "xy")
+        inset(part, 0.05, 0.015, 0.25)
+        s.add(part, m["hull" if k else "accent"], at=(0, 0, z))
+    windows(s, m, (2.06, -2.0, -0.66), (2.06, 2.4, -0.66), 9, (0.03, 0.06, 0.05), mirror=True)
+    keelfin = plate([(-2.2, 0.0), (2.6, 0.0), (2.7, -0.4), (-1.4, -0.36)], 0.14, "yz")
+    inset(keelfin, 0.04, 0.012, 0.1)
+    s.add(keelfin, m["hull"], at=(0, 0, -1.34))
+    s.add(sphere(0.2, 2), m["plain"], at=(0, -1.9, -1.36))
+    for y in (-0.4, 0.2, 0.8, 1.4):
+        s.add(box(1.0, 0.035, 0.2), m["steel"], at=(0, y, -1.42))
+    # Drei Panzerdecks übereinander, jedes schmaler: Festungsterrassen mit Plattenfugen, Zierlinie und Zinnen
+    deck1 = [(0.0, -4.5), (2.28, -4.1), (2.8, -2.8), (2.8, 2.5), (2.42, 4.0), (1.3, 4.5), (-1.3, 4.5), (-2.42, 4.0), (-2.8, 2.5), (-2.8, -2.8), (-2.28, -4.1)]
+    deck2 = [(x * 0.8, y * 0.86 + 0.2) for x, y in deck1]
+    deck3 = [(-1.3, -1.6), (1.3, -1.6), (1.45, -0.8), (1.45, 3.2), (1.1, 3.7), (-1.1, 3.7), (-1.45, 3.2), (-1.45, -0.8)]
+    for outline, z, t, mat in ((deck1, 0.98, 0.3, "accent"), (deck2, 1.28, 0.3, "hull"), (deck3, 1.56, 0.26, "hull")):
+        part = plate(outline, t, "xy")
+        inset(part, 0.06, 0.02, 0.3)
+        s.add(part, m[mat], at=(0, 0, z))
+    trim_loop(s, m, deck1, 1.08, 0.08, 0.08)
+    trim_loop(s, m, deck3, 1.69, 0.06, 0.05)
+    for k in range(8):
+        s.add(box(0.2, 0.36, 0.2), m["hull"], at=(2.18, -2.9 + k * 0.82, 1.53), mirror=True)
+    s.add(box(0.06, 5.0, 0.1), m["signal"], at=(2.42, -0.2, 0.32), mirror=True)
+    windows(s, m, (2.43, -2.6, 0.0), (2.43, 2.6, 0.0), 12, (0.03, 0.06, 0.05), mirror=True)
+    # Schildwand am Bug (eigene Baugruppe, zurückgeneigt): hoch und um den Bug gewölbt, zweilagig, mit Zierkante,
+    # Emitterband, zwei Schildlinsen und Kristall; dahinter Stützpfeiler
+    wall = [(-2.86, 1.3), (-2.35, 2.0), (-1.2, 2.45), (0.0, 2.75), (1.2, 2.45), (2.35, 2.0), (2.86, 1.3), (2.72, -0.4), (1.85, -1.35),
+            (0.0, -1.8), (-1.85, -1.35), (-2.72, -0.4)]
+    bend, inner = 0.12, 0.13
+    g = Ship("bastion_wall")
+    front = slab(wall, 0.5, bend)
+    inset(front, 0.08, 0.03, 0.5)
+    g.add(front, m["hull"])
+    face = slab([(x * 0.86, z * 0.82 - 0.05) for x, z in wall], 0.2, inner)
+    inset(face, 0.07, 0.02, 0.3)
+    g.add(face, m["accent"], at=(0, -0.16, 0))
+    g.add(sweep([(x, bend * x * x - 0.03, z + 0.04) for x, z in wall[:7]], rect(0.1, 0.1)), m["trim"])
+    g.add(sweep([(x / 10, inner * (x / 10) ** 2 - 0.2, 1.05) for x in range(-20, 21, 2)], rect(0.08, 0.14)), m["signal"])
+    for x in (-1.55, 0.0, 1.55):
+        y = inner * x * x - 0.17
+        g.add(hoop(16, 0.2, 0.32, 0.1), m["steel"], at=(x, y, 0.15), rot=(90, 0, 0))
+        g.add(sphere(0.21, 2), m["signal"], at=(x, y + 0.1, 0.15), scale=(1, 0.5, 1))
+    g.add(crystal(0.2, 0.32), m["signal"], at=(0, -0.24, 1.7), rot=(90, 0, 0), scale=(1, 1, 0.6))
+    s.place(g, at=(0, -5.0, 0.15), rot=(-12, 0, 0))
+    g.bm.free()
+    for x in (0.9, 2.0):
+        s.add(plate([(-4.6, 2.0), (-4.3, 2.1), (-3.3, 1.1), (-4.3, 1.1)], 0.18, "yz"), m["hull"], at=(x, 0, 0.0), mirror=True)
+    # Eckbastionen: runde Türme mit Zinnenkranz, darauf die Schildpylone (Mast mit drei Spulenringen und
+    # Emitterkristall in einer Dreizackfassung)
+    for x, y, h in ((2.3, -2.6, 1.5), (2.3, 2.3, 1.3)):
+        z0 = 1.13
+        s.add(post(12, 0.5, 0.46, 0.0, 0.42), m["hull"], at=(x, y, z0), mirror=True)
+        s.add(hoop(12, 0.4, 0.5, 0.06), m["trim"], at=(x, y, z0 + 0.42), mirror=True)
+        for a in range(0, 360, 60):
+            c, sn = math.cos(math.radians(a)), math.sin(math.radians(a))
+            s.add(box(0.16, 0.16, 0.16), m["hull"], at=(x + 0.43 * c, y + 0.43 * sn, z0 + 0.53), rot=(0, 0, a), mirror=True)
+        z0 += 0.42
+        s.add(post(8, 0.26, 0.18, 0.0, 0.25), m["dark"], at=(x, y, z0), mirror=True)
+        s.add(post(8, 0.09, 0.06, 0.25, h), m["steel"], at=(x, y, z0), mirror=True)
+        for k in range(3):
+            zz = z0 + 0.45 + k * 0.28
+            s.add(hoop(12, 0.08, 0.24 - 0.04 * k, 0.08), m["signal"], at=(x, y, zz), mirror=True)
+            s.add(hoop(12, 0.07, 0.26 - 0.04 * k, 0.04), m["dark"], at=(x, y, zz + 0.08), mirror=True)
+        top = z0 + h
+        for a in (90, 210, 330):
+            c, sn = math.cos(math.radians(a)), math.sin(math.radians(a))
+            s.add(segment((x, y, top), (x + 0.16 * c, y + 0.16 * sn, top + 0.3), 0.025, 6), m["steel"], mirror=True)
+        s.add(crystal(0.13, 0.22), m["signal"], at=(x, y, top + 0.28), mirror=True)
+    # Wenige, kleine Geschütze: zwei Zwillingstürme vorn, Flak an den Ecken
+    turret(s, m, (1.05, -2.9, 1.43), barrel=0.6, r=0.24, mirror=True)
+    pd_turret(s, m, (2.2, -3.75, 1.13), r=0.11, mirror=True)
+    pd_turret(s, m, (2.0, 3.7, 1.13), r=0.11, yaw=180, mirror=True)
+    # Bergfried: Kommandobrücke mit Fensterreihen, Radar und Leuchtfeuer
+    top = bridge(s, m, (0, 2.2, 1.69), [(2.1, 1.7, 0.55), (1.6, 1.25, 0.5), (1.1, 0.85, 0.42)], per_deck=6)
+    radar(s, m, (0, 1.65, top), 0.6, 0.24)
+    s.add(dish(0.22, 0.08, 12, 2, 0.02), m["steel"], at=(0.85, 1.9, 2.8), rot=(-45, 0, -50), mirror=True)
+    # Wappen: Schild mit Mauerwerk und Bernstein-Raute
+    shield = [(-0.85, -0.7), (0.85, -0.7), (0.85, 0.2), (0.45, 0.78), (0.0, 1.02), (-0.45, 0.78), (-0.85, 0.2)]
+    bricks = [rect(0.3, 0.16) for _ in range(5)]
+    bricks = [[(x + dx, y + dy) for x, y in b] for b, (dx, dy) in zip(bricks, ((-0.36, -0.42), (0.0, -0.42), (0.36, -0.42), (-0.18, -0.22), (0.18, -0.22)))]
+    emblem(s, m, (0, -0.35, 1.69), shield, [(b, "trim") for b in bricks] + [([(0, 0.0), (0.2, 0.3), (0, 0.62), (-0.2, 0.3)], "signal")], rot=(0, 0, 180))
+    # Lüfter, Rohrleitungen, Kleinteile
+    vents(s, m, (1.5, 3.0, 1.43), 0.5, 0.2, slots=4, rot=(-90, 0, 0), mirror=True)
+    s.add(pipe([(1.75, -1.6, 1.45), (1.75, 1.0, 1.45)], 0.04, 8, joints=False), m["plain"], mirror=True)
+    greebles(s, m, (0.3, 0.5, 1.2, 1.4), 1.69, 6, size=(0.06, 0.18), seed=37, mirror=True)
+    greebles(s, m, (1.7, 2.0, 2.2, 3.4), 1.43, 5, size=(0.06, 0.16), seed=41, mirror=True)
+    # Heckblock mit drei schweren Düsen, zwei kleine an den Deckecken
+    s.add(rbox(3.6, 0.8, 1.2, 0.08, 1), m["dark"], at=(0, 4.25, 0.15))
+    for dx in (-1.1, 0.0, 1.1):
+        s.engine(m, 0.46, 4.5, 5.3, dx=dx, dz=0.15, n=20, plume=0.25)
+    s.engine(m, 0.28, 4.1, 4.75, dx=2.1, dz=0.98, n=16, mirror=True)
+    s.add(sphere(0.05, 1), m["navgreen"], at=(2.84, -2.8, 0.98))
+    s.add(sphere(0.05, 1), m["navred"], at=(-2.84, -2.8, 0.98))
+    return lifted(s, 0.5).finish()
+
+
+def vanguard():
+    """Admiral Vance, „der Hammer“: schlanker, kantiger Kreuzer, der nach vorn drängt: langer gepanzerter Rammbug als
+    Speerspitze mit glühenden Schneiden, darunter zwei schwere Bugkanonen, gepfeilte Panzerklingen, zurückgestaffelte
+    Brücke und ein kräftiger Düsencluster."""
+    s = Ship("vanguard")
+    m = flagship_palette(s.name, VANCE, (0.42, 0.04, 0.035), hull=(0.25, 0.26, 0.29), tile=1.2)
+    # Kantiger Rumpf mit Rückgrat
+    hull = [
+        sec(-2.6, octagon(1.2, 0.85, 0.45)),
+        sec(-1.7, octagon(2.0, 1.15, 0.45)),
+        sec(0.4, octagon(2.4, 1.3, 0.4)),
+        sec(2.6, octagon(2.4, 1.3, 0.4)),
+        sec(3.6, octagon(2.1, 1.15, 0.45)),
+        sec(4.0, octagon(1.8, 0.95, 0.45)),
+    ]
+    part = loft(hull)
+    inset(part, 0.05, 0.015, 0.3)
+    s.add(part, m["hull"])
+    spine = loft([sec(-2.3, octagon(0.5, 0.2, 0.4)), sec(-1.4, octagon(1.05, 0.5, 0.4)), sec(2.9, octagon(1.15, 0.55, 0.4)),
+                  sec(3.7, octagon(0.7, 0.3, 0.4))])
+    inset(spine, 0.04, 0.012, 0.2)
+    s.add(spine, m["hull"], at=(0, 0, 0.58))
+    trim_line(s, m, flank(hull, 0.34, 0.025))
+    # Rammbug als Speerspitze: Klinge mit Sechseckquerschnitt (Schneiden an den Seiten), Panzerlage, Goldgrat, glühende Schneiden
+    ram = [(-5.0, 0.6, 0.32), (-3.9, 1.8, 0.8), (-3.15, 2.0, 0.95), (-2.45, 1.35, 1.0), (-1.9, 1.15, 1.0)]
+    part = loft([tip(-5.6, 0, -0.12)] + [sec(y, hexagon(w, h)) for y, w, h in ram])
+    inset(part, 0.05, 0.015, 0.3)
+    s.add(part, m["hull"])
+    armor = [(-4.6, 0.55, 0.28), (-3.8, 1.45, 0.6), (-3.05, 1.6, 0.7), (-2.3, 1.05, 0.75)]
+    part = loft([tip(-5.25, 0, 0.06)] + [sec(y, hexagon(w, h)) for y, w, h in armor])
+    inset(part, 0.04, 0.012, 0.15)
+    s.add(part, m["accent"], at=(0, 0, 0.2))
+    s.add(sweep([(0, -5.25, 0.28)] + [(0, y, 0.2 + h / 2 + 0.015) for y, w, h in armor], rect(0.09, 0.06)), m["trim"])
+    s.add(sweep([(0.0, -5.62, -0.12)] + [(w / 2 + 0.01, y, 0.0) for y, w, h in ram[:4]], rect(0.06, 0.09)), m["signal"], mirror=True)
+    # Zwei schwere Bugkanonen unter dem Rammbug: Gehäuse, Kühlringe, Lauf, Mündungsbremse, Glühen
+    gx, gz = 0.68, -0.6
+    s.add(rbox(0.6, 2.2, 0.55, 0.06, 1), m["dark"], at=(gx, -1.5, gz), mirror=True)
+    s.add(tube(14, 0.16, 0.14, -4.6, -2.4), m["steel"], at=(gx, 0, gz), mirror=True)
+    for y in (-2.65, -2.85, -3.05, -3.25):
+        s.add(hoop(14, 0.14, 0.22, 0.08), m["dark"], at=(gx, y, gz), rot=(90, 0, 0), mirror=True)
+    s.add(tube(14, 0.2, 0.2, -4.85, -4.6), m["plain"], at=(gx, 0, gz), mirror=True)
+    s.add(box(0.46, 0.12, 0.09), m["plain"], at=(gx, -4.72, gz), mirror=True)
+    s.add(tube(10, 0.1, 0.1, -4.92, -4.85), m["signal"], at=(gx, 0, gz), mirror=True)
+    # Gepfeilte Panzerklingen an den Flanken in zwei Lagen, Zierkante, Leuchtstreifen
+    blade = plate([(0.9, -1.6), (1.55, -0.6), (2.12, 2.4), (2.12, 3.85), (1.62, 3.25), (0.9, 2.85)], 0.14, "xy")
+    inset(blade, 0.04, 0.012, 0.15)
+    s.add(blade, m["accent"], at=(0, 0, 0.17), mirror=True)
+    lower = plate([(0.9, -0.8), (1.4, -0.1), (1.86, 2.7), (1.82, 3.5), (0.9, 3.1)], 0.1, "xy")
+    inset(lower, 0.035, 0.01, 0.15)
+    s.add(lower, m["hull"], at=(0, 0, -0.22), mirror=True)
+    trim_line(s, m, [(x + 0.025, y, 0.2) for x, y in ((1.55, -0.6), (2.12, 2.4), (2.12, 3.85))], 0.05, 0.09)
+    s.add(sweep([(1.3, -0.6, 0.25), (1.75, 2.0, 0.25), (1.78, 3.1, 0.25)], rect(0.05, 0.03)), m["signal"], mirror=True)
+    pd_turret(s, m, (1.6, 1.2, 0.24), r=0.11, mirror=True)
+    missile_pod(s, m, (1.45, 0.0, 0.4), size=(0.36, 0.8, 0.3), cells=(2, 2), mirror=True)
+    # Zwei schwere Türme nach vorn, der hintere überhöht
+    turret(s, m, (0, -0.55, 0.85), barrel=1.5, r=0.34)
+    s.add(post(20, 0.44, 0.42, 0.85, 1.17), m["hull"], at=(0, 0.75, 0))
+    turret(s, m, (0, 0.75, 1.17), barrel=1.45, r=0.34)
+    # Wappen vor den Türmen: zwei verschachtelte Winkel als Speerspitze
+    kite = [(0.0, -0.75), (0.5, -0.2), (0.45, 0.45), (0.0, 0.6), (-0.45, 0.45), (-0.5, -0.2)]
+    outer = [(0.0, -0.55), (0.36, -0.02), (0.22, 0.08), (0.0, -0.26), (-0.22, 0.08), (-0.36, -0.02)]
+    inner = [(x, y + 0.3) for x, y in outer]
+    emblem(s, m, (0, -1.75, 0.68), kite, [(outer, "trim"), (inner, "signal")])
+    # Zurückgestaffelte Brücke achtern, Radar, Schüsseln
+    top = bridge(s, m, (0, 2.1, 0.85), [(1.3, 1.4, 0.45), (1.0, 1.05, 0.4), (0.7, 0.72, 0.34)], per_deck=5, rake=0.22)
+    radar(s, m, (0, 2.15, top), 0.5, 0.2)
+    s.add(dish(0.18, 0.07, 12, 2, 0.02), m["steel"], at=(0.6, 2.6, 1.6), rot=(-50, 0, -50), mirror=True)
+    # Kräftiger Düsencluster: Gehäuse mit Leuchtstreifen, große Mitteldüse und vier äußere
+    s.add(rbox(2.6, 0.8, 1.55, 0.1, 1), m["dark"], at=(0, 3.95, 0.0))
+    s.add(box(2.64, 0.08, 0.08), m["signal"], at=(0, 3.85, 0.5))
+    s.add(box(2.64, 0.08, 0.08), m["signal"], at=(0, 3.85, -0.5))
+    s.engine(m, 0.58, 4.1, 5.05, dx=0.0, dz=0.0, n=20, plume=0.22)
+    for dz in (0.42, -0.42):
+        s.engine(m, 0.38, 4.1, 4.9, dx=0.82, dz=dz, n=16, mirror=True, plume=0.22)
+    # Kiel, Fenster, Lüfter, Kleinteile, Lichter
+    keelfin = plate([(-1.4, 0.0), (3.4, 0.0), (3.6, -0.5), (-0.4, -0.4)], 0.1, "yz")
+    inset(keelfin, 0.03, 0.01, 0.1)
+    s.add(keelfin, m["hull"], at=(0, 0, -0.6))
+    windows(s, m, (1.2, -1.2, 0.02), (1.2, 3.2, 0.02), 10, (0.03, 0.06, 0.04), mirror=True)
+    vents(s, m, (0.45, 3.2, 0.86), 0.3, 0.14, slots=3, rot=(-90, 0, 0), mirror=True)
+    greebles(s, m, (-0.4, 1.4, 0.4, 3.4), 0.86, 6, size=(0.05, 0.14), seed=43)
+    s.add(sphere(0.045, 1), m["navgreen"], at=(2.14, 3.8, 0.17))
+    s.add(sphere(0.045, 1), m["navred"], at=(-2.14, 3.8, 0.17))
+    return s.finish()
+
+def on_surface(tree, x, y, z=10.0):
+    """Punkt und Neigung (Grad, für `rot`) der Oberfläche unter (x, y), per Strahl von oben auf `tree` (BVHTree)."""
+    hit, normal, _, _ = tree.ray_cast(Vector((x, y, z)), Vector((0, 0, -1)))
+    if hit is None:
+        return None, None
+    euler = Vector((0, 0, 1)).rotation_difference(normal).to_euler()
+    return hit, tuple(math.degrees(a) for a in euler)
+
+
+def mini_drone(s, m, at, k=0.42, yaw=0.0):
+    """Angedockte Drohne in klein (wie `drone`): Keilrumpf, Pfeilflügel, Sensorauge, glimmende Düse."""
+    g = Ship("mini_drone")
+    g.add(loft([tip(-2.0 * k), sec(-1.2 * k, octagon(0.62 * k, 0.32 * k, 0.35)), sec(0.0, octagon(0.8 * k, 0.42 * k, 0.35)),
+                sec(1.3 * k, octagon(0.6 * k, 0.34 * k, 0.35))]), m["hull"])
+    g.add(plate([(0.3 * k, -0.45 * k), (1.75 * k, 0.55 * k), (1.75 * k, 0.8 * k), (0.3 * k, 0.95 * k)], 0.06 * k, "xy"), m["accent"], mirror=True)
+    g.add(sphere(0.12 * k, 1), m["canopy"], at=(0, -0.6 * k, 0.2 * k))
+    g.add(tube(8, 0.2 * k, 0.16 * k, 1.3 * k, 1.6 * k), m["dark"], at=(0.3 * k, 0, 0), mirror=True)
+    g.add(tube(8, 0.13 * k, 0.0, 1.55 * k, 1.9 * k), m["signal"], at=(0.3 * k, 0, 0), mirror=True)
+    s.place(g, at=at, rot=(0, 0, yaw))
+    g.bm.free()
+
+
+def hive():
+    """Admiral Halvorsen, „der Schwarm“: Trägerschiff mit leicht organischem Zwei-Kammer-Rumpf; auf dem Rücken die
+    Brutkammer aus Waben, die violett leuchten (manche verdeckelt), an den Flanken sechseckige Hangarbuchten und
+    Andockarme mit Drohnen, vorn ein Sechseck-Turm als Brücke."""
+    s = Ship("hive")
+    m = flagship_palette(s.name, HALVORSEN, (0.2, 0.08, 0.3), hull=(0.26, 0.26, 0.32), tile=1.0)
+    N = 28
+    body = lambda w, h: superellipse(w, h, N, 2.4)  # noqa: E731
+    # Rumpf: vordere und hintere Kammer mit Taille dazwischen
+    rings = smooth([
+        sec(-4.7, body(1.0, 0.7), dz=-0.1),
+        sec(-4.1, body(2.2, 1.45), dz=-0.05),
+        sec(-2.6, body(3.1, 1.95)),
+        sec(-0.6, body(2.7, 1.75)),
+        sec(1.3, body(3.7, 2.3), dz=0.05),
+        sec(3.3, body(3.5, 2.2), dz=0.05),
+        sec(4.5, body(2.4, 1.55)),
+        sec(4.9, body(1.5, 1.0)),
+    ], 2)
+    part = loft(rings)
+    tree = BVHTree.FromBMesh(part)
+    s.add(part, m["hull"])
+    trim_line(s, m, flank(rings, 0.5, 0.025), 0.07, 0.08)
+    # Rippen über der Taille (Außenskelett) und Grat auf dem Rücken
+    for y, w, h in ((-1.25, 2.86, 1.8), (-0.6, 2.78, 1.8), (0.05, 3.02, 1.94)):
+        arc = [(x * 1.03, y, z * 1.03) for x, z in superellipse(w, h, 24, 2.4)[:13]]
+        s.add(sweep(arc, rect(0.16, 0.12)), m["accent"])
+    s.add(sweep([(0, y, z) for y, z in ((-4.3, 0.62), (-3.2, 0.98), (-2.2, 1.0), (-0.6, 0.9), (0.6, 1.14))], rect(0.12, 0.14)), m["accent"])
+    # Brutkammer: Waben auf der Wölbung der hinteren Kammer; offene leuchten violett, verdeckelte sind dunkel
+    r, gap = 0.3, 0.035
+    for i in range(-4, 5):
+        for j in range(-1, 9):
+            x, y = i * 1.5 * r, 0.55 + j * math.sqrt(3) * r + (math.sqrt(3) / 2 * r if i % 2 else 0)
+            if abs(x) > 1.45 - 0.25 * (j < 0 or j > 6) or y > 3.65:
+                continue
+            hit, rot = on_surface(tree, x, y)
+            if hit is None:
+                continue
+            at = hit + Vector((0, 0, -0.04))
+            s.add(hoop(6, r - gap - 0.05, r - gap, 0.2), m["dark"], at=(at.x, at.y, at.z + 0.1), rot=rot)
+            if s.rng.random() < 0.28:
+                s.add(post(6, r - gap - 0.03, r - gap - 0.07, 0.0, 0.17), m["accent"], at=at, rot=rot)
+            else:
+                s.add(post(6, r - gap - 0.05, r - gap - 0.05, 0.0, 0.06), m["signal"], at=at, rot=rot)
+    # Hangar-Sponsons an den Flanken: Gondel an Streben, drei offene Sechseckbuchten mit Leuchten im Inneren,
+    # obenauf eine angedockte Drohne in ihrer Klammer
+    sx, sz = 2.32, -0.2
+    pod = smooth([tip(-0.9), sec(-0.4, superellipse(0.7, 0.66, 16, 2.6)), sec(0.4, superellipse(0.9, 0.84, 16, 2.6)),
+                  sec(3.3, superellipse(0.9, 0.84, 16, 2.6)), sec(4.0, superellipse(0.66, 0.6, 16, 2.6))], 2)
+    s.add(loft(pod), m["accent"], at=(sx, 0, sz), mirror=True)
+    for y in (0.3, 1.6, 2.9):
+        s.add(plate([(-0.3, 0.25), (0.35, 0.25), (0.2, -0.2), (-0.15, -0.2)], 0.12, "xz"), m["hull"], at=(1.95, y + 0.3, sz), mirror=True)
+    for y in (0.65, 1.65, 2.65):
+        s.add(hoop(6, 0.27, 0.37, 0.16), m["steel"], at=(sx + 0.46, y, sz), rot=(0, 90, 0), mirror=True)
+        s.add(post(6, 0.3, 0.3, 0.0, 0.03), m["dark"], at=(sx + 0.42, y, sz), rot=(0, 90, 0), mirror=True)
+        s.add(post(6, 0.21, 0.21, 0.0, 0.02), m["signal"], at=(sx + 0.45, y, sz), rot=(0, 90, 0), mirror=True)
+    s.add(sweep([(sx + 0.47, y, sz) for y in (-0.15, 0.2)], rect(0.04, 0.3)), m["signal"], mirror=True)
+    for side in (1, -1):
+        s.add(rbox(0.36, 1.0, 0.1, 0.03, 1), m["dark"], at=(side * sx, 1.65, sz + 0.44))
+        s.add(box(0.05, 0.8, 0.04), m["signal"], at=(side * sx, 1.65, sz + 0.5))
+        mini_drone(s, m, (side * sx, 1.6, sz + 0.62), k=0.36)
+    # Kopf: Sensorauge im Sechseckrahmen, zwei Fühlerantennen
+    s.add(hoop(6, 0.26, 0.38, 0.12), m["steel"], at=(0, -4.62, -0.08), rot=(90, 0, 0))
+    s.add(sphere(0.25, 2), m["signal"], at=(0, -4.6, -0.08))
+    for sx in (1, -1):
+        s.add(pipe([(sx * 0.5, -3.9, 0.55), (sx * 0.75, -4.6, 0.85), (sx * 0.7, -5.15, 0.8)], 0.03, 6), m["steel"])
+        s.add(sphere(0.05, 1), m["signal"], at=(sx * 0.7, -5.16, 0.8))
+    # Sechseckturm als Brücke: Decks mit Fenstern auf allen Seiten, Zierlinie, Mast mit Leuchtfeuer
+    hit, _ = on_surface(tree, 0, -1.75)
+    z = hit.z - 0.05
+    for rr, h, count in ((0.8, 0.45, 3), (0.62, 0.42, 2), (0.46, 0.36, 2)):
+        s.add(post(6, rr, rr * 0.95, 0.0, h), m["hull"], at=(0, -1.75, z))
+        s.add(hoop(6, rr * 0.85, rr * 1.04, 0.04), m["steel"], at=(0, -1.75, z + h))
+        apothem = rr * 0.975 * math.cos(math.pi / 6)
+        for k in range(6):
+            phi = math.radians(30 + 60 * k)
+            for t in range(count):
+                off = (t - (count - 1) / 2) * 0.16
+                s.add(box(0.03, 0.08, 0.06), m["window"], at=(apothem * math.cos(phi) - off * math.sin(phi), -1.75 + apothem * math.sin(phi) + off * math.cos(phi),
+                                                            z + h * 0.58), rot=(0, 0, math.degrees(phi)))
+        z += h
+    trim_loop(s, m, [(x, y - 1.75) for x, y in ngon(6, 0.5)], z + 0.03, 0.06, 0.06, 0.0)
+    s.add(post(10, 0.05, 0.035, 0.0, 0.85), m["steel"], at=(0, -1.6, z))
+    s.add(box(0.5, 0.05, 0.05), m["steel"], at=(0, -1.6, z + 0.5))
+    s.add(sphere(0.12, 1), m["glow"], at=(0, -1.6, z + 0.92))
+    radar(s, m, (0.0, -2.1, z), 0.4, 0.16)
+    # Wappen vor dem Turm: Sechseck mit drei Waben in Gold und violettem Kern
+    hit, rot = on_surface(tree, 0, -3.15)
+    hexes = [[(x + 0.24 * math.cos(math.radians(a)), y + 0.24 * math.sin(math.radians(a))) for x, y in ngon(6, 0.17)] for a in (90, 210, 330)]
+    emblem(s, m, (0, -3.15, hit.z - 0.06), ngon(6, 0.62), [(h, "trim") for h in hexes] + [(ngon(6, 0.09), "signal")], rot=(rot[0], 0, 0))
+    # Flak, Fenster, Lüfter, Kleinteile
+    for x, y in ((1.25, -2.4), (1.3, 3.75)):
+        hit, rot = on_surface(tree, x, y)
+        pd_turret(s, m, (hit.x, hit.y, hit.z - 0.02), r=0.12, yaw=0 if y < 0 else 180, mirror=True)
+    windows(s, m, (1.64, -3.2, -0.15), (1.42, -1.6, -0.15), 5, (0.03, 0.06, 0.05), mirror=True)
+    vents(s, m, (1.5, 0.5, -0.55), 0.3, 0.16, slots=3, rot=(0, 0, 90), mirror=True)
+    # Unterseite: Kiel, Bauchsensor, Radiatoren
+    keelfin = plate([(-3.4, 0.0), (3.6, 0.0), (3.3, -0.4), (-2.6, -0.35)], 0.12, "yz")
+    inset(keelfin, 0.03, 0.01, 0.1)
+    s.add(keelfin, m["hull"], at=(0, 0, -1.08))
+    s.add(sphere(0.18, 2), m["plain"], at=(0, -2.6, -0.98))
+    for y in (1.2, 1.8, 2.4, 3.0):
+        s.add(box(1.4, 0.035, 0.2), m["steel"], at=(0, y, -1.18))
+    # Düsen: eine große Mitteldüse, zwei kleinere darunter, in sechseckigen Fassungen
+    s.engine(m, 0.5, 4.6, 5.45, dx=0.0, dz=0.15, n=20, plume=0.22)
+    s.add(hoop(6, 0.5, 0.64, 0.2), m["accent"], at=(0, 4.75, 0.15), rot=(90, 0, 0))
+    s.engine(m, 0.34, 4.5, 5.2, dx=0.85, dz=-0.38, n=16, mirror=True, plume=0.22)
+    s.add(sphere(0.05, 1), m["navgreen"], at=(2.0, 2.0, 0.55))
+    s.add(sphere(0.05, 1), m["navred"], at=(-2.0, 2.0, 0.55))
+    return lifted(s, 0.25).finish()
+
+def facet(w, h, top=0.36, low=0.5, drop=0.6):
+    """Facettierter Tarnkappen-Querschnitt: scharfe Kimmkanten an den Seiten, schmaler flacher Grat oben, flacher Boden."""
+    return [(w / 2, 0.0), (w * top / 2, h / 2), (-w * top / 2, h / 2), (-w / 2, 0.0), (-w * low / 2, -h / 2 * drop), (w * low / 2, -h / 2 * drop)]
+
+
+def mirage():
+    """Admiral Moreau, „das Phantom“: Tarnkappen-Flaggschiff, flach und schmal, aus ebenen Facetten mit scharfen
+    Kanten; dunkler Rumpf mit türkisen Nähten und Paneelen, zwei schräge Projektorflossen, facettierte Brücke."""
+    s = Ship("mirage")
+    m = flagship_palette(s.name, MOREAU, (0.03, 0.3, 0.29), hull=(0.06, 0.07, 0.085), tile=1.1)
+    # Dunkler Rumpf und türkise Paneele mit Dünnschicht-Schimmer
+    m["hull"] = iridescent(material("mirage_hull", (0.06, 0.07, 0.085), 0.9, 0.6, style="plating", tile=1.1), 485, 1.45)
+    m["accent"] = iridescent(material("mirage_accent", (0.03, 0.3, 0.29), 0.9, 0.45, style="plating", tile=1.1, normal_strength=0.6), 340, 1.45)
+    # Facettierter Rumpf mit Plattenfugen: Kimmkanten an den Seiten in Gold, Gratkanten oben in Türkis
+    sections = [(-3.5, 0.75, 0.3), (-2.0, 1.6, 0.55), (-0.2, 2.2, 0.72), (2.0, 2.0, 0.68), (3.3, 1.5, 0.52), (3.9, 1.1, 0.4)]
+    part = loft([tip(-4.6, 0, 0.0)] + [sec(y, facet(w, h)) for y, w, h in sections])
+    inset(part, 0.04, 0.012, 0.15)
+    s.add(part, m["hull"])
+    trim_line(s, m, [(0.0, -4.62, 0.0)] + [(w / 2 + 0.015, y, 0.0) for y, w, h in sections], 0.05, 0.07)
+    s.add(sweep([(0.0, -4.5, 0.03)] + [(w * 0.18 + 0.012, y, h / 2 + 0.008) for y, w, h in sections[:4]], rect(0.035, 0.025)), m["signal"], mirror=True)
+    # Tarnkappen-Einlässe an den Flanken: schräge Facettenkästen mit dunklem Gitter
+    intake = [(-1.6, 0.36, 0.06), (-0.9, 0.5, 0.26), (0.6, 0.5, 0.3), (1.4, 0.4, 0.22)]
+    s.add(loft([sec(y, facet(w, h, 0.6, 0.8, 1.0)) for y, w, h in intake]), m["hull"], at=(0.95, 0, 0.12), mirror=True)
+    s.add(box(0.36, 0.05, 0.16), m["plain"], at=(0.95, -0.92, 0.14), mirror=True)
+    for k in range(3):
+        s.add(box(0.37, 0.06, 0.012), m["steel"], at=(0.95, -0.93, 0.08 + 0.05 * k), mirror=True)
+    # Phasen-Emitter: Reihe türkiser Linsen auf dem Rückengrat vor der Brücke
+    for k in range(4):
+        s.add(post(6, 0.06, 0.04, 0.0, 0.04), m["signal"], at=(0, -3.4 + 0.38 * k, 0.12 + 0.07 * k))
+    # Flache Diamantflügel mit Sägezahn-Hinterkante, türkisen Paneelen und leuchtender Vorderkante
+    wing = [(0.85, -2.5), (2.05, 0.9), (2.1, 1.65), (1.6, 1.4), (1.2, 2.45), (0.85, 2.35)]
+    part = plate(wing, 0.09, "xy")
+    inset(part, 0.04, 0.012, 0.2)
+    s.add(part, m["hull"], at=(0, 0, -0.06), rot=(0, -3, 0), mirror=True)
+    panel = plate([(1.05, -1.4), (1.8, 0.75), (1.8, 1.25), (1.15, 1.55)], 0.1, "xy")
+    inset(panel, 0.03, 0.01, 0.1)
+    s.add(panel, m["accent"], at=(0, 0, -0.05), rot=(0, -3, 0), mirror=True)
+    s.add(sweep([(0.9, -2.45, -0.03), (2.08, 0.92, -0.1)], rect(0.04, 0.05)), m["signal"], mirror=True)
+    s.add(sweep([(1.0, -1.9, 0.0), (1.45, -0.4, -0.02), (1.45, 1.9, -0.04), (1.2, 2.3, -0.04)], rect(0.025, 0.02)), m["signal"], at=(0, 0, 0.0), mirror=True)
+    for k in range(3):
+        y = 0.2 + 0.45 * k
+        s.add(box(0.32, 0.22, 0.03), m["dark"], at=(1.25, y + 0.9, 0.0), rot=(0, -3, 0), mirror=True)
+    missile_pod(s, m, (1.25, 0.3, -0.18), size=(0.3, 0.9, 0.16), cells=(2, 1), mirror=True)
+    # Projektorflossen: zwei nach außen geneigte Rückenflossen mit Emitterkante, Linsen und Kristall an der Spitze
+    fin = [(1.0, 0.0), (3.55, 0.0), (3.95, 1.25), (3.05, 1.32)]
+    g = Ship("mirage_fin")
+    part = plate(fin, 0.06, "yz")
+    inset(part, 0.025, 0.008, 0.1)
+    g.add(part, m["hull"])
+    g.add(plate([(1.6, 0.25), (3.3, 0.25), (3.55, 1.0), (3.0, 1.05)], 0.08, "yz"), m["accent"])
+    g.add(sweep([(0, 1.0, 0.02), (0, 3.05, 1.34)], rect(0.05, 0.05)), m["signal"])
+    for k in range(3):
+        g.add(sphere(0.05, 1), m["signal"], at=(0.035, 2.0 + 0.4 * k, 0.6 + 0.2 * k), scale=(0.5, 1, 1))
+    g.add(crystal(0.08, 0.16), m["signal"], at=(0, 3.5, 1.4), rot=(90, 0, 0))
+    for side in (1, -1):
+        s.place(g, at=(side * 0.42, 0, 0.26), rot=(0, side * 26, 0))
+    g.bm.free()
+    # Bauchflossen an den Flügelspitzen
+    for side in (1, -1):
+        s.add(plate([(0.6, 0.0), (1.7, 0.0), (1.85, -0.45), (1.2, -0.5)], 0.04, "yz"), m["hull"], at=(side * 2.02, 0, -0.1), rot=(0, side * -20, 0))
+        s.add(sweep([(side * 2.02, 0.6, -0.1), (side * (2.02 + 0.17), 1.2, -0.58)], rect(0.03, 0.03)), m["signal"])
+    # Erhöhte, facettierte Brücke: Fensterband, dunkle Kanzel, Oberdeck mit Zierlinie, Mast mit Leuchtfeuer
+    pod = [(-1.9, 0.3, 0.08), (-1.2, 0.95, 0.46), (0.1, 1.05, 0.52), (0.85, 0.65, 0.3)]
+    part = loft([sec(y, facet(w, h, 0.5, 0.8, 1.0)) for y, w, h in pod])
+    inset(part, 0.025, 0.008, 0.06)
+    s.add(part, m["hull"], at=(0, 0, 0.36))
+    s.add(loft([sec(y, facet(w, h, 0.5, 0.8, 1.0)) for y, w, h in ((-1.5, 0.5, 0.22), (-1.15, 0.86, 0.4), (-0.75, 0.9, 0.42))]), m["canopy"], at=(0, -0.03, 0.4))
+    windows(s, m, (0.49, -0.9, 0.5), (0.49, 0.1, 0.5), 5, (0.03, 0.07, 0.04), mirror=True)
+    deck = [(-0.32, -0.55), (0.32, -0.55), (0.38, 0.35), (-0.38, 0.35)]
+    s.add(plate(deck, 0.16, "xy"), m["hull"], at=(0, 0, 0.7))
+    trim_loop(s, m, deck, 0.78, 0.04, 0.04, 0.0)
+    windows(s, m, (-0.2, -0.56, 0.72), (0.2, -0.56, 0.72), 3, (0.05, 0.03, 0.04))
+    s.add(post(8, 0.035, 0.025, 0.0, 0.55), m["steel"], at=(0, 0.1, 0.78))
+    s.add(sphere(0.08, 1), m["glow"], at=(0, 0.1, 1.38))
+    # Rückendeck mit Wappen: zwei versetzte Rauten, Gold und Türkis, die einander überlappen (Phasentausch)
+    spine = [(-0.45, 0.85), (0.45, 0.85), (0.5, 2.9), (0.0, 3.3), (-0.5, 2.9)]
+    part = plate(spine, 0.1, "xy")
+    inset(part, 0.03, 0.01, 0.1)
+    s.add(part, m["dark"], at=(0, 0, 0.36))
+    diamond = [(0.0, -0.66), (0.44, 0.0), (0.0, 0.66), (-0.44, 0.0)]
+    rhomb = [(0.0, -0.3), (0.2, 0.0), (0.0, 0.3), (-0.2, 0.0)]
+    emblem(s, m, (0, 1.95, 0.39), diamond, [([(x - 0.08, y + 0.12) for x, y in rhomb], "trim"),
+                                            ([(x * 0.55 + 0.08, y * 0.55 - 0.12) for x, y in rhomb], "signal")])
+    # Fensterreihen über den Kimmkanten, Sensorflossen am Bug, Projektorlinsen achtern zwischen den Flossen
+    windows(s, m, (0.86, -1.8, 0.08), (1.02, 1.6, 0.08), 9, (0.03, 0.07, 0.035), mirror=True)
+    s.add(plate([(-2.9, 0.0), (-2.45, 0.0), (-2.55, 0.22), (-2.75, 0.24)], 0.02, "yz"), m["hull"], at=(0.16, 0, 0.16), rot=(0, 18, 0), mirror=True)
+    s.add(sweep([(0.16, -2.9, 0.17), (0.2, -2.75, 0.39)], rect(0.02, 0.02)), m["signal"], mirror=True)
+    for k in range(3):
+        s.add(hoop(10, 0.035, 0.07, 0.04), m["steel"], at=(0.0, 3.25 + 0.28 * k, 0.33), mirror=False)
+        s.add(sphere(0.04, 1), m["signal"], at=(0.0, 3.25 + 0.28 * k, 0.35))
+    # Canards am Bug, Projektorgondeln an den Flügelspitzen
+    canard = plate([(0.3, -3.0), (0.95, -2.45), (0.95, -2.22), (0.3, -2.3)], 0.05, "xy")
+    s.add(canard, m["hull"], at=(0, 0, 0.02), mirror=True)
+    s.add(sweep([(0.32, -2.98, 0.05), (0.95, -2.45, 0.05)], rect(0.03, 0.03)), m["signal"], mirror=True)
+    tippod = [(-0.2, 0.12, 0.08), (0.2, 0.2, 0.14), (1.0, 0.2, 0.14), (1.3, 0.12, 0.08)]
+    s.add(loft([tip(-0.6)] + [sec(y, facet(w, h, 0.6, 0.8, 1.0)) for y, w, h in tippod]), m["dark"], at=(2.1, 0.6, -0.1), mirror=True)
+    for k in range(3):
+        s.add(sphere(0.035, 1), m["signal"], at=(2.18, 0.8 + 0.25 * k, -0.06), scale=(0.6, 1, 1), mirror=True)
+    # Verdeckte Bugkanonen in den Flügelwurzeln
+    s.add(tube(10, 0.08, 0.07, -1.0, -2.6), m["dark"], at=(0.82, 0, -0.08), mirror=True)
+    s.add(tube(10, 0.04, 0.035, -2.6, -3.3), m["steel"], at=(0.82, 0, -0.08), mirror=True)
+    s.add(tube(8, 0.028, 0.028, -3.3, -3.36), m["signal"], at=(0.82, 0, -0.08), mirror=True)
+    # Flache Düsenverkleidung mit zwei Triebwerken, türkiser Abschluss
+    s.add(loft([sec(y, facet(w, h, 0.6, 0.8, 1.0)) for y, w, h in ((2.6, 1.9, 0.5), (3.9, 2.0, 0.55), (4.2, 1.8, 0.45))]), m["dark"], at=(0, 0, -0.05))
+    s.engine(m, 0.24, 3.9, 4.55, dx=0.5, dz=-0.05, n=16, mirror=True, plume=0.25)
+    s.add(hoop(16, 0.24, 0.29, 0.05), m["signal"], at=(0.5, 4.25, -0.05), rot=(90, 0, 0), mirror=True)
+    s.add(box(1.7, 0.04, 0.04), m["signal"], at=(0, 4.22, 0.17))
+    vents(s, m, (0.55, 3.55, 0.2), 0.3, 0.12, slots=3, rot=(-90, 0, 0), mirror=True)
+    for k in range(3):
+        s.add(sphere(0.06, 1), m["dark"], at=(0.0, 3.0 + 0.32 * k, 0.37 - 0.03 * k), scale=(1, 1.4, 0.6))
+    # Kiel, Sensorkugel unter dem Bug, Antennen, Lüfter, Kleinteile, Lichter
+    s.add(plate([(-2.5, 0.0), (1.8, 0.0), (1.6, -0.22), (-1.6, -0.2)], 0.06, "yz"), m["hull"], at=(0, 0, -0.2))
+    s.add(sphere(0.1, 2), m["signal"], at=(0, -2.9, -0.2))
+    s.add(hoop(12, 0.1, 0.14, 0.04), m["steel"], at=(0, -2.9, -0.2))
+    s.add(plate([(0.9, 0.0), (1.3, 0.0), (1.25, 0.18), (0.95, 0.2)], 0.015, "yz"), m["steel"], at=(0.2, 0, 0.62))
+    vents(s, m, (0.35, 2.85, 0.34), 0.22, 0.1, slots=3, rot=(-90, 0, 0), mirror=True)
+    greebles(s, m, (-0.3, 3.0, 0.3, 3.6), 0.28, 4, size=(0.04, 0.1), seed=47, mats=("dark", "plain"))
+    s.add(sphere(0.04, 1), m["navgreen"], at=(2.12, 1.2, -0.08))
+    s.add(sphere(0.04, 1), m["navred"], at=(-2.12, 1.2, -0.08))
+    return s.finish()
+
+def gear(teeth, r, depth, width=0.5):
+    """Zahnrad-Umriss (x, y): `teeth` Zähne zwischen Radius r - depth und r, `width` ist der Anteil des Zahns an der Teilung."""
+    pts = []
+    for k in range(teeth):
+        a = 2 * math.pi * k / teeth
+        half = math.pi / teeth * width
+        for angle, radius in ((a - half * 1.25, r - depth), (a - half * 0.75, r), (a + half * 0.75, r), (a + half * 1.25, r - depth)):
+            pts.append((radius * math.cos(angle), radius * math.sin(angle)))
+    return pts
+
+
+def pendulum():
+    """Admiral Kerr, „der Uhrmacher“: Railgun-Schlachtschiff. Die Railgun ist das Rückgrat, vorn ragen ihre Schienen
+    mit stahlblau leuchtenden Spulen weit über den Bug; um den Rumpf ein Gimbal aus Messing-Zahnkranz und geneigtem
+    Spulenring, unter dem Kiel ein schwingendes Pendel als Gegengewicht."""
+    s = Ship("pendulum")
+    m = flagship_palette(s.name, KERR, (0.08, 0.12, 0.26), hull=(0.28, 0.31, 0.38), tile=1.0)
+    m["brass"] = material("pendulum_brass", (0.62, 0.42, 0.14), 0.95, 0.5, style="plating", tile=0.8, normal_strength=0.5)
+    zc = 1.0
+    # Rumpf: Keilprofil mit flachem Deck, Panzerschürzen mit Fugen, Zierlinie an der Deckkante
+    hull = [sec(-3.2, keel(1.2, 0.9), dz=zc), sec(-2.4, keel(2.6, 1.3), dz=zc), sec(-0.8, keel(3.2, 1.5), dz=zc),
+            sec(2.6, keel(3.2, 1.5), dz=zc), sec(3.8, keel(2.6, 1.3), dz=zc), sec(4.3, keel(2.0, 1.0), dz=zc)]
+    part = loft(hull)
+    inset(part, 0.05, 0.015, 0.3)
+    s.add(part, m["hull"])
+    trim_line(s, m, flank(hull, zc + 0.62, 0.02), 0.07, 0.07)
+    skirt = plate([(1.2, -2.6), (1.7, -1.6), (1.75, 2.8), (1.4, 3.7), (1.2, 3.7)], 0.16, "xy")
+    inset(skirt, 0.04, 0.012, 0.2)
+    s.add(skirt, m["accent"], at=(0, 0, zc + 0.1), mirror=True)
+    # Railgun als Rückgrat: Gehäuse auf dem Deck, davor zwei Schienen mit Führungskanal, Spulen (Messing und
+    # stahlblau leuchtend im Wechsel), Joch am Bug, Mündung; achtern der Verschluss mit Kondensatorbank
+    zr = zc + 0.95
+    s.add(loft([sec(-3.1, octagon(0.9, 0.6, 0.35), dz=zr), sec(0.6, octagon(1.0, 0.7, 0.35), dz=zr)]), m["dark"])
+    for x in (0.22, -0.22):
+        s.add(box(0.16, 3.7, 0.56), m["steel"], at=(x, -3.75, zr))
+        s.add(box(0.05, 3.7, 0.06), m["brass"], at=(x * 1.45, -3.75, zr + 0.3))
+    s.add(box(0.12, 3.8, 0.06), m["signal"], at=(0, -3.75, zr - 0.2))
+    for k in range(9):
+        y = -5.25 + 0.34 * k + (0.0 if k < 6 else 0.36 * (k - 5))
+        if k % 2:
+            s.add(hoop(16, 0.36, 0.5, 0.1), m["signal"], at=(0, y, zr), rot=(90, 0, 0))
+        else:
+            s.add(hoop(16, 0.36, 0.58, 0.16), m["brass"], at=(0, y, zr), rot=(90, 0, 0))
+    s.add(rbox(0.9, 0.3, 0.9, 0.05, 1), m["dark"], at=(0, -5.6, zr))
+    s.add(box(0.3, 0.06, 0.5), m["signal"], at=(0, -5.76, zr))
+    s.add(plate([(-0.5, 0.25), (0.5, 0.25), (0.35, -0.9), (-0.35, -0.9)], 0.3, "xz"), m["hull"], at=(0, -3.25, zr - 0.2))
+    s.add(rbox(1.6, 1.5, 0.75, 0.08, 1), m["hull"], at=(0, 1.35, zc + 1.05))
+    for k in range(4):
+        s.add(post(12, 0.13, 0.13, 0.0, 0.32), m["dark"], at=(0.85, 0.85 + 0.35 * k, zc + 0.85), mirror=True)
+        s.add(post(12, 0.09, 0.09, 0.32, 0.36), m["signal"], at=(0.85, 0.85 + 0.35 * k, zc + 0.85), mirror=True)
+    s.add(sweep([(0.0, -3.1, zr + 0.36), (0.0, 0.6, zr + 0.4)], rect(0.06, 0.04)), m["signal"])
+    # Gimbal um den Rumpf: Messing-Zahnkranz quer, darin ein geneigter Spulenring, beide auf Zapfen an den Flanken
+    gy, gz = -1.2, zc + 0.15
+    s.add(hoop(48, 1.84, 1.96, 0.24), m["brass"], at=(0, gy, gz), rot=(90, 0, 0))
+    s.add(hoop(48, 1.8, 1.86, 0.12), m["signal"], at=(0, gy, gz), rot=(90, 0, 0))
+    for k in range(40):
+        a = 2 * math.pi * k / 40
+        s.add(box(0.14, 0.2, 0.13), m["brass"], at=(2.02 * math.cos(a), gy, gz + 2.02 * math.sin(a)), rot=(0, -math.degrees(a), 0))
+    s.add(hoop(48, 1.64, 1.73, 0.12), m["steel"], at=(0, gy, gz), rot=(142, 0, 0))
+    s.add(hoop(48, 1.6, 1.65, 0.07), m["signal"], at=(0, gy, gz), rot=(142, 0, 0))
+    s.add(tube(16, 0.17, 0.17, -0.3, 0.3), m["brass"], at=(1.75, gy, gz), rot=(0, 0, 90), mirror=True)
+    s.add(tube(16, 0.11, 0.11, 0.3, 0.36), m["signal"], at=(1.75, gy, gz), rot=(0, 0, 90), mirror=True)
+    s.add(tube(12, 0.26, 0.26, -0.12, 0.12), m["dark"], at=(1.62, gy, gz), rot=(0, 0, 90), mirror=True)
+    # Pendel unter dem Kiel: Lagerbock, Messingstange, linsenförmiges Gewicht mit leuchtendem Kern, im Schwung nach achtern
+    py, pz, swing = 1.7, zc - 0.78, math.radians(14)
+    d = Vector((0, math.sin(swing), -math.cos(swing)))
+    pivot = Vector((0, py, pz))
+    s.add(rbox(0.5, 0.5, 0.3, 0.05, 1), m["dark"], at=(0, py, pz + 0.12))
+    s.add(tube(16, 0.09, 0.09, -0.3, 0.3), m["brass"], at=(0, py, pz), rot=(0, 0, 90))
+    s.add(segment(pivot, pivot + d * 0.75, 0.05, 8), m["brass"])
+    bob = pivot + d * 0.92
+    s.add(revolve([(0.0, -0.13), (0.3, -0.1), (0.44, -0.04), (0.44, 0.04), (0.3, 0.1), (0.0, 0.13)], 28), m["brass"], at=tuple(bob), rot=(0, 0, 90))
+    s.add(tube(20, 0.2, 0.2, -0.14, 0.14), m["signal"], at=tuple(bob), rot=(0, 0, 90))
+    s.add(hoop(28, 0.44, 0.5, 0.06), m["steel"], at=tuple(bob), rot=(0, 90, 0))
+    # Zwei Türme auf dem Vorschiff neben dem Railgun-Gehäuse
+    turret(s, m, (1.0, -2.4, zc + 0.75), barrel=0.8, r=0.3, mirror=True)
+    # Wappen auf dem Verschluss: Zahnrad mit Zeigern
+    face = ngon(20, 0.62)
+    hands = [[(-0.035, -0.02), (0.035, -0.02), (0.025, 0.36), (-0.025, 0.36)], [(-0.035, -0.02), (0.035, -0.02), (0.025, 0.25), (-0.025, 0.25)]]
+    hands = [hands[0], [(x * math.cos(2.1) - y * math.sin(2.1), x * math.sin(2.1) + y * math.cos(2.1)) for x, y in hands[1]]]
+    emblem(s, m, (0, 1.35, zc + 1.42), face, [(gear(12, 0.5, 0.09), "brass"), (ngon(16, 0.3), "signal")] + [(h, "trim") for h in hands])
+    # Brücke achtern mit Uhrenfenster am zweiten Deck
+    top = bridge(s, m, (0, 3.0, zc + 0.75), [(1.6, 1.3, 0.5), (1.15, 0.95, 0.45), (0.8, 0.65, 0.38)], per_deck=6)
+    s.add(tube(24, 0.24, 0.24, -0.03, 0.03), m["brass"], at=(0, 3.0 - 0.95 / 2 - 0.03, zc + 0.75 + 0.5 + 0.22))
+    s.add(tube(24, 0.19, 0.19, -0.05, 0.0), m["signal"], at=(0, 3.0 - 0.95 / 2 - 0.05, zc + 0.75 + 0.5 + 0.22))
+    radar(s, m, (0, 2.75, top), 0.5, 0.2)
+    s.add(dish(0.2, 0.07, 12, 2, 0.02), m["steel"], at=(0.7, 3.3, zc + 1.6), rot=(-50, 0, -50), mirror=True)
+    # Düsen in Messingfassungen, Flak, Fenster, Lüfter, Kleinteile, Kiel
+    s.add(rbox(2.4, 0.6, 1.3, 0.08, 1), m["dark"], at=(0, 4.25, zc + 0.15))
+    for dx, dz, r in ((0.6, 0.0, 0.44), (1.25, 0.4, 0.28)):
+        s.engine(m, r, 4.35, 5.05 if r > 0.3 else 4.85, dx=dx, dz=zc + dz, n=20 if r > 0.3 else 16, mirror=True, plume=0.22)
+        s.add(hoop(20, r, r + 0.08, 0.1), m["brass"], at=(dx, 4.6, zc + dz), rot=(90, 0, 0), mirror=True)
+    pd_turret(s, m, (1.35, 1.6, zc + 0.75), r=0.11, mirror=True)
+    pd_turret(s, m, (1.2, 3.9, zc + 0.75), r=0.11, yaw=180, mirror=True)
+    windows(s, m, (1.62, -2.0, zc + 0.35), (1.62, 3.4, zc + 0.35), 12, (0.03, 0.06, 0.05), mirror=True)
+    vents(s, m, (0.95, 3.6, zc + 0.76), 0.4, 0.16, slots=3, rot=(-90, 0, 0), mirror=True)
+    greebles(s, m, (0.55, -0.4, 1.3, 0.6), zc + 0.75, 6, size=(0.06, 0.16), seed=53, mirror=True)
+    keelfin = plate([(-2.6, 0.0), (0.6, 0.0), (0.4, -0.35), (-2.0, -0.3)], 0.1, "yz")
+    inset(keelfin, 0.03, 0.01, 0.1)
+    s.add(keelfin, m["hull"], at=(0, 0, zc - 0.7))
+    s.add(sphere(0.05, 1), m["navgreen"], at=(1.62, -2.0, zc + 0.75))
+    s.add(sphere(0.05, 1), m["navred"], at=(-1.62, -2.0, zc + 0.75))
+    return s.finish()
+
+def hologram(name, color, alpha, strength):
+    """Leuchtendes, durchscheinendes Material eines Hologramms: konstantes Alpha unter 1 (glTF alphaMode BLEND),
+    beidseitig, Emission in der Farbe."""
+    mat = material(name, color, 0.0, 0.3, emission=color, strength=strength)
+    bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    bsdf.inputs["Alpha"].default_value = alpha
+    mat.surface_render_method = "BLENDED"
+    mat.use_backface_culling = False
+    return mat
+
+
+def decoy():
+    """Trugbild (Token der Admiralsfähigkeit des Phantoms): Hologramm eines Jägers in Moreaus Türkis, aus
+    durchscheinenden Facetten mit leuchtenden Kanten und Scanlinien; wenige Dreiecke, kein Bevel, flach schattiert."""
+    s = Ship("decoy")
+    m = {"face": hologram("decoy_face", MOREAU, 0.16, 0.6), "edge": hologram("decoy_edge", MOREAU, 0.9, 2.4)}
+    edge = rect(0.03, 0.03)
+
+    def outline(points):
+        s.add(sweep(points + points[:2], edge), m["edge"])
+
+    # Rumpf: Facetten wie bei der Mirage; Längskanten und drei Scanlinien-Ringe
+    stations = [(-2.2, 0.5, 0.2), (-0.9, 1.0, 0.4), (0.7, 1.15, 0.46), (2.1, 0.85, 0.36), (2.7, 0.6, 0.28)]
+    rings = [sec(y, facet(w, h)) for y, w, h in stations]
+    nose = tip(-3.1, 0, 0.0)
+    s.add(loft([nose] + rings), m["face"])
+    for i in range(6):
+        s.add(sweep([nose] + [ring[i] for ring in rings], edge), m["edge"])
+    outline([tuple(p) for p in rings[-1]])
+    for y in (-1.6, -0.1, 1.4):
+        a, b = (0, 1) if y < -0.9 else (1, 2) if y < 0.7 else (2, 3)
+        ya, yb = stations[a][0], stations[b][0]
+        t = (y - ya) / (yb - ya)
+        ring = [ra.lerp(rb, t) for ra, rb in zip(rings[a], rings[b])]
+        outline([tuple(p) for p in ring])
+    # Kanzel als leuchtende Facette
+    s.add(loft([sec(y, facet(w, h, 0.5, 0.8, 1.0)) for y, w, h in ((-1.5, 0.26, 0.06), (-0.9, 0.5, 0.26), (-0.2, 0.42, 0.22))]), m["edge"], at=(0, 0, 0.2))
+    # Diamantflügel und schräge Flossen: Fläche und leuchtender Umriss
+    wing = [(0.45, -1.3), (2.05, 0.75), (2.1, 1.25), (1.55, 1.05), (1.15, 1.85), (0.45, 1.75)]
+    for side in (1, -1):
+        pts = [(side * x, y) for x, y in wing]
+        s.add(plate(pts, 0.03, "xy"), m["face"], at=(0, 0, -0.04))
+        outline([(x, y, -0.04) for x, y in pts])
+        fin = [(0.9, 0.0), (2.6, 0.0), (2.95, 0.95), (2.25, 1.0)]
+        g = Ship("decoy_fin")
+        g.add(plate(fin, 0.02, "yz"), m["face"])
+        g.add(sweep([(0, y, z) for y, z in fin + fin[:2]], edge), m["edge"])
+        s.place(g, at=(side * 0.3, 0, 0.18), rot=(0, side * 24, 0))
+        g.bm.free()
+    # Düsen als Lichtringe
+    for side in (1, -1):
+        s.add(hoop(12, 0.12, 0.2, 0.04), m["edge"], at=(side * 0.3, 2.72, 0.0), rot=(90, 0, 0))
+        s.add(tube(12, 0.12, 0.0, 2.7, 3.1), m["face"], at=(side * 0.3, 0, 0.0))
+    obj = s.finish(bevel=None)
+    obj.data.shade_flat()
+    return obj
+
 SHIPS = {
     "void_interceptor": void_interceptor,
     "scrap_raider": scrap_raider,
@@ -794,6 +1529,12 @@ SHIPS = {
     "drone": drone,
     "repair_drone": repair_drone,
     "signal_booster": signal_booster,
+    "bastion": bastion,
+    "vanguard": vanguard,
+    "hive": hive,
+    "mirage": mirage,
+    "pendulum": pendulum,
+    "decoy": decoy,
 }
 
 

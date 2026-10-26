@@ -1,5 +1,5 @@
 // Ein Landeplatz auf dem Brett: zeigt an, ob er gerade ein gültiges Ziel ist,
-// und trägt das platzierte Schiff. Die Breite liegt entlang der Lane-Achse (x),
+// und trägt das platzierte Schiff und den Geist eines eingeplanten. Die Breite liegt entlang der Lane-Achse (x),
 // Schiffe unter dem Anker zeigen mit der Nase zum Gegner.
 
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
@@ -15,7 +15,9 @@ import type { ShipView } from "./ship.ts";
 
 export const PAD_WIDTH = 2.5;
 export const PAD_DEPTH = 1.7;
-const SHIP_ANCHOR_HEIGHT = 0.42;
+export const SHIP_ANCHOR_HEIGHT = 0.42;
+/** Steht schon ein Schiff auf dem Pad (Phasentausch der Mirage), schwebt der Geist so hoch darüber. */
+export const GHOST_LIFT = 0.85;
 /** Breite des leuchtenden Rahmens um ein gültiges Ziel. */
 const RIM = 0.12;
 
@@ -58,6 +60,8 @@ export class SlotPad {
   private isValidTarget = false;
   private isHovered = false;
   ship: ShipView | null = null;
+  /** Geist eines eingeplanten Schiffs, das nach den Bewegungen dieser Runde hier steht. */
+  ghost: ShipView | null = null;
 
   constructor(
     scene: Scene,
@@ -140,12 +144,27 @@ export class SlotPad {
     this.updateVisuals();
   }
 
+  /** Stellt den Geist auf den Pad; über einem echten Schiff schwebt er (`GHOST_LIFT`). */
+  attachGhost(ghost: ShipView): void {
+    this.clearGhost();
+    this.ghost = ghost;
+    ghost.root.parent = this.shipAnchor;
+    ghost.root.position.y = this.ship ? GHOST_LIFT : 0;
+    this.updateVisuals();
+  }
+
+  clearGhost(): void {
+    this.ghost?.dispose();
+    this.ghost = null;
+    this.updateVisuals();
+  }
+
   private updateVisuals(): void {
     this.baseMesh.isVisible = this.isGridVisible;
     this.validGlow.isVisible = this.isValidTarget;
     // Beim Platzieren (Gitter sichtbar) zeigt der Geist unter dem Zeiger den Slot schon an. Der Geist
     // des geplanten Schiffs als Befehlsziel wird markiert wie ein echtes Schiff.
-    this.hoverGlow.isVisible = this.isValidTarget && this.isHovered && !(this.isGridVisible && this.ship?.isGhost);
+    this.hoverGlow.isVisible = this.isValidTarget && this.isHovered && !(this.isGridVisible && this.ghost !== null);
   }
 }
 

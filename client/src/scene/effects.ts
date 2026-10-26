@@ -1,14 +1,16 @@
-// Kurzlebige Effekte auf dem Brett: Laserbolzen, Impulse, Einschläge,
+// Kurzlebige Effekte auf dem Brett: Laserbolzen, der Strahl der Railgun, Impulse, Schildblasen, Einschläge,
 // Sekundärexplosionen, Detonationen und brennende Trümmer. Alle räumen sich
 // nach dem Abspielen selbst weg.
 
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
+import { FresnelParameters } from "@babylonjs/core/Materials/fresnelParameters";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -28,6 +30,13 @@ const BOLT_SPEED = 15;
 const BOLT_STRETCH = 5;
 /** Impulse werden additiv gemischt und wirken so wie Licht statt wie eine Kugel. */
 const PULSE_ALPHA = 0.55;
+/** Strahl der Railgun: weißer Kern, Mantel in der Schussfarbe, der sich beim Verblassen weitet (ms). */
+const BEAM_CORE = 0.07;
+const BEAM_SHEATH = 0.26;
+const BEAM_DURATION = 520;
+/** Schildblase: Sie wächst in einem Drittel der Zeit auf ihre Größe, leuchtet am Rand und verblasst am Ende (ms). */
+const BUBBLE_DURATION = 1100;
+const BUBBLE_ALPHA = 0.85;
 
 /** Einschlag: Blitz und Druckwelle, Dauer in ms (vor der Streckung). */
 const FLASH_DURATION = 140;
@@ -240,6 +249,36 @@ export class BoardEffects {
     this.disposeMesh(mesh);
   }
 
+  /**
+   * Ein gerader Strahl steht sofort zwischen `from` und `to` und verblasst, sein Mantel weitet sich dabei;
+   * `width` skaliert ihn (dünn für den Zielstrahl der Zielerfassung).
+   */
+  async beam(from: Vector3, to: Vector3, color: Color3, width = 1): Promise<void> {
+    const length = Vector3.Distance(from, to);
+    const core = this.createBeam("beam-core", BEAM_CORE * width, length, Color3.Lerp(color, Color3.White(), 0.7), from, to);
+    const sheath = this.createBeam("beam-sheath", BEAM_SHEATH * width, length, color, from, to);
+    await tween(this.scene, BEAM_DURATION, (progress) => {
+      (core.material as StandardMaterial).alpha = (1 - progress) ** 2;
+      (sheath.material as StandardMaterial).alpha = 0.6 * (1 - progress);
+      sheath.scaling.x = sheath.scaling.y = 1 + 1.4 * easeOutCubic(progress);
+    });
+    this.disposeMesh(core);
+    this.disposeMesh(sheath);
+  }
+
+  /** Schildblase um ein Schiff: eine Kugel, die am Rand leuchtet, auf `size` wächst, kurz steht und verblasst. */
+  async bubble(position: Vector3, color: Color3, size: number): Promise<void> {
+    const mesh = this.createSphere("bubble", 1, color, BUBBLE_ALPHA);
+    const material = mesh.material as StandardMaterial;
+    material.emissiveFresnelParameters = new FresnelParameters({ leftColor: Color3.White(), rightColor: Color3.Black(), power: 2.2 });
+    mesh.position.copyFrom(position);
+    await tween(this.scene, BUBBLE_DURATION, (progress) => {
+      mesh.scaling.setAll(Math.max(size * easeOutCubic(Math.min(progress * 3, 1)), 0.01));
+      material.alpha = BUBBLE_ALPHA * Math.min(1, (1 - progress) * 2.5);
+    });
+    this.disposeMesh(mesh);
+  }
+
   /** Eine Leuchtkugel wächst auf `size` und verblasst dabei. */
   async pulse(position: Vector3, color: Color3, size: number, duration: number): Promise<void> {
     const mesh = this.createSphere("pulse", 1, color, PULSE_ALPHA);
@@ -416,6 +455,20 @@ export class BoardEffects {
   private createSphere(name: string, diameter: number, color: Color3, alpha: number): Mesh {
     const mesh = CreateSphere(name, { diameter, segments: 12 }, this.scene);
     mesh.material = this.createMaterial(name, color, alpha);
+    mesh.isPickable = false;
+    this.glow.addIncludedOnlyMesh(mesh);
+    return mesh;
+  }
+
+  /** Ein Zylinder von `from` nach `to`, selbstleuchtend und im Glow. */
+  private createBeam(name: string, diameter: number, length: number, color: Color3, from: Vector3, to: Vector3): Mesh {
+    const mesh = CreateCylinder(name, { height: length, diameter, tessellation: 10 }, this.scene);
+    // Die Achse des Zylinders liegt auf y; gekippt zeigt sie nach z, und `lookAt` richtet z aufs Ziel.
+    mesh.rotation.x = Math.PI / 2;
+    mesh.bakeCurrentTransformIntoVertices();
+    mesh.position = Vector3.Center(from, to);
+    mesh.lookAt(to);
+    mesh.material = this.createMaterial(name, color, 1);
     mesh.isPickable = false;
     this.glow.addIncludedOnlyMesh(mesh);
     return mesh;

@@ -1,5 +1,5 @@
-// Ergebnis-Overlay nach Matchende: Sieg, Niederlage oder Unentschieden groß
-// in der Bildmitte, nach einer Aufgabe mit entsprechendem Untertitel. „Brett ansehen“ blendet es aus und lässt ein Abzeichen in der
+// Ergebnis-Overlay nach Matchende: Sieg, Niederlage oder Unentschieden groß in der Bildmitte, darunter
+// das zerstörte Flaggschiff, nach einer Aufgabe stattdessen die Aufgabe. „Brett ansehen“ blendet es aus und lässt ein Abzeichen in der
 // Kopfzeile stehen, über das es wieder aufgeht; „Neues Match“ legt ein neues an, ohne die Seite neu zu laden.
 // Solange das Match entschieden ist, trägt der UI-Container die Klasse `match-over`.
 // Beim Erscheinen erklingt eine Fanfare, bei Niederlage und Unentschieden eine düstere.
@@ -49,8 +49,8 @@ export class ResultScreen {
     newButton.addEventListener("click", onNewMatch);
   }
 
-  /** Öffnet das Overlay, sobald ein Ergebnis feststeht; bleibt danach in der Hand des Spielers. */
-  show(result: MatchResult | null, round: number, surrendered: boolean): void {
+  /** Öffnet das Overlay, sobald ein Ergebnis feststeht; bleibt danach in der Hand des Spielers. `flagships` sind die Namen beider Flaggschiffe. */
+  show(result: MatchResult | null, round: number, surrendered: boolean, flagships: { own: string; enemy: string }): void {
     if (result === this.result) return;
     this.result = result;
     this.container.classList.toggle("match-over", result !== null);
@@ -63,7 +63,7 @@ export class ResultScreen {
     this.overlay.dataset.result = result;
     this.badge.dataset.result = result;
     this.title.textContent = text.title;
-    this.subtitle.textContent = surrendered && result !== "draw" ? t.result.surrendered[result] : text.subtitle;
+    this.subtitle.textContent = subtitle(result, surrendered, flagships);
     this.rounds.textContent = t.result.rounds(round);
     this.badge.textContent = text.title;
     this.setOpen(true);
@@ -76,3 +76,15 @@ export class ResultScreen {
   }
 }
 
+/** Der Untertitel nennt die Aufgabe oder das zerstörte Flaggschiff. */
+function subtitle(result: MatchResult, surrendered: boolean, flagships: { own: string; enemy: string }): string {
+  if (surrendered && result !== "draw") return t.result.surrendered[result];
+  switch (result) {
+    case "won":
+      return t.result.won.subtitle(flagships.enemy);
+    case "lost":
+      return t.result.lost.subtitle(flagships.own);
+    case "draw":
+      return t.result.draw.subtitle(flagships.own, flagships.enemy);
+  }
+}

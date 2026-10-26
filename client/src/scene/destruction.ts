@@ -2,7 +2,8 @@
 // Sekundärexplosionen aus der Hülle), Detonation (Kern, Druckwellen, Blitzlicht,
 // Kamerawackeln) und das Wrack, dessen glühende Bruchstücke auseinanderfliegen,
 // brennen, abkühlen und verblassen. Jedes Schiff hat sein eigenes Profil; die
-// Bruchstücke kommen aus `<id>_wreck.glb` (tools/ships/wreck.py).
+// Bruchstücke kommen aus `<id>_wreck.glb` (tools/ships/wreck.py). Flaggschiffe gehen in der Farbe ihres
+// Admirals unter, mit der größten Detonation auf dem Brett.
 
 import { Space } from "@babylonjs/core/Maths/math.axis";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -11,6 +12,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { ShipId } from "../../../shared/cards.ts";
 import { playSound } from "../audio/sounds.ts";
+import { color3 } from "../data/palette.ts";
 import { randomBetween, randomInCone, type BlastStyle } from "./effects.ts";
 import type { MatchScene } from "./matchScene.ts";
 import type { ShipView, Wreck } from "./ship.ts";
@@ -57,6 +59,18 @@ export const PROFILES: Record<ShipId, DestructionProfile> = {
   repair_drone: { energy: SUPPORT_ENERGY, style: "fire", size: 0.9, agony: 450, pops: 2, force: 4, shake: 0.1, linger: 1400 },
   /** Relais: die Sender entladen sich in Blitzen, die Schüssel segelt davon. */
   signal_booster: { energy: CYAN, style: "energy", size: 1, agony: 500, pops: 2, force: 4, shake: 0.12, linger: 1500 },
+  /** Trugbild: Das Hologramm zersplittert ohne Todeskampf in einem kurzen Lichtblitz. */
+  decoy: { energy: color3("moreau"), style: "energy", size: 0.8, agony: 150, pops: 0, force: 4.5, shake: 0.05, linger: 900 },
+  /** Bastion: Panzerdeck um Panzerdeck bricht auf, bis der Kern die Festung zerreißt. */
+  bastion: { energy: color3("osei"), style: "fire", size: 2.6, agony: 2100, pops: 9, force: 3, shake: 0.6, linger: 3200 },
+  /** Vanguard: Die Speerspitze bricht in einer Kette von Explosionen vom Bug zum Heck. */
+  vanguard: { energy: color3("vance"), style: "fire", size: 2.3, agony: 1700, pops: 8, force: 3.5, shake: 0.5, linger: 2900 },
+  /** Hive: Die Brutkammern platzen eine nach der anderen, dann geht der Kern violett hoch. */
+  hive: { energy: color3("halvorsen"), style: "energy", size: 2.5, agony: 1900, pops: 9, force: 3, shake: 0.55, linger: 3100 },
+  /** Mirage: Der Phasenantrieb flackert, dann zerreißt ihn eine Entladung. */
+  mirage: { energy: color3("moreau"), style: "energy", size: 2.1, agony: 1300, pops: 6, force: 4.5, shake: 0.45, linger: 2500 },
+  /** Pendulum: Die Railgun entlädt sich ein letztes Mal in den eigenen Rumpf. */
+  pendulum: { energy: color3("kerr"), style: "energy", size: 2.6, agony: 2000, pops: 9, force: 3, shake: 0.6, linger: 3200 },
 };
 
 /** Sekundärexplosionen und Nachexplosionen sind kleiner als die Detonation; die Hülle blitzt dabei nur leicht. */
@@ -134,7 +148,8 @@ async function agony(ship: ShipView, profile: DestructionProfile, view: MatchSce
 async function scatter(wreck: Wreck, center: Vector3, profile: DestructionProfile, ship: ShipView, view: MatchScene): Promise<void> {
   const { pieces, materials } = wreck;
   const cuts = materials.filter((material) => material.name.endsWith("_wreck"));
-  const lights = materials.filter((material) => !cuts.includes(material) && material.emissiveIntensity > 1);
+  // Die Kennzeichen der Flaggschiffe (`<id>_signal`) leuchten nur mit Stärke 1, erlöschen aber wie Lichter.
+  const lights = materials.filter((material) => !cuts.includes(material) && (material.emissiveIntensity > 1 || material.name.endsWith("_signal")));
   const brightness = new Map(lights.map((material) => [material, material.emissiveIntensity]));
 
   const bodies = launch(pieces, center, profile);

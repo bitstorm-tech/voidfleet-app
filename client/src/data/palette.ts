@@ -7,6 +7,12 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 /** Farbe als RGB-Tripel im Bereich 0..1, wie Godots Color. */
 export type Rgb = readonly [number, number, number];
 
+/** Farbe aus einer Hex-Angabe wie `#E8A33A`. */
+function hex(value: string): Rgb {
+  const rgb = parseInt(value.slice(1), 16);
+  return [(rgb >> 16) / 255, ((rgb >> 8) & 255) / 255, (rgb & 255) / 255];
+}
+
 export const PALETTE = {
   /** Hintergrund hinter allem: Seite und Szene. */
   background: [0.016, 0.02, 0.04],
@@ -29,6 +35,17 @@ export const PALETTE = {
   won: [1, 0.84, 0.4],
   lost: [1, 0.38, 0.31],
   draw: [0.69, 0.74, 0.81],
+  /**
+   * Akzentfarbe je Admiral (`shared/admirals.ts`, Schlüssel = `AdmiralId`): Auswahlkarte, Fähigkeitskarte, Banner,
+   * die Marken seiner Fähigkeit und der Ring unter seinem Flaggschiff. Die Modelle der Flaggschiffe tragen dieselben Töne.
+   */
+  osei: hex("#E8A33A"),
+  vance: hex("#E2483D"),
+  halvorsen: hex("#9D5CF2"),
+  moreau: hex("#33D1C6"),
+  kerr: hex("#5B8DFF"),
+  /** Gemeinsamer Zierton aller Flaggschiffe: Rahmen der Flaggschiff-Karte, Krone neben dem Hüllenbalken. */
+  flagshipTrim: hex("#F4D68C"),
 } as const satisfies Record<string, Rgb>;
 
 export type PaletteKey = keyof typeof PALETTE;

@@ -11,9 +11,12 @@ import { CreateTube } from "@babylonjs/core/Meshes/Builders/tubeBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
 import { color3 } from "../data/palette.ts";
-import type { SlotPad } from "./slotPad.ts";
+import { GHOST_LIFT, type SlotPad } from "./slotPad.ts";
 
-/** Start über dem Schiff, Spitze über dem Geist im Ziel-Slot, damit sie nicht im Modell verschwindet. */
+/**
+ * Start über dem Schiff, Spitze über dem Geist im Ziel-Slot, damit sie nicht im Modell verschwindet; steht dort ein
+ * Schiff (Phasentausch), schwebt der Geist darüber und die Spitze mit ihm.
+ */
 const START_HEIGHT = 1.1;
 const TIP_HEIGHT = 1.45;
 /** Scheitelhöhe des Bogens über dem Brett. */
@@ -46,7 +49,7 @@ export class MoveArrow {
 
     const up = Vector3.Up();
     const start = from.root.getAbsolutePosition().add(up.scale(START_HEIGHT));
-    const tip = to.root.getAbsolutePosition().add(up.scale(TIP_HEIGHT));
+    const tip = to.root.getAbsolutePosition().add(up.scale(TIP_HEIGHT + (to.ship ? GHOST_LIFT : 0)));
     const headBase = tip.add(up.scale(HEAD_LENGTH));
     // Erst steil nach oben und leicht zum Ziel, am Ende senkrecht über dem Ziel herab.
     const lift = up.scale(ARC_HEIGHT - START_HEIGHT);

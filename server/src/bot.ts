@@ -1,53 +1,86 @@
 // Der Computergegner: plant aus Brett und eigener Hand einen Zug. Er sieht nur,
 // was auch ein Spieler sieht, insbesondere nicht den Plan des Gegners.
-// Faustregeln: immer so viele Schiffe legen wie erlaubt (Kampfschiffe zuerst, robuste nach vorne,
+// Faustregeln: immer so viele Schiffe legen wie erlaubt (in Runde 1 das Flaggschiff mittig in die
+// Command-Lane und das robusteste Kampfschiff davor; sonst Kampfschiffe zuerst, robuste nach vorne,
 // Jäger und Support in einen gedeckten Command-Slot), den Befehl spielen, der nach grober
-// Schätzung am meisten Schaden anrichtet oder verhindert, und das Grundmanöver nutzen, um ein
-// Schiff zu retten, in Deckung zu bringen oder ein anderes zu decken. Ab und zu weicht er einem
-// vermuteten Torpedo aus oder zielt auf ein Ausweichmanöver, damit ihn ein Mensch nicht einfach
-// berechnen kann.
+// Schätzung am meisten Schaden anrichtet oder verhindert, und das Grundmanöver nutzen, um das
+// Flaggschiff oder ein anderes Schiff zu retten, in Deckung zu bringen oder ein anderes zu decken.
+// Die Admiralsfähigkeit nimmt er statt des Manövers, wenn sie im Kampf dieser Runde mehr bringt.
+// Ab und zu weicht er einem vermuteten Torpedo aus oder zielt auf ein Ausweichmanöver, damit ihn
+// ein Mensch nicht einfach berechnen kann.
 
-import { Board, maxDeploys, nearest, opposite, SLOT_COUNT, slotTarget, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
-import type { CommandCard, ShipCard } from "../../shared/cards.ts";
-import type { Deploy, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
-import { highest, resolveCombat } from "../../shared/resolution.ts";
+import { ABILITY_VALUES, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
+import { Board, isSameSlot, maxDeploys, nearest, opposite, SLOT_COUNT, slotTarget, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
+import { commandById, deckCopies, isFlagship, isToken, shipById, type CommandCard, type CommandId, type ShipCard } from "../../shared/cards.ts";
+import { canMark, powerTargets } from "../../shared/powers.ts";
+import type { Deploy, OpponentView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
+import { highest, resolveCleanup, resolveCombat, resolveManeuver, resolvePower, resolveSwap } from "../../shared/resolution.ts";
 
-export interface BotHands {
+/** Was der Computergegner beim Planen weiß: Seite, Admiral, eigene Hände und, was jeder vom Gegner sieht. */
+export interface BotView {
   readonly side: Side;
+  readonly admiral: AdmiralId;
   readonly shipHand: readonly ShipCard[];
   readonly commandHand: readonly CommandCard[];
+  /** Aus `OpponentView`: die Befehle, die der Gegner schon gespielt hat, und wie viele er noch hält. */
+  readonly opponent: Pick<OpponentView, "playedCommands" | "commandHandSize">;
 }
 
 /** Schiffe landen möglichst mittig in der Lane. */
 const LANE_CENTER = (SLOT_COUNT - 1) / 2;
+/** Runde 1: Das Flaggschiff kommt mittig in die Command-Lane, das robusteste Kampfschiff davor. */
+const FLAGSHIP_SLOT = 2;
 /** Ein Abschuss ist mehr wert als der reine Schaden. */
 const KILL_BONUS = 2;
+/** Schaden am Flaggschiff zählt doppelt; sein Fall entscheidet das Match. */
+const FLAGSHIP_WEIGHT = 2;
+const DECISIVE = 1000;
+/** Ein Flaggschiff vorne zieht sich ab so wenigen HP in Deckung zurück. */
+const FLAGSHIP_RETREAT_HP = 7;
 /** So oft weicht er dem Schiff aus, auf das ein Torpedo am ehesten zielt, bzw. zielt auf ein Ausweichmanöver. */
 const SURPRISE_CHANCE = 0.15;
 /** Gewicht eines Torpedoziels, das sich wahrscheinlich bewegt. */
 const UNSURE = 0.5;
 /** Wie wahrscheinlich ein angeschlagenes, ungedecktes Schiff die Lane wechselt (für das Sperrfeuer). */
 const FLEE_CHANCE = 0.4;
+/** So oft tauscht die Mirage den Platz, wenn ein Torpedo droht, damit er das Schiff trifft, mit dem sie getauscht hat. */
+const SWAP_CHANCE = 0.4;
+/** Kerr: wie wahrscheinlich ein gedecktes Ziel beim Schuss der Railgun ungedeckt ist, bei schwacher bzw. stabiler Deckung. */
+const KERR = { weakCover: 0.3, covered: 0.15 };
+/**
+ * Admiralsfähigkeit oder Grundmanöver: Das Manöver lohnt oft erst in den Folgerunden und bekommt diesen Vorschuss.
+ * `future`: so viele Runden Feuer zählt jedes Schiff zusätzlich (ein Abschuss nimmt dem Gegner auch die nächsten Schüsse).
+ */
+const POWER = { maneuverHeadStart: 1, future: 2 };
 
 /** `random` liefert Zahlen in [0, 1), in Tests fest vorgegeben. */
-export function planBotTurn(board: Board, bot: BotHands, round: number, random: () => number = Math.random): TurnPlan {
-  // Geplant wird auf einer Kopie, auf der die gelegten Schiffe schon stehen.
+export function planBotTurn(board: Board, bot: BotView, round: number, random: () => number = Math.random): TurnPlan {
+  // Geplant wird auf einer Kopie, auf der die gelegten Schiffe schon stehen, in Runde 1 zuerst das Flaggschiff.
   const after = copyOf(board);
+  const flagship: SlotTarget | null = round === 1 ? { lane: "command", slotIndex: FLAGSHIP_SLOT } : null;
+  if (flagship) after.place(after.lane(bot.side, flagship.lane), flagship.slotIndex, shipById(ADMIRALS[bot.admiral].flagship));
   const ships = planShips(after, bot, maxDeploys(round));
-  const situation = new Situation(after, bot, ships, random);
+  // Auch das Flaggschiff landet erst in dieser Runde und manövriert noch nicht.
+  const arrivals = [...ships.map((ship) => ship.target), ...(flagship ? [flagship] : [])];
+  const situation = new Situation(after, bot, arrivals, random);
   const command = situation.planCommand();
+  const { maneuver, power } = situation.planPower(situation.planManeuver(command), command);
   return {
     ships,
     command: command && { handIndex: command.handIndex, target: command.target && slotTarget(command.target), destination: command.destination?.index ?? null },
-    maneuver: situation.planManeuver(command),
+    maneuver,
+    flagship,
+    power,
+    mark: canMark(board, bot.side) ? situation.planMark(maneuver) : null,
   };
 }
 
-/** Kopie zum Durchspielen, mit dem Overdrive der Runde. */
+/** Kopie zum Durchspielen, mit dem Overdrive der Runde und den Drohnen, die die Hive schon gestartet hat. */
 function copyOf(board: Board): Board {
   const copy = new Board();
   copy.load(board.snapshot());
   copy.overdrive = board.overdrive;
+  copy.hiveLaunches = { ...board.hiveLaunches };
   return copy;
 }
 
@@ -64,7 +97,7 @@ function isFragile(card: ShipCard): boolean {
 }
 
 /** Legt die Schiffe nacheinander auf `board`, die Kopie des Bretts: jedes mit Rücksicht auf die vorigen. */
-function planShips(board: Board, bot: BotHands, count: number): Deploy[] {
+function planShips(board: Board, bot: BotView, count: number): Deploy[] {
   const ships: Deploy[] = [];
   const hand = bot.shipHand.map((card, handIndex) => ({ card, handIndex }));
   for (let i = 0; i < count; i++) {
@@ -77,9 +110,24 @@ function planShips(board: Board, bot: BotHands, count: number): Deploy[] {
   return ships;
 }
 
+/** Ein ungedecktes Command-Schiff, das Deckung braucht: zuerst das Flaggschiff, dann eines, auf das die gegnerische Railgun zielt. */
+function needsGuard(board: Board, side: Side): Slot | null {
+  const strike = board.lane(side, "strike");
+  const open = (slot: Slot | null) => slot !== null && slot.lane.type === "command" && !strike.slots[slot.index]!.isOccupied && board.canPlace(strike, slot.index);
+  const flagship = board.flagship(side);
+  if (open(flagship)) return flagship;
+  return board.lane(side, "command").occupiedSlots.find((slot) => slot.marked && open(slot)) ?? null;
+}
+
 function planShip(board: Board, side: Side, shipHand: readonly ShipCard[]): Deploy | null {
   const card = highest(shipHand, shipValue);
   if (card === null) return null;
+  // Braucht ein Schiff Deckung, stellt sich das robusteste Kampfschiff davor.
+  const guarded = needsGuard(board, side);
+  if (guarded) {
+    const guard = highest(shipHand.filter((ship) => ship.atk > 0), (ship) => ship.hp + ship.shield) ?? card;
+    return { handIndex: shipHand.indexOf(guard), target: { lane: "strike", slotIndex: guarded.index } };
+  }
   const strike = board.lane(side, "strike");
   const command = board.lane(side, "command");
   // Ein Strike-Schiff deckt den Command-Slot dahinter: Jäger und Support kommen in einen
@@ -112,6 +160,7 @@ interface Move {
 
 const attacks = (slot: Slot) => slot.card!.atk > 0;
 const hp = (slot: Slot) => slot.hp;
+const durability = (slot: Slot) => slot.hp + slot.shield;
 const damaged = (slot: Slot) => slot.hp < slot.card!.hp;
 const lowest = (slots: readonly Slot[], value: (slot: Slot) => number) => highest(slots, (slot) => -value(slot));
 
@@ -123,10 +172,17 @@ function on(slot: Slot, score: number, destination: Slot | null = null): Option 
   return { score, target: slot, destination };
 }
 
-/** Schaden, der bei einem Schiff ankommt, plus Bonus, wenn es dabei zerstört wird. */
+/** Schaden, der bei einem Schiff ankommt, plus Bonus, wenn es dabei zerstört wird; beim Flaggschiff doppelt, sein Fall entscheidet. */
 function damageValue(slot: Slot, amount: number): number {
-  const remaining = slot.hp + slot.shield;
-  return Math.min(amount, remaining) + (remaining <= amount ? KILL_BONUS : 0);
+  const remaining = durability(slot);
+  const dealt = Math.min(amount, remaining);
+  if (isFlagship(slot.card!)) return dealt * FLAGSHIP_WEIGHT + (remaining <= amount ? DECISIVE : 0);
+  return dealt + (remaining <= amount ? KILL_BONUS : 0);
+}
+
+/** Wie viele Kopien eines Befehls der Gegner noch nicht gespielt hat. */
+function unplayed(bot: BotView, id: CommandId): number {
+  return deckCopies(commandById(id)) - bot.opponent.playedCommands.filter((played) => played === id).length;
 }
 
 /**
@@ -137,26 +193,28 @@ class Situation {
   private readonly side: Side;
   private readonly own: readonly Slot[];
   private readonly enemies: readonly Slot[];
-  /** Die in dieser Runde gelegten Schiffe. */
+  /** Die in dieser Runde gelegten Schiffe, in Runde 1 auch das Flaggschiff. */
   private readonly fresh: ReadonlySet<Slot>;
   private readonly enemyAttack: number;
   private readonly enemyMaxAttack: number;
-  /** Der Kampf dieser Runde, falls sich niemand bewegt und keiner einen Befehl spielt. */
+  private readonly flagship: Slot | null;
+  /** Der Kampf dieser Runde samt Railgun, falls sich niemand bewegt und keiner einen Befehl spielt. */
   private readonly preview: Board;
   private readonly shots: Extract<RoundEvent, { kind: "attack" }>[];
 
   constructor(
     private readonly board: Board,
-    private readonly bot: BotHands,
-    ships: readonly Deploy[],
+    private readonly bot: BotView,
+    arrivals: readonly SlotTarget[],
     private readonly random: () => number,
   ) {
     this.side = bot.side;
     this.own = board.ships(bot.side);
     this.enemies = board.ships(opposite(bot.side));
-    this.fresh = new Set(ships.map((ship) => this.lane(ship.target.lane).slots[ship.target.slotIndex]!));
+    this.fresh = new Set(arrivals.map((target) => this.lane(target.lane).slots[target.slotIndex]!));
     this.enemyAttack = this.enemies.reduce((total, slot) => total + slot.attack, 0);
     this.enemyMaxAttack = Math.max(0, ...this.enemies.map((slot) => slot.attack));
+    this.flagship = board.flagship(bot.side);
     this.preview = copyOf(board);
     const events: RoundEvent[] = [];
     resolveCombat(this.preview, events);
@@ -174,7 +232,7 @@ class Situation {
 
   /** Steht unter Beschuss und ein einzelner Treffer kann es zerstören. */
   private endangered(slot: Slot): boolean {
-    return this.board.isExposed(slot) && slot.hp + slot.shield <= this.enemyMaxAttack;
+    return this.board.isExposed(slot) && durability(slot) <= this.enemyMaxAttack;
   }
 
   private previewOf(slot: Slot): Slot {
@@ -186,16 +244,35 @@ class Situation {
     return this.previewOf(slot).hp <= 0;
   }
 
+  /** Schaden im Kampf dieser Runde (samt Railgun), wenn es stehen bleibt. */
+  private hit(slot: Slot): number {
+    const after = this.previewOf(slot);
+    return durability(slot) - after.hp - after.shield;
+  }
+
   /** Was die Gegenseite im Kampf an dem Schiff gewinnt, wenn es stehen bleibt. */
   private loss(slot: Slot): number {
-    const after = this.previewOf(slot);
-    return damageValue(slot, slot.hp + slot.shield - after.hp - after.shield);
+    return damageValue(slot, this.hit(slot));
   }
 
   /** Was das Schiff mit seinem Schuss in diesem Kampf anrichtet. */
   private shotValue(slot: Slot): number {
     const shot = this.shots.find(({ attacker }) => attacker.side === slot.lane.side && attacker.lane === slot.lane.type && attacker.slotIndex === slot.index);
     return shot ? damageValue(this.board.lane(shot.target.side, shot.target.lane).slots[shot.target.slotIndex]!, shot.amount) : 0;
+  }
+
+  /** Was dem eigenen Flaggschiff in dieser Runde schlimmstenfalls droht: der Kampf und ein starker Befehl, abzüglich Wächterschild. */
+  private flagshipThreat(): number {
+    const flagship = this.flagship;
+    if (flagship === null) return 0;
+    let command = 0;
+    if (this.bot.opponent.commandHandSize > 0) {
+      if (unplayed(this.bot, "torpedo") > 0) command = 5;
+      else if (unplayed(this.bot, "orbital_strike") > 0 && highest(this.own, hp) === flagship) command = 4;
+      else if (unplayed(this.bot, "volley_fire") > 0) command = 1;
+    }
+    const guard = flagship.card!.id === "bastion" ? ABILITY_VALUES.guardianShield : 0;
+    return Math.max(0, this.hit(flagship) + command - guard);
   }
 
   /**
@@ -205,7 +282,7 @@ class Situation {
    * bildet nur noch dort ein Paar. null, wenn die andere Lane keinen Platz hat.
    */
   private move(slot: Slot, other: Move | null = null): { destination: Slot; paired: boolean } | null {
-    const free = this.board.laneSwitchDestinations(slot, other ? [slotTarget(other.destination)] : []);
+    const free = this.destinations(slot, other).filter((destination) => destination.lane !== slot.lane);
     const partner = (index: number) => {
       const neighbour = slot.lane.slots[index]!;
       return neighbour === other?.destination || (neighbour.isOccupied && neighbour !== slot && neighbour !== other?.ship);
@@ -213,6 +290,15 @@ class Situation {
     const paired = free.filter((destination) => partner(destination.index));
     const destination = nearest(paired.length > 0 ? paired : free, slot.index);
     return destination && { destination, paired: paired.length > 0 };
+  }
+
+  /**
+   * Freie Slots, in die das Schiff wechseln kann, neben dem Lane-Wechsel `other` (siehe `Board.canMove`): Beide Ziele
+   * zählen zur Lane-Grenze, auch das eines Tokens, und auch der Befehl muss danach noch gelten.
+   */
+  private destinations(slot: Slot, other: Move | null): Slot[] {
+    const free = this.board.maneuverDestinations(slot, other ? [slotTarget(other.destination)] : []);
+    return other ? free.filter((destination) => this.board.canMove(other.ship, slotTarget(other.destination), [slotTarget(destination)])) : free;
   }
 
   /**
@@ -257,6 +343,15 @@ class Situation {
     return ship && { ship, destination: this.move(ship)!.destination };
   }
 
+  /** Ein freier, gedeckter Command-Slot für ein eigenes Schiff: hinter einem Strike-Schiff, das stehen bleibt (oder hinter dem Ziel von `other`). */
+  private shelter(slot: Slot, other: Move | null): Slot | null {
+    const covered = (destination: Slot) => {
+      const front = this.lane("strike").slots[destination.index]!;
+      return front === other?.destination || (front.isOccupied && front !== other?.ship && front !== slot);
+    };
+    return nearest(this.destinations(slot, other).filter((destination) => destination.lane.type === "command" && covered(destination)), slot.index);
+  }
+
   /** Der Befehl mit dem größten geschätzten Nutzen; null, wenn keiner etwas bringt. */
   planCommand(): (Option & { handIndex: number }) | null {
     let best: (Option & { handIndex: number }) | null = null;
@@ -267,7 +362,7 @@ class Situation {
     return best;
   }
 
-  /** Bewertet den Befehl; null oder Score 0, wenn er nichts bringt. */
+  /** Bewertet den Befehl; null oder Score 0, wenn er nichts bringt. Flaggschiffe bewegt er per Befehl nicht nach vorne. */
   private evaluate(card: CommandCard): Option | null {
     const { enemies, fresh } = this;
     const strikeCount = this.lane("strike").occupiedSlots.length;
@@ -279,6 +374,9 @@ class Situation {
       case "volley_fire":
         return untargeted(enemies.reduce((total, slot) => total + damageValue(slot, 1), 0));
       case "torpedo": {
+        // Feuert die eigene Railgun auf ein Schiff hinter schwacher Deckung, räumt der Torpedo die Deckung weg.
+        const cover = this.markCover();
+        if (cover) return on(cover.front, damageValue(cover.front, 5) + damageValue(cover.marked, ABILITY_VALUES.railgun));
         // Er trifft, wer nach allen Bewegungen im Slot steht: meist ein Schiff, das wohl stehen bleibt,
         // ab und zu der Slot, in den sich ein angeschlagenes Strike-Schiff am ehesten zurückzieht.
         const retreat = this.random() < SURPRISE_CHANCE ? this.likelyRetreat() : null;
@@ -302,18 +400,23 @@ class Situation {
       case "power_surge":
         return untargeted(this.lane("strike").occupiedSlots.filter(attacks).length);
       case "emergency_shields": {
+        // Droht dem Flaggschiff der Fall und rettet es der Schild, bekommt es ihn.
+        const flagship = this.flagship;
+        const threat = this.flagshipThreat();
+        if (flagship && threat >= durability(flagship) && threat - 3 < durability(flagship)) return on(flagship, DECISIVE / 2);
         // Jäger schießen auf das schwächste ungedeckte Schiff: Das bekommt den Schild, auch ein frisch
         // gelegtes Kampfschiff vorne.
         const candidates = this.board.exposedShips(this.side).filter((slot) => !fresh.has(slot) || (slot.lane.type === "strike" && attacks(slot)));
         const target = lowest(candidates, hp);
-        return target && on(target, Math.min(3, this.enemyAttack) + (this.endangered(target) ? 1 : 0));
+        return target && on(target, Math.min(3, this.enemyAttack) * (isFlagship(target.card!) ? FLAGSHIP_WEIGHT : 1) + (this.endangered(target) ? 1 : 0));
       }
       case "overcharge": {
         // +3 ATK gegen 2 Eigenschaden: nur für ein Kampfschiff, das das und einen Treffer übersteht,
-        // auch für eines, das gerade vorne landet.
+        // auch für eines, das gerade vorne landet; nie für das Flaggschiff.
         const sturdy = this.own.filter(
           (slot) =>
             attacks(slot) &&
+            !isFlagship(slot.card!) &&
             (!fresh.has(slot) || slot.lane.type === "strike") &&
             slot.hp > 2 + (this.board.isExposed(slot) ? this.enemyMaxAttack : 0),
         );
@@ -323,7 +426,7 @@ class Situation {
       case "flanking_maneuver": {
         // Das robusteste Schiff nach vorne, wenn es damit ein anderes deckt; sonst ein angeschlagenes
         // Schiff vorne in einen gedeckten Slot bringen, solange vorne jemand bleibt.
-        const advance = highest(this.settled(this.lane("command").occupiedSlots).filter((slot) => this.pairsAfterMove(slot)), hp);
+        const advance = highest(this.settled(this.lane("command").occupiedSlots).filter((slot) => !isFlagship(slot.card!) && this.pairsAfterMove(slot)), hp);
         if (advance) return this.moving(advance, 2);
         const retreat = lowest(this.settled(this.lane("strike").occupiedSlots), hp);
         if (retreat && this.endangered(retreat) && this.pairsAfterMove(retreat) && strikeCount >= 2) {
@@ -334,7 +437,7 @@ class Situation {
       case "intercept": {
         // Holt ein Schiff nach vorne: +2 ATK für ein Kampfschiff, dazu Deckung für die anderen. Ein
         // frisch in die Command-Lane gelegtes Kampfschiff darf sofort mit.
-        const candidates = this.lane("command").occupiedSlots.filter((slot) => !fresh.has(slot) || attacks(slot));
+        const candidates = this.lane("command").occupiedSlots.filter((slot) => (!fresh.has(slot) || attacks(slot)) && !isFlagship(slot.card!));
         const target = highest(candidates, (slot) => (attacks(slot) ? 100 : 0) + slot.hp);
         return target && this.moving(target, (attacks(target) ? 1.5 : 0) + (this.pairsAfterMove(target) ? 2 : 0));
       }
@@ -352,19 +455,76 @@ class Situation {
     }
   }
 
+  /** Feuert die eigene Railgun in dieser Runde auf ein Command-Schiff hinter einer Deckung, die ein Torpedo zerstört: Deckung und Ziel. */
+  private markCover(): { front: Slot; marked: Slot } | null {
+    const marked = this.enemies.find((slot) => slot.marked);
+    if (marked?.lane.type !== "command") return null;
+    const front = this.board.lane(opposite(this.side), "strike").slots[marked.index]!;
+    return front.isOccupied && durability(front) <= 5 ? { front, marked } : null;
+  }
+
   /**
    * Das Grundmanöver neben dem geplanten Befehl: Es lässt dessen Zielschiff in Ruhe und meidet den Slot,
-   * in den der Befehl verlegt. Erst Rückzug, dann Deckung, dann Vorrücken, sonst selten ein Ausweichen.
+   * in den der Befehl verlegt. Erst das Flaggschiff retten, dann ein markiertes Schiff aus dem Schuss der
+   * Railgun nehmen, der Phasentausch der Mirage, Rückzug, Deckung, Vorrücken, ein Ausweichen des
+   * Flaggschiffs, sonst selten ein Ausweichen.
    */
   planManeuver(command: Option | null): TurnPlan["maneuver"] {
     const other = command?.destination ? { ship: command.target!, destination: command.destination } : null;
     const movable = this.settled(this.own).filter((slot) => slot !== command?.target);
+    // Die Pendulum bleibt sonst stehen: Sie feuert oder markiert jede Runde, und bewegt sie sich, fällt der Schuss aus.
+    const free = movable.filter((slot) => slot.card!.id !== "pendulum");
     const move =
-      this.retreat(movable, other) ??
-      this.takeCover(movable, other) ??
-      this.advance(movable, other) ??
-      (this.random() < SURPRISE_CHANCE ? this.dodge(movable, other) : null);
+      this.protectFlagship(movable, other) ??
+      this.evadeMark(free, other) ??
+      this.phaseSwap(free, other) ??
+      this.retreat(free, other) ??
+      this.takeCover(free, other) ??
+      this.advance(free, other) ??
+      this.flagshipDodge(free, other) ??
+      (this.random() < SURPRISE_CHANCE ? this.dodge(free, other) : null);
     return move && { ship: slotTarget(move.ship), destination: slotTarget(move.destination) };
+  }
+
+  /**
+   * Das Flaggschiff in Sicherheit: ungedeckt und unter Beschuss (auch der Railgun), oder vorne angeschlagen,
+   * geht es hinter ein Strike-Schiff. Die Mirage tauscht lieber (`phaseSwap`); die Pendulum bewegt sich nur,
+   * wenn ihr der Fall droht.
+   */
+  private protectFlagship(movable: readonly Slot[], other: Move | null): Move | null {
+    const flagship = this.flagship;
+    if (flagship === null || !movable.includes(flagship) || flagship.card!.id === "mirage" || !this.board.isExposed(flagship)) return null;
+    const inDanger = flagship.lane.type === "strike" ? this.dies(flagship) || durability(flagship) <= FLAGSHIP_RETREAT_HP : this.hit(flagship) > 0;
+    if (!inDanger || (flagship.card!.id === "pendulum" && !this.dies(flagship))) return null;
+    const destination = this.shelter(flagship, other);
+    return destination && { ship: flagship, destination };
+  }
+
+  /** Ein markiertes Schiff (die gegnerische Railgun feuert in dieser Runde) geht in Deckung, wenn ihr Schuss es zerstören kann. */
+  private evadeMark(movable: readonly Slot[], other: Move | null): Move | null {
+    const marked = movable.find((slot) => slot.marked && !isFlagship(slot.card!));
+    if (!marked || !this.board.isExposed(marked) || durability(marked) > ABILITY_VALUES.railgun + 1) return null;
+    const destination = this.shelter(marked, other);
+    return destination && { ship: marked, destination };
+  }
+
+  /**
+   * Phasentausch der Mirage: Ungedeckt unter Beschuss tauscht sie mit einem robusten Schiff in Deckung;
+   * droht ein Torpedo, tauscht sie manchmal einfach den Platz, damit er das andere Schiff trifft.
+   */
+  private phaseSwap(movable: readonly Slot[], other: Move | null): Move | null {
+    const mirage = this.flagship;
+    if (mirage?.card!.id !== "mirage" || !movable.includes(mirage)) return null;
+    const partners = movable.filter((slot) => slot !== mirage && slot !== other?.ship);
+    const covered = partners.filter((slot) => !this.board.isExposed(slot));
+    if (this.board.isExposed(mirage) && this.hit(mirage) > 0) {
+      const partner = highest(covered.filter((slot) => durability(slot) > this.hit(mirage) + 1 && !isToken(slot.card!)), durability);
+      if (partner) return { ship: mirage, destination: partner };
+    }
+    const torpedo = this.bot.opponent.commandHandSize > 0 && unplayed(this.bot, "torpedo") > 0;
+    if (!torpedo || this.random() >= SWAP_CHANCE) return null;
+    const partner = highest(this.board.isExposed(mirage) ? partners : covered, durability);
+    return partner && { ship: mirage, destination: partner };
   }
 
   /** Kampfschiffe vorne, nachdem `other` die Lane gewechselt hat; `except` zählt nicht mit. */
@@ -406,10 +566,7 @@ class Situation {
       const front = this.lane("strike").slots[slot.index]!;
       return front === other?.destination || (front.isOccupied && front !== other?.ship);
     };
-    const shelter = (slot: Slot) => {
-      const free = this.board.maneuverDestinations(slot, other ? [slotTarget(other.destination)] : []);
-      return nearest(free.filter((destination) => destination.lane === slot.lane && covered(destination)), slot.index);
-    };
+    const shelter = (slot: Slot) => nearest(this.destinations(slot, other).filter((destination) => destination.lane === slot.lane && covered(destination)), slot.index);
     const candidates = movable.filter(
       (slot) => slot.lane.type === "command" && this.board.isExposed(slot) && this.loss(slot) > this.shotValue(slot) && shelter(slot),
     );
@@ -417,15 +574,16 @@ class Situation {
     return ship && { ship, destination: shelter(ship)! };
   }
 
-  /** Vorrücken: Greift vorne niemand an, deckt ein robustes Command-Schiff ein anderes. */
+  /** Vorrücken: Greift vorne niemand an, deckt ein robustes Command-Schiff (kein Flaggschiff) ein anderes. */
   private advance(movable: readonly Slot[], other: Move | null): Move | null {
     if (this.enemyAttack === 0 || this.attackersInFront(null, other) > 0) return null;
     const candidates = movable.filter(
       (slot) =>
         slot.lane.type === "command" &&
+        !isFlagship(slot.card!) &&
         attacks(slot) &&
         !isFragile(slot.card!) &&
-        slot.hp + slot.shield > this.enemyMaxAttack &&
+        durability(slot) > this.enemyMaxAttack &&
         this.attackerRemains(slot) &&
         this.move(slot, other)?.paired,
     );
@@ -433,11 +591,92 @@ class Situation {
     return ship && { ship, destination: this.move(ship, other)!.destination };
   }
 
-  /** Ausweichen: das Schiff, auf das ein gegnerischer Torpedo am ehesten zielt, wechselt die Lane. */
+  /** Das Flaggschiff weicht einem vermuteten Torpedo in einen anderen gedeckten Command-Slot aus, angeschlagen öfter. */
+  private flagshipDodge(movable: readonly Slot[], other: Move | null): Move | null {
+    const flagship = this.flagship;
+    if (flagship === null || !movable.includes(flagship) || flagship.lane.type !== "command") return null;
+    if (this.bot.opponent.commandHandSize === 0 || unplayed(this.bot, "torpedo") === 0) return null;
+    if (this.random() >= (durability(flagship) <= 10 ? 0.3 : 0.1)) return null;
+    const destination = this.shelter(flagship, other);
+    return destination && { ship: flagship, destination };
+  }
+
+  /** Ausweichen: das Schiff (kein Flaggschiff), auf das ein gegnerischer Torpedo am ehesten zielt, wechselt die Lane. */
   private dodge(movable: readonly Slot[], other: Move | null): Move | null {
-    const ship = highest(this.settled(this.own), (slot) => this.torpedoValue(slot));
+    const ship = highest(this.settled(this.own).filter((slot) => !isFlagship(slot.card!)), (slot) => this.torpedoValue(slot));
     if (ship === null || !movable.includes(ship) || this.uncovers(ship) || !this.attackerRemains(ship)) return null;
     const move = this.move(ship, other);
     return move && { ship, destination: move.destination };
   }
+
+  // --- Admiralsfähigkeit und Markierung ---
+
+  /**
+   * Admiralsfähigkeit statt Grundmanöver: Jedes mögliche Ziel der Fähigkeit und das geplante Manöver werden im
+   * Kampf dieser Runde durchgespielt (ohne die Züge des Gegners); die Fähigkeit gewinnt, wenn sie mehr bringt als
+   * das Manöver samt Vorschuss.
+   */
+  planPower(maneuver: TurnPlan["maneuver"], command: Option | null): { maneuver: TurnPlan["maneuver"]; power: TurnPlan["power"] } {
+    const base = this.outcome(() => {});
+    let best: { target: SlotTarget; gain: number } | null = null;
+    for (const option of this.powerOptions(command)) {
+      const gain = this.outcome(option.apply) - base;
+      if (gain > (best?.gain ?? 0)) best = { target: option.target, gain };
+    }
+    if (best === null) return { maneuver, power: null };
+    if (maneuver && this.outcome((board) => applyMove(board, this.side, maneuver)) - base + POWER.maneuverHeadStart >= best.gain) {
+      return { maneuver, power: null };
+    }
+    return { maneuver: null, power: { target: best.target } };
+  }
+
+  /** Der Kampf dieser Runde auf einer Kopie nach `setup`: die Stellung danach aus eigener Sicht, samt dem Feuer der Folgerunden. */
+  private outcome(setup: (board: Board) => void): number {
+    const board = copyOf(this.board);
+    setup(board);
+    resolveCombat(board, []);
+    resolveCleanup(board, []);
+    const firepower = (side: Side) => board.ships(side).reduce((total, slot) => total + slot.attack, 0) * POWER.future;
+    return positionScore(board, this.side) + firepower(this.side) - firepower(opposite(this.side));
+  }
+
+  /** Die gültigen Ziele der eigenen Fähigkeit (`powerTargets` auf der Kopie mit den gelegten Schiffen), je mit ihrer Wirkung. */
+  private powerOptions(command: Option | null): { target: SlotTarget; apply: (board: Board) => void }[] {
+    const power = ADMIRALS[this.bot.admiral].power;
+    const blocked = command?.destination ? [slotTarget(command.destination)] : [];
+    return powerTargets(this.board, this.side, power, [], blocked).map(({ lane, slotIndex }) => {
+      const target = { lane, slotIndex };
+      return { target, apply: (board: Board) => resolvePower(board, this.side, { id: power, target }, []) };
+    });
+  }
+
+  /** Pendulum: markiert das Ziel, das ihre Railgun in der nächsten Runde am ehesten ungedeckt trifft; nicht, wenn sie sich bewegt. */
+  planMark(maneuver: TurnPlan["maneuver"]): SlotTarget | null {
+    if (maneuver && isSameSlot(maneuver.ship, slotTarget(this.flagship!))) return null;
+    const strike = this.board.lane(opposite(this.side), "strike");
+    const exposure = (slot: Slot) => {
+      if (slot.lane.type === "strike") return 0.8;
+      const front = strike.slots[slot.index]!;
+      if (!front.isOccupied) return 0.6;
+      return durability(front) <= 5 ? KERR.weakCover : KERR.covered;
+    };
+    const target = highest(this.enemies.filter((slot) => !isToken(slot.card!)), (slot) => damageValue(slot, ABILITY_VALUES.railgun) * exposure(slot));
+    return target && slotTarget(target);
+  }
+}
+
+/** Die Stellung aus Sicht von `side`: HP und Schild aller Schiffe (des Flaggschiffs doppelt), je Schiff außer Tokens ein Bonus; der Fall eines Flaggschiffs entscheidet. */
+function positionScore(board: Board, side: Side): number {
+  const value = (of: Side) =>
+    board.ships(of).reduce((total, slot) => total + durability(slot) * (isFlagship(slot.card!) ? FLAGSHIP_WEIGHT : 1) + (isToken(slot.card!) ? 0 : KILL_BONUS), 0);
+  const fallen = (of: Side) => (board.flagship(of) ? 0 : DECISIVE);
+  return value(side) - value(opposite(side)) - fallen(side) + fallen(opposite(side));
+}
+
+/** Das Grundmanöver auf einer Brettkopie: Wechsel in einen freien Slot oder Phasentausch. */
+function applyMove(board: Board, side: Side, { ship, destination }: NonNullable<TurnPlan["maneuver"]>): void {
+  const from = board.lane(side, ship.lane).slots[ship.slotIndex]!;
+  const to = board.lane(side, destination.lane).slots[destination.slotIndex]!;
+  if (to.isOccupied) resolveSwap(from, to, []);
+  else resolveManeuver(from, to, []);
 }

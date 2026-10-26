@@ -3,7 +3,8 @@
 // Live-Zustand der Schiffe (HP, Schild, Rundenmodifikatoren). "player" ist immer die
 // Seite des Betrachters; der Server spiegelt das Brett für den zweiten Spieler.
 
-import { isToken, shipById, type ShipCard, type ShipId } from "./cards.ts";
+import { ABILITY_VALUES, type PowerId } from "./admirals.ts";
+import { isFlagship, isToken, shipById, type ShipCard, type ShipId } from "./cards.ts";
 import type { SlotTarget } from "./protocol.ts";
 
 export type Side = "player" | "enemy";
@@ -15,6 +16,8 @@ export interface SlotState {
   shield: number;
   /** Dauerhafter ATK-Bonus des Scrap Raiders (`Slot.scrapBonus`). */
   scrapBonus: number;
+  /** Von der gegnerischen Pendulum markiert: Ihre Railgun feuert in der nächsten Runde auf dieses Schiff (`Slot.marked`). */
+  marked: boolean;
 }
 
 /** Serialisierbarer Brettzustand, je Seite und Lane die Slots in Index-Reihenfolge. */
@@ -55,12 +58,16 @@ export function overdriveBonus(round: number): number {
   return round < OVERDRIVE_START ? 0 : Math.floor((round - OVERDRIVE_START) / OVERDRIVE_STEP) + 1;
 }
 
+const NO_POWERS: readonly PowerId[] = [];
+
 export class Slot {
   card: ShipCard | null = null;
   hp = 0;
   shield = 0;
   /** Scrap Raider: +1 ATK für jedes gegnerische Schiff, das in seiner Lane zerstört wurde; bleibt bis zu seiner Zerstörung. */
   scrapBonus = 0;
+  /** Pendulum: Die Markierung folgt dem Schiff und hält über das Rundenende, bis die Railgun gefeuert hat. */
+  marked = false;
 
   // Nur für die laufende Runde, im Cleanup zurückgesetzt. Zwischen den Runden
   // sind sie immer neutral und gehören deshalb nicht in den Snapshot.
@@ -72,6 +79,8 @@ export class Slot {
   /** Hat diese Runde den Slot gewechselt, per Grundmanöver oder Befehl (Ziel des Sperrfeuers). */
   moved = false;
   selfDamageAfterCombat = 0;
+  /** Admiralsfähigkeiten, die in dieser Runde auf dem Schiff liegen (Gegenfeuer, Fokusfeuer, Schwarmangriff, Taktvorsprung); sie folgen ihm. */
+  powers: readonly PowerId[] = NO_POWERS;
 
   constructor(
     readonly lane: Lane,
@@ -90,7 +99,13 @@ export class Slot {
   get attack(): number {
     if (!this.card) return 0;
     const overdrive = this.card.atk > 0 ? this.lane.board.overdrive : 0;
-    return Math.max(0, this.card.atk + overdrive + this.scrapBonus + this.signalBoost + this.attackBonus);
+    return Math.max(0, this.card.atk + overdrive + this.scrapBonus + this.signalBoost + this.spearhead + this.attackBonus);
+  }
+
+  /** Vanguard (Speerspitze): Steht sie in der Command-Lane, hat das Kampfschiff im Strike-Slot direkt vor ihr mehr ATK. */
+  get spearhead(): number {
+    if (this.lane.type !== "strike" || this.card!.atk === 0) return 0;
+    return this.lane.board.lane(this.lane.side, "command").slots[this.index]!.card?.id === "vanguard" ? ABILITY_VALUES.spearhead : 0;
   }
 
   /**
@@ -118,12 +133,14 @@ export class Slot {
     this.hp = 0;
     this.shield = 0;
     this.scrapBonus = 0;
+    this.marked = false;
     this.attackBonus = 0;
     this.shieldBonus = 0;
     this.disabled = false;
     this.maneuvered = false;
     this.moved = false;
     this.selfDamageAfterCombat = 0;
+    this.powers = NO_POWERS;
   }
 
   /** Schaden geht erst auf den Schild, der Rest auf die HP. */
@@ -153,25 +170,42 @@ export class Slot {
     this.maneuvered = false;
     this.moved = false;
     this.selfDamageAfterCombat = 0;
+    this.powers = NO_POWERS;
   }
 
   /** Übernimmt Schiff samt Live-Zustand eines anderen Slots und leert diesen; das Schiff gilt als bewegt. */
   takeFrom(other: Slot): void {
-    this.card = other.card;
-    this.hp = other.hp;
-    this.shield = other.shield;
-    this.scrapBonus = other.scrapBonus;
-    this.attackBonus = other.attackBonus;
-    this.shieldBonus = other.shieldBonus;
-    this.disabled = other.disabled;
-    this.maneuvered = other.maneuvered;
-    this.selfDamageAfterCombat = other.selfDamageAfterCombat;
+    this.copy(other);
     this.moved = true;
     other.clear();
   }
 
+  /** Phasentausch: Beide Schiffe tauschen die Plätze samt Live-Zustand; keins gilt dabei als bewegt. */
+  swapWith(other: Slot): void {
+    const ship = new Slot(this.lane, this.index);
+    ship.copy(this);
+    this.copy(other);
+    other.copy(ship);
+  }
+
+  /** Schiff samt Live-Zustand eines anderen Slots. */
+  private copy(other: Slot): void {
+    this.card = other.card;
+    this.hp = other.hp;
+    this.shield = other.shield;
+    this.scrapBonus = other.scrapBonus;
+    this.marked = other.marked;
+    this.attackBonus = other.attackBonus;
+    this.shieldBonus = other.shieldBonus;
+    this.disabled = other.disabled;
+    this.maneuvered = other.maneuvered;
+    this.moved = other.moved;
+    this.selfDamageAfterCombat = other.selfDamageAfterCombat;
+    this.powers = other.powers;
+  }
+
   get state(): SlotState | null {
-    return this.card ? { cardId: this.card.id, hp: this.hp, shield: this.shield, scrapBonus: this.scrapBonus } : null;
+    return this.card ? { cardId: this.card.id, hp: this.hp, shield: this.shield, scrapBonus: this.scrapBonus, marked: this.marked } : null;
   }
 
   set state(state: SlotState | null) {
@@ -181,6 +215,7 @@ export class Slot {
     this.hp = state.hp;
     this.shield = state.shield;
     this.scrapBonus = state.scrapBonus;
+    this.marked = state.marked;
   }
 }
 
@@ -199,7 +234,7 @@ export class Lane {
     return this.slots.filter((slot) => slot.isOccupied);
   }
 
-  /** Schiffe der Lane für die Lane-Grenze (`MAX_SHIPS_PER_LANE`); Drohnen zählen nicht. */
+  /** Schiffe der Lane für die Lane-Grenze (`MAX_SHIPS_PER_LANE`); Tokens (Drohne, Trugbild) zählen nicht. */
   get shipCount(): number {
     return this.occupiedSlots.filter((slot) => !isToken(slot.card!)).length;
   }
@@ -233,6 +268,8 @@ export class Board {
   ];
   /** ATK-Bonus aller Kampfschiffe aus der Rundenzahl (`overdriveBonus`); gehört nicht in den Snapshot. */
   overdrive = 0;
+  /** So viele Drohnen hat die Hive je Seite in diesem Match gestartet (`ABILITY_VALUES.hiveBudget`); gehört nicht in den Snapshot. */
+  hiveLaunches: Record<Side, number> = { player: 0, enemy: 0 };
 
   lane(side: Side, type: LaneType): Lane {
     return this.lanes.find((lane) => lane.side === side && lane.type === type)!;
@@ -247,17 +284,27 @@ export class Board {
     return [this.lane(side, "strike"), this.lane(side, "command")].flatMap((lane) => lane.occupiedSlots);
   }
 
-  /** Schutzregel: ein Command-Schiff ist gedeckt, solange im Strike-Slot davor ein Schiff steht. */
-  isExposed(slot: Slot): boolean {
-    return slot.lane.type === "strike" || !this.lane(slot.lane.side, "strike").slots[slot.index]!.isOccupied;
+  /** Das Flaggschiff der Seite; null vor Runde 1 und sobald es gefallen ist. */
+  flagship(side: Side): Slot | null {
+    return this.ships(side).find((slot) => isFlagship(slot.card!)) ?? null;
   }
 
-  /** Schiffe einer Seite, die beschossen werden können, in `ships`-Reihenfolge. */
-  exposedShips(side: Side): Slot[] {
-    return this.ships(side).filter((slot) => this.isExposed(slot));
+  /**
+   * Schutzregel: ein Command-Schiff ist gedeckt, solange im Strike-Slot davor ein Schiff steht. `seeThrough`: so
+   * sehen es Flaggschiffe, die Trugbilder durchschauen; ein Trugbild davor deckt dann nicht.
+   */
+  isExposed(slot: Slot, seeThrough = false): boolean {
+    if (slot.lane.type === "strike") return true;
+    const front = this.lane(slot.lane.side, "strike").slots[slot.index]!;
+    return !front.isOccupied || (seeThrough && front.card!.id === "decoy");
   }
 
-  /** Schiffe einer Seite für die Flottengrenze (`MAX_SHIPS_PER_SIDE`); Drohnen zählen nicht. */
+  /** Schiffe einer Seite, die beschossen werden können, in `ships`-Reihenfolge; mit `seeThrough` ist ein Trugbild weder Ziel noch Deckung. */
+  exposedShips(side: Side, seeThrough = false): Slot[] {
+    return this.ships(side).filter((slot) => this.isExposed(slot, seeThrough) && !(seeThrough && slot.card!.id === "decoy"));
+  }
+
+  /** Schiffe einer Seite für die Flottengrenze (`MAX_SHIPS_PER_SIDE`); Tokens (Drohne, Trugbild) zählen nicht. */
   shipCount(side: Side): number {
     return this.ships(side).filter((slot) => !isToken(slot.card!)).length;
   }

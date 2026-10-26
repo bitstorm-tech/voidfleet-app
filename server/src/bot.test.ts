@@ -1,54 +1,59 @@
 import { expect, test } from "bun:test";
+import { ADMIRAL_IDS, type AdmiralId } from "../../shared/admirals.ts";
 import { Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import { commandById, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
-import { planBotTurn, type BotHands } from "./bot.ts";
+import { planBotTurn, type BotView } from "./bot.ts";
 import { Match } from "./match.ts";
 
 function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: ShipId): Slot {
   return board.place(board.lane(side, lane), slotIndex, shipById(id))!;
 }
 
-function hands(ships: ShipId[], commands: CommandId[]): BotHands {
-  return { side: "player", shipHand: ships.map(shipById), commandHand: commands.map(commandById) };
+/** Halvorsen braucht für seine Fähigkeit eigene Drohnen; ohne sie plant der Bot wie ohne Admiralsfähigkeit. */
+function hands(ships: ShipId[], commands: CommandId[], admiral: AdmiralId = "halvorsen"): BotView {
+  return { side: "player", admiral, shipHand: ships.map(shipById), commandHand: commands.map(commandById), opponent: { playedCommands: [], commandHandSize: 0 } };
 }
 
 /** Ein Zug ab Runde 2, mit einem Schiff; `random` steuert die seltenen Überraschungen (1: nie, 0: immer). */
-function planTurn(board: Board, bot: BotHands, random = () => 1) {
+function planTurn(board: Board, bot: BotView, random = () => 1) {
   return planBotTurn(board, bot, 2, random);
 }
 
-/** Ein Match in Runde 2, in dem Seat 0 nur die angegebenen Karten auf der Hand hat. */
-function matchWith(ships: ShipId[], commands: CommandId[]): Match {
+/** Ein Match (ab Runde 2), in dem Seat 0 nur die angegebenen Karten auf der Hand hat. */
+function matchWith(ships: ShipId[], commands: CommandId[], round = 2): Match {
   const match = new Match("bot");
   match.join("a");
   match.join("b");
-  match.round = 2;
+  for (const seat of [0, 1] as const) match.chooseAdmiral(seat, "halvorsen");
+  match.round = round;
   const player = match.players[0]!;
   player.shipHand.splice(0, player.shipHand.length, ...ships.map(shipById));
   player.commandHand.splice(0, player.commandHand.length, ...commands.map(commandById));
   return match;
 }
 
-test("Bot gegen Bot: über 300 Partien gilt jeder Zug und jede Partie endet", () => {
+test("Bot gegen Bot: über 300 Partien mit allen Admiralen gilt jeder Zug und jede Partie endet", () => {
   // Der Overdrive lässt den Schaden steigen, bis Repair Drones nicht mehr mithalten.
   let stalemates = 0;
   for (let game = 0; game < 300; game++) {
     const match = new Match("bots");
     match.join("a");
     match.join("b");
+    match.chooseAdmiral(0, ADMIRAL_IDS[game % ADMIRAL_IDS.length]!);
+    match.chooseAdmiral(1, ADMIRAL_IDS[Math.floor(game / ADMIRAL_IDS.length) % ADMIRAL_IDS.length]!);
     while (match.winner === null) {
       if (match.round === 100) {
         stalemates += 1;
         break;
       }
       for (const player of match.players) {
-        expect(match.submit(player.seat, planBotTurn(match.board, player, match.round))).toBeNull();
+        expect(match.submit(player.seat, planBotTurn(match.board, match.botView(player.seat), match.round))).toBeNull();
       }
       match.resolveRound();
     }
   }
   expect(stalemates).toBe(0);
-});
+}, 30_000);
 
 test("Auf leerem Brett kommt das stärkste Kampfschiff nach vorne in die Mitte", () => {
   const plan = planTurn(new Board(), hands(["repair_drone", "void_interceptor", "iron_dreadnought"], []));
@@ -56,13 +61,16 @@ test("Auf leerem Brett kommt das stärkste Kampfschiff nach vorne in die Mitte",
   expect(plan.command).toBeNull();
 });
 
-test("In Runde 1 legt der Bot zwei Schiffe, das zweite mit Rücksicht auf das erste", () => {
-  const plan = planBotTurn(new Board(), hands(["repair_drone", "void_interceptor", "iron_dreadnought"], []), 1);
-  // Der Jäger steht gedeckt hinter dem Dreadnought.
+test("In Runde 1 kommt das Flaggschiff mittig in die Command-Lane, das robusteste Kampfschiff davor, und der Zug gilt", () => {
+  const match = matchWith(["repair_drone", "void_interceptor", "iron_dreadnought"], [], 1);
+  const plan = planBotTurn(match.board, match.botView(0), match.round, () => 1);
+  expect(plan.flagship).toEqual({ lane: "command", slotIndex: 2 });
+  // Hinter dem Dreadnought ist kein Command-Slot mehr frei: Der Jäger kommt daneben nach vorne.
   expect(plan.ships).toEqual([
     { handIndex: 2, target: { lane: "strike", slotIndex: 2 } },
-    { handIndex: 1, target: { lane: "command", slotIndex: 2 } },
+    { handIndex: 1, target: { lane: "strike", slotIndex: 3 } },
   ]);
+  expect(match.submit(0, plan)).toBeNull();
 });
 
 test("Jäger und Support kommen in die Command-Lane, sobald vorne ein Schiff steht; robuste Schiffe nach vorne", () => {
@@ -218,7 +226,7 @@ test("Manöver und Bewegungsbefehl verlegen verschiedene Schiffe in verschiedene
   place(board, "player", "strike", 3, "iron_dreadnought");
   place(board, "enemy", "strike", 1, "void_interceptor");
   place(board, "enemy", "strike", 2, "void_interceptor");
-  const plan = planBotTurn(board, match.players[0]!, match.round, () => 1);
+  const plan = planBotTurn(board, match.botView(0), match.round, () => 1);
   // Recall holt die erste Fregatte hinter die zweite; die zieht sich hinter den Dreadnought zurück,
   // weil Command-Slot 2 schon vergeben und Slot 1 nach dem Recall ungedeckt ist.
   expect(plan.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 1 }, destination: 2 });
@@ -274,8 +282,53 @@ test("Intercept holt einen frisch in die Command-Lane gelegten Jäger sofort nac
   const match = matchWith(["void_interceptor"], ["intercept"]);
   place(match.board, "player", "strike", 2, "iron_dreadnought");
   place(match.board, "enemy", "strike", 2, "horizon_cruiser");
-  const plan = planBotTurn(match.board, match.players[0]!, match.round, () => 1);
+  const plan = planBotTurn(match.board, match.botView(0), match.round, () => 1);
   expect(plan.ships).toEqual([{ handIndex: 0, target: { lane: "command", slotIndex: 2 } }]);
   expect(plan.command).toEqual({ handIndex: 0, target: { lane: "command", slotIndex: 2 }, destination: 1 });
   expect(match.submit(0, plan)).toBeNull();
+});
+
+test("Kerr markiert mit der Pendulum ein gegnerisches Schiff, aber nicht in der Runde, in der ihre Railgun feuert", () => {
+  const board = new Board();
+  place(board, "player", "command", 2, "pendulum");
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  const target = place(board, "enemy", "strike", 3, "horizon_cruiser");
+  expect(planTurn(board, hands([], [], "kerr")).mark).toEqual({ lane: "strike", slotIndex: 3 });
+  target.marked = true;
+  expect(planTurn(board, hands([], [], "kerr")).mark).toBeNull();
+});
+
+test("Vance setzt Fokusfeuer statt eines Manövers, wenn es im Kampf dieser Runde ein Schiff zerstört", () => {
+  const board = new Board();
+  place(board, "player", "strike", 0, "horizon_cruiser");
+  place(board, "player", "strike", 4, "horizon_cruiser");
+  place(board, "enemy", "strike", 0, "titan_carrier");
+  place(board, "enemy", "strike", 2, "scrap_raider");
+  const plan = planTurn(board, hands([], [], "vance"));
+  expect([plan.power, plan.maneuver]).toEqual([{ target: { lane: "strike", slotIndex: 2 } }, null]);
+});
+
+test("Das Flaggschiff geht in Deckung, wenn es ungedeckt unter Beschuss steht", () => {
+  const board = new Board();
+  place(board, "player", "command", 0, "bastion");
+  place(board, "player", "strike", 3, "horizon_cruiser");
+  place(board, "enemy", "strike", 0, "horizon_cruiser");
+  expect(planTurn(board, hands([], [], "osei")).maneuver).toEqual({ ship: { lane: "command", slotIndex: 0 }, destination: { lane: "command", slotIndex: 3 } });
+});
+
+test("Die Mirage tauscht ungedeckt unter Beschuss mit einem robusten Schiff in Deckung", () => {
+  const board = new Board();
+  place(board, "player", "strike", 1, "mirage");
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  place(board, "player", "command", 2, "titan_carrier");
+  place(board, "enemy", "strike", 1, "horizon_cruiser");
+  expect(planTurn(board, hands([], [], "moreau")).maneuver).toEqual({ ship: { lane: "strike", slotIndex: 1 }, destination: { lane: "command", slotIndex: 2 } });
+});
+
+test("Ein markiertes Schiff, das die gegnerische Railgun zerstören würde, geht in Deckung", () => {
+  const board = new Board();
+  place(board, "player", "command", 0, "plasma_frigate").marked = true;
+  place(board, "player", "strike", 3, "iron_dreadnought");
+  place(board, "enemy", "command", 2, "pendulum");
+  expect(planTurn(board, hands([], [], "osei")).maneuver).toEqual({ ship: { lane: "command", slotIndex: 0 }, destination: { lane: "command", slotIndex: 3 } });
 });

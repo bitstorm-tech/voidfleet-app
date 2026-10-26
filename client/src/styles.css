@@ -227,6 +227,69 @@ body {
   color: rgb(var(--enemy));
 }
 
+/* Der Admiral des Gegners: Porträt im Ring seiner Farbe, Name und Beiname, darunter Flaggschiff und Fähigkeit (Texte im Tooltip). */
+.opponent-admiral {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 9px;
+  row-gap: 3px;
+  align-items: center;
+  margin: -2px 0 10px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.opponent-admiral[hidden] {
+  display: none;
+}
+
+.opponent-admiral .portrait {
+  grid-row: span 3;
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgb(var(--admiral-rgb)), 0 0 10px rgb(var(--admiral-rgb) / 0.5);
+}
+
+.opponent-admiral .identity {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.opponent-admiral .identity b {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.opponent-admiral .identity span {
+  font-size: 10.5px;
+  color: rgb(var(--admiral-rgb));
+}
+
+.opponent-admiral .ability {
+  font-size: 10.5px;
+  line-height: 1.25;
+  pointer-events: auto;
+}
+
+.opponent-admiral .ability::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  vertical-align: 1px;
+  background: rgb(var(--admiral-rgb));
+  border-radius: 1px;
+}
+
+.opponent-admiral .ability.flagship::before {
+  background: rgb(var(--flagshipTrim));
+}
+
 .opponent-cards {
   display: grid;
   grid-template-columns: 1fr auto auto;
@@ -812,6 +875,18 @@ body {
   color: var(--text);
 }
 
+.rules-turn .frames {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.rules-turn .or {
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 .rules-turn .frame {
   width: 98px;
   height: 137px;
@@ -820,6 +895,11 @@ body {
 .rules-turn .frame > * {
   transform-origin: top left;
   scale: 0.7;
+}
+
+/* Die Fähigkeitskarte ist flacher als die übrigen; unten bündig mit ihnen. */
+.rules-turn .frame:has(.power-card) {
+  height: 105px;
 }
 
 .rules-turn .frame .rules-svg {
@@ -893,9 +973,175 @@ body {
   justify-content: space-between;
 }
 
+/* Passt eine Hand nicht in ihre Hälfte der Leiste, schieben sich ihre Karten übereinander (`--card-gap`, `hand.ts`). */
 .hand {
   display: flex;
-  gap: 10px;
+}
+
+.hand > .card {
+  flex: none;
+}
+
+.hand > .card + .card {
+  margin-left: var(--card-gap, 10px);
+}
+
+/* Rechts: Admiralsfähigkeit (darüber bei Kerr die Zielerfassung) und die Befehle. */
+.hand-side {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.admiral-area {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 140px;
+  height: 196px;
+}
+
+.admiral-area[hidden] {
+  display: none;
+}
+
+/* Die Fähigkeitskarte: Porträt als Hintergrund, Rahmen und Schrift in der Farbe des Admirals; flacher als die übrigen Karten. */
+.card.power-card {
+  flex: none;
+  height: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 8px 7px;
+  text-align: center;
+  background:
+    linear-gradient(to bottom, rgb(14 16 22 / 0.9) 0%, rgb(14 16 22 / 0.35) 34%, rgb(14 16 22 / 0.55) 55%, rgb(14 16 22 / 0.95) 80%),
+    var(--portrait) center 22% / cover;
+  border: 1px solid rgb(var(--admiral-rgb) / 0.75);
+  border-top: 5px solid rgb(var(--admiral-rgb));
+  border-radius: 4px;
+  box-shadow: 0 0 14px rgb(var(--admiral-rgb) / 0.35);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.9);
+}
+
+.power-card .power-label {
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgb(var(--admiral-rgb));
+}
+
+.power-card .name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.power-card .target {
+  font-size: 8px;
+  color: rgb(191 224 255 / 0.9);
+}
+
+.power-card .effect {
+  margin-top: auto;
+  font-size: 7.5px;
+  line-height: 1.3;
+  color: rgb(235 242 255);
+}
+
+.power-card .hint {
+  font-size: 7px;
+  font-style: italic;
+  color: rgb(var(--admiral-rgb));
+}
+
+.power-card.blocked {
+  filter: saturate(0.4) brightness(0.7);
+}
+
+/* Während der Zielwahl pulsiert der Rahmen in der Farbe des Admirals. */
+.power-card.selecting,
+.lock-button.selecting {
+  animation: power-selecting 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes power-selecting {
+  from { box-shadow: 0 0 0 2px rgb(var(--admiral-rgb) / 0.6), 0 0 10px rgb(var(--admiral-rgb) / 0.4); }
+  to { box-shadow: 0 0 0 3px rgb(var(--admiral-rgb)), 0 0 26px rgb(var(--admiral-rgb) / 0.9); }
+}
+
+/* Zielerfassung der Pendulum über der Fähigkeitskarte; in der Feuerrunde steht dort das Ziel der Railgun. */
+#ui .lock-button,
+.railgun-status {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 7px;
+  min-height: 38px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  text-align: left;
+  border: 1px solid rgb(var(--admiral-rgb) / 0.6);
+  border-radius: 4px;
+}
+
+#ui .lock-button {
+  color: var(--text);
+  background: rgb(var(--admiral-rgb) / 0.14);
+}
+
+#ui .lock-button:hover {
+  background: rgb(var(--admiral-rgb) / 0.3);
+}
+
+#ui .lock-button.selected {
+  border-color: rgb(var(--select));
+  box-shadow: 0 0 0 1px rgb(var(--select));
+}
+
+#ui .lock-button.blocked {
+  opacity: 0.45;
+}
+
+.lock-button[hidden],
+.railgun-status[hidden] {
+  display: none !important;
+}
+
+.railgun-status {
+  color: var(--text);
+  background: rgb(var(--admiral-rgb) / 0.22);
+  pointer-events: auto;
+}
+
+.lock-button svg,
+.railgun-status svg {
+  grid-row: span 2;
+  width: 18px;
+  height: 18px;
+  color: rgb(var(--admiral-rgb));
+}
+
+.lock-button em,
+.railgun-status em {
+  font-size: 9.5px;
+  font-style: normal;
+  line-height: 1.2;
+  color: rgb(var(--damage));
+}
+
+.lock-button em:empty,
+.railgun-status em:empty {
+  display: none;
+}
+
+.railgun-status.warning,
+#ui .lock-button.warning {
+  border-color: rgb(var(--damage) / 0.8);
 }
 
 .submit-area {
@@ -1069,6 +1315,35 @@ body {
   color: var(--text);
 }
 
+/* Flaggschiff: goldener Rahmen, Kopfleiste in der Farbe des Admirals und eine Krone. */
+.flagship-card {
+  border-top-color: rgb(var(--admiral-rgb));
+  box-shadow:
+    inset 0 0 0 2px rgb(var(--flagshipTrim) / 0.85),
+    0 0 16px rgb(var(--flagshipTrim) / 0.35);
+}
+
+.flagship-card .crown {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  width: 20px;
+  height: 20px;
+  color: rgb(var(--flagshipTrim));
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.9));
+}
+
+.flagship-card .crown svg,
+.admiral-card h4 svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.flagship-card .name {
+  padding-right: 18px;
+}
+
 /* Befehlskarten als Datapad: dunkler Rahmen, Illustration im Farbton des Befehlstyps als Screen, Tastenleiste unten. */
 .command-card {
   display: flex;
@@ -1146,9 +1421,8 @@ body {
   left: 50%;
   translate: -50% 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 14px;
   min-width: 280px;
   padding: 10px 28px;
   background: var(--panel);
@@ -1162,10 +1436,26 @@ body {
   --banner-color: rgb(var(--enemy));
 }
 
+.reveal-banner > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
 .reveal-banner strong {
   font-size: 22px;
   font-weight: 600;
   color: var(--banner-color);
+}
+
+/* Admiralsfähigkeiten und Fähigkeiten der Flaggschiffe: Porträt des Admirals im Ring seiner Farbe. */
+.banner-portrait {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgb(var(--admiral-rgb)), 0 0 14px rgb(var(--admiral-rgb) / 0.6);
 }
 
 .reveal-banner span {
@@ -1454,4 +1744,235 @@ body {
 @keyframes loading-sweep {
   from { translate: -100% 0; }
   to { translate: 340% 0; }
+}
+
+/* --- Admiralswahl: Overlay über dem Brett, die Hand darunter bleibt frei --- */
+
+.admiral-overlay {
+  position: absolute;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 230px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  gap: 4px;
+  padding: 0 24px;
+  overflow-y: auto;
+  background: radial-gradient(ellipse at center, rgb(var(--background) / 0.82), rgb(var(--background) / 0.55) 75%);
+  pointer-events: auto;
+  animation: result-fade 0.4s ease-out;
+}
+
+.admiral-overlay[hidden] {
+  display: none;
+}
+
+.admiral-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.admiral-hint {
+  margin: 0 0 8px;
+  max-width: 980px;
+  font-size: 13.5px;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.admiral-cards {
+  display: flex;
+  gap: 14px;
+}
+
+/* Eine Karte je Admiral: Porträt, Name und Beiname, Flaggschiff und Admiralsfähigkeit, alles in seiner Farbe. */
+#ui .admiral-card {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 220px;
+  min-width: 170px;
+  padding: 0 0 9px;
+  overflow: hidden;
+  text-align: left;
+  background: rgb(22 26 34 / 0.96);
+  border: 1px solid rgb(var(--admiral-rgb) / 0.55);
+  border-top: 4px solid rgb(var(--admiral-rgb));
+  border-radius: 4px;
+  transition:
+    translate 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+#ui .admiral-card:hover:not(:disabled) {
+  translate: 0 -6px;
+  background: rgb(26 30 40 / 0.98);
+  box-shadow: 0 0 26px rgb(var(--admiral-rgb) / 0.5);
+}
+
+#ui .admiral-card.chosen {
+  opacity: 1;
+  box-shadow:
+    0 0 0 2px rgb(var(--admiral-rgb)),
+    0 0 30px rgb(var(--admiral-rgb) / 0.7);
+}
+
+#ui .admiral-card:disabled:not(.chosen) {
+  opacity: 0.35;
+}
+
+.admiral-card .portrait {
+  height: 92px;
+  background: center 25% / cover;
+  mask-image: linear-gradient(to bottom, black 70%, transparent);
+}
+
+.admiral-card .identity {
+  display: flex;
+  flex-direction: column;
+  margin-top: -18px;
+  padding: 0 12px;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
+}
+
+.admiral-card .identity b {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.admiral-card .identity span {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--admiral-rgb));
+}
+
+.admiral-card section {
+  padding: 0 12px;
+}
+
+.admiral-card h4 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgb(199 219 250 / 0.6);
+}
+
+.admiral-card h4 svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: rgb(var(--flagshipTrim));
+}
+
+.admiral-card .ship {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 3px;
+}
+
+.admiral-card .ship b {
+  font-size: 13.5px;
+  color: rgb(var(--flagshipTrim));
+}
+
+.admiral-card .ship span {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.admiral-card p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.34;
+  color: var(--text-dim);
+}
+
+.admiral-card p b {
+  color: var(--text);
+}
+
+.admiral-card .power p b {
+  color: rgb(var(--admiral-rgb));
+}
+
+.admiral-card .choose {
+  margin: auto 12px 0;
+  padding: 4px 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+  color: rgb(var(--admiral-rgb));
+  border: 1px solid rgb(var(--admiral-rgb) / 0.6);
+  border-radius: 3px;
+}
+
+#ui .admiral-card:hover:not(:disabled) .choose,
+#ui .admiral-card.chosen .choose {
+  color: rgb(var(--background));
+  background: rgb(var(--admiral-rgb));
+}
+
+/* Die Admirale im Regel-Dialog: Porträt, Name, Flaggschiff und Fähigkeitskarte je Admiral. */
+.rules-admirals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.rules-admiral {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px;
+  background: rgb(255 255 255 / 0.03);
+  border-left: 3px solid rgb(var(--admiral-rgb));
+  border-radius: 3px;
+}
+
+.rules-admiral .portrait {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgb(var(--admiral-rgb));
+}
+
+.rules-admiral .identity {
+  display: flex;
+  flex-direction: column;
+}
+
+.rules-admiral .identity b {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.rules-admiral .identity span {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--admiral-rgb));
+}
+
+.rules-admiral .cards {
+  grid-column: span 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.rules-admiral .card {
+  pointer-events: none;
 }

@@ -1,15 +1,19 @@
 // Spielregeln: Fragezeichen-Knopf links neben dem Zahnrad öffnet einen großen modalen
 // Dialog mit Kapitelnavigation links und dem Regeltext rechts. Die Texte kommen aus
 // `t.rules.sections`; jedes Kapitel bekommt hier seine Illustration (`rulesFigures.ts`),
-// Screenshots aus `assets/images/rules/` oder die Galerie aller Karten (`cardView.ts`).
+// Screenshots aus `assets/images/rules/`, die Admirale mit Flaggschiff und Fähigkeitskarte oder die Galerie
+// aller Karten samt Flaggschiffen und Tokens (`cardView.ts`).
 
-import { COMMAND_ORDER, COMMANDS, deckCopies, SHIPS, TOKENS, type Card, type CommandType } from "../../../shared/cards.ts";
+import { ADMIRAL_IDS, ADMIRALS } from "../../../shared/admirals.ts";
+import { COMMAND_ORDER, COMMANDS, deckCopies, FLAGSHIPS, isToken, SHIPS, shipById, TOKENS, type Card, type CommandType } from "../../../shared/cards.ts";
 import deployScreenshot from "../../assets/images/rules/deploy.jpg";
 import maneuverScreenshot from "../../assets/images/rules/maneuver.jpg";
+import { admiralPortrait, flagshipAdmiral } from "../data/admirals.ts";
 import type { Messages, RulesSection } from "../i18n/en.ts";
-import { cardText, t } from "../i18n/index.ts";
+import { admiralTitle, cardText, t } from "../i18n/index.ts";
 import { createCard } from "./cardView.ts";
 import { iconDialog } from "./iconDialog.ts";
+import { createPowerCard } from "./powerCard.ts";
 import { boardFigure, overdriveFigure, phasesFigure, targetingFigure, turnFigure } from "./rulesFigures.ts";
 
 type SectionId = keyof Messages["rules"]["sections"];
@@ -22,6 +26,8 @@ const ICON = `<circle cx="12" cy="12" r="10" />
 const CHAPTERS: readonly { id: SectionId; figures?: (() => Element)[]; after?: number }[] = [
   { id: "goal", figures: [overdriveFigure] },
   { id: "turn", figures: [turnFigure, () => screenshot(deployScreenshot)], after: 2 },
+  { id: "admirals" },
+  { id: "roster", figures: [admiralGallery] },
   { id: "board", figures: [boardFigure], after: 2 },
   { id: "movement", figures: [() => screenshot(maneuverScreenshot)], after: 1 },
   { id: "resolution", figures: [phasesFigure] },
@@ -86,18 +92,42 @@ function screenshot(url: string): HTMLImageElement {
   return Object.assign(document.createElement("img"), { src: url, alt: "", loading: "lazy" });
 }
 
-/** Alle Schiffe als Karte mit Werten, Klasse und ihrem Zielverhalten, zuletzt die Tokens wie die Drohne. */
+/** Je Admiral Porträt, Name und Beiname, sein Flaggschiff und die Karte seiner Fähigkeit. */
+function admiralGallery(): HTMLElement {
+  const grid = Object.assign(document.createElement("div"), { className: "rules-admirals" });
+  for (const admiral of ADMIRAL_IDS) {
+    const entry = Object.assign(document.createElement("div"), { className: "rules-admiral" });
+    entry.style.setProperty("--admiral-rgb", `var(--${admiral})`);
+    const portrait = Object.assign(document.createElement("img"), { className: "portrait", src: admiralPortrait(admiral), alt: "", loading: "lazy" });
+    const name = Object.assign(document.createElement("div"), { className: "identity" });
+    name.append(
+      Object.assign(document.createElement("b"), { textContent: t.admirals[admiral].name }),
+      Object.assign(document.createElement("span"), { textContent: t.admirals[admiral].epithet }),
+    );
+    const cards = Object.assign(document.createElement("div"), { className: "cards" });
+    cards.append(createCard(shipById(ADMIRALS[admiral].flagship)), createPowerCard(admiral));
+    entry.append(portrait, name, cards);
+    grid.append(entry);
+  }
+  return grid;
+}
+
+/** Alle Schiffe als Karte mit Werten, Klasse und ihrem Zielverhalten, danach die Tokens wie die Drohne und die Flaggschiffe. */
 function shipGallery(): HTMLElement {
   return gallery(
-    [...SHIPS, ...TOKENS].map((card) => ({
-      card,
-      meta: t.shipClasses[card.shipClass],
-      lines: [
-        `${t.stats.hp} ${card.hp} · ${t.stats.atk} ${card.atk}${card.shield > 0 ? ` · ${t.stats.shield} ${card.shield}` : ""}`,
-        cardText(card).effect,
-        `${t.shipClasses[card.shipClass]} ${t.rules.classes[card.shipClass]}`,
-      ],
-    })),
+    [...SHIPS, ...TOKENS, ...FLAGSHIPS].map((card) => {
+      const admiral = flagshipAdmiral(card.id);
+      const origin = admiral ? t.rules.flagship(admiralTitle(admiral)) : isToken(card) ? t.rules.token : null;
+      return {
+        card,
+        meta: [t.shipClasses[card.shipClass], origin].filter(Boolean).join(" · "),
+        lines: [
+          `${t.stats.hp} ${card.hp} · ${t.stats.atk} ${card.atk}${card.shield > 0 ? ` · ${t.stats.shield} ${card.shield}` : ""}`,
+          admiral ? `${t.admirals[admiral].ability}: ${cardText(card).effect}` : cardText(card).effect,
+          `${t.shipClasses[card.shipClass]} ${t.rules.classes[card.shipClass]}`,
+        ],
+      };
+    }),
   );
 }
 
