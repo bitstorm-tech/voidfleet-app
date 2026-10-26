@@ -293,12 +293,11 @@ class Situation {
   }
 
   /**
-   * Freie Slots, in die das Schiff wechseln kann, neben dem Lane-Wechsel `other` (siehe `Board.canMove`): Beide Ziele
-   * zählen zur Lane-Grenze, auch das eines Tokens, und auch der Befehl muss danach noch gelten.
+   * Freie Slots, in die das Schiff wechseln kann, neben dem Lane-Wechsel `other` (siehe `Board.canMove`): Sein Ziel ist
+   * belegt, und die Lane-Grenze gilt für beide Bewegungen zusammen, so wie der Server sie prüft.
    */
   private destinations(slot: Slot, other: Move | null): Slot[] {
-    const free = this.board.maneuverDestinations(slot, other ? [slotTarget(other.destination)] : []);
-    return other ? free.filter((destination) => this.board.canMove(other.ship, slotTarget(other.destination), [slotTarget(destination)])) : free;
+    return this.board.maneuverDestinations(slot, [], other && { from: other.ship, to: other.destination });
   }
 
   /**

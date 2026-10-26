@@ -4,15 +4,9 @@
 
 import { ADMIRALS, targetsEnemy, type AdmiralId, type PowerId } from "../../../shared/admirals.ts";
 import { commandById, isToken, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "../../../shared/cards.ts";
-import { Board, isSameSlot, maxDeploys, otherLane, overdriveBonus, slotTarget, type Side, type Slot } from "../../../shared/board.ts";
+import { Board, isSameSlot, maxDeploys, otherLane, overdriveBonus, slotTarget, type PlannedMove, type Side, type Slot } from "../../../shared/board.ts";
 import { canMark, markTargets, powerTargets, railgunFires } from "../../../shared/powers.ts";
 import type { MatchResult, OpponentView, PlayerView, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
-
-/** Eine eingeplante Bewegung: der Slot des Schiffs und der Slot, in den es geht (beim Phasentausch belegt). */
-export interface PlannedMove {
-  from: Slot;
-  to: Slot;
-}
 
 /** Ein Schiff zum Legen: eine Karte der Schiffshand (Index) oder in Runde 1 das Flaggschiff. */
 export type ShipPick = number | "flagship";
@@ -198,8 +192,7 @@ export class Match {
     const maneuver = this.plannedManeuver;
     if (maneuver?.from === from || this.plannedSwap?.to === from) return [];
     // Beim Phasentausch ist das Ziel schon belegt; der Tausch ändert die Schiffszahl keiner Lane.
-    const arriving = this.plannedSwap ? null : maneuver && slotTarget(maneuver.to);
-    const destinations = this.board.laneSwitchDestinations(from, [...this.arrivals.map((arrival) => arrival.target), arriving]);
+    const destinations = this.board.laneSwitchDestinations(from, this.arrivals.map((arrival) => arrival.target), this.plannedSwap ? null : maneuver);
     const decoy = this.plannedDecoy;
     return decoy ? destinations.filter((slot) => !isSameSlot(slotTarget(slot), decoy)) : destinations;
   }
@@ -211,7 +204,7 @@ export class Match {
   maneuverDestinations(from: Slot): Slot[] {
     const command = this.plannedCommandMove;
     if (!from.isOccupied || command?.from === from) return [];
-    const free = this.board.maneuverDestinations(from, [...this.arrivals.map((arrival) => arrival.target), command && slotTarget(command.to)]);
+    const free = this.board.maneuverDestinations(from, this.arrivals.map((arrival) => arrival.target), command);
     if (from.card!.id !== "mirage") return free;
     const partners = this.board.ships("player").filter((slot) => slot !== from && slot !== command?.from);
     return [...free, ...partners];
@@ -232,8 +225,7 @@ export class Match {
     const keptCommand = command !== null && keeps(command) ? command : null;
     // Der Phasentausch geht in einen belegten Slot; ihm kann kein Deploy im Weg stehen.
     const maneuver = this.plannedSwap ? null : this.plannedManeuver;
-    const fits = (move: PlannedMove | null, other: PlannedMove | null) =>
-      move === null || this.board.canMove(move.from, slotTarget(move.to), [...deploys, other && slotTarget(other.to)]);
+    const fits = (move: PlannedMove | null, other: PlannedMove | null) => move === null || this.board.canMove(move.from, slotTarget(move.to), deploys, other);
     return fits(keptCommand, maneuver) && fits(maneuver, keptCommand);
   }
 

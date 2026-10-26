@@ -9,7 +9,7 @@
 
 import { ADMIRAL_IDS, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
 import { canTargetLane, needsTarget, shipById, targetsEnemySlot, type CommandCard, type CommandId, type ShipCard } from "../../shared/cards.ts";
-import { Board, isSameSlot, maxDeploys, opposite, otherLane, overdriveBonus, type Side } from "../../shared/board.ts";
+import { Board, isSameSlot, maxDeploys, opposite, otherLane, overdriveBonus, type PlannedMove, type Side } from "../../shared/board.ts";
 import { canMark, markTargets, powerTargets, type PlannedArrival } from "../../shared/powers.ts";
 import type { ErrorCode, MatchResult, OpponentView, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { resolveTurns, type Commander, type Turn } from "../../shared/resolution.ts";
@@ -240,6 +240,7 @@ export class Match {
     }
     // Das Grundmanöver geht in einen freien Slot; nur die Mirage darf in einen belegten und tauscht dann (Phasentausch).
     let swap = false;
+    let maneuver: PlannedMove | null = null;
     if (plan.maneuver) {
       const { ship, destination } = plan.maneuver;
       const slot = board.lane(side, ship.lane).slots[ship.slotIndex];
@@ -248,9 +249,11 @@ export class Match {
       swap = to !== undefined && to !== slot && to.isOccupied;
       if (swap && slot.card!.id !== "mirage") return "swap_not_allowed";
       if (!swap && !board.canMove(slot, destination, deploys)) return "maneuver_destination_unavailable";
+      // Der Phasentausch ändert die Schiffszahl keiner Lane und steht dem Befehl nicht im Weg.
+      if (!swap) maneuver = { from: slot, to: to! };
     }
     // Manöver und Bewegungsbefehl dürfen nicht im selben Slot landen und zusammen mit den Deploys die
-    // Lane-Grenze nicht überschreiten; `canMove` prüft das beim Befehl mit allen Ankünften.
+    // Lane-Grenze nicht überschreiten; `canMove` prüft das beim Befehl mit den Deploys und dem Manöver.
     let moved: SlotTarget | null = null;
     if (plan.command) {
       const { handIndex, target } = plan.command;
@@ -272,8 +275,7 @@ export class Match {
       if (card.moves && target && maneuvered.some((ship) => isSameSlot(ship, target))) return "maneuver_conflict";
       // Bewegt sich ein gelegtes Schiff, ist `from` sein noch leerer Slot; `canMove` zählt Deploys nur in der Ziel-Lane.
       moved = target && destination !== null ? { lane: otherLane(target.lane), slotIndex: destination } : null;
-      const maneuver = swap ? null : (plan.maneuver?.destination ?? null);
-      if (slot && moved && !board.canMove(slot, moved, [...deploys, maneuver])) return "destination_unavailable";
+      if (slot && moved && !board.canMove(slot, moved, deploys, maneuver)) return "destination_unavailable";
     }
     // Die Admiralsfähigkeit statt des Grundmanövers; das Trugbild erscheint nicht, wo der Befehl ein Schiff hinbringt.
     if (plan.power) {

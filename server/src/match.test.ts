@@ -314,6 +314,26 @@ test("Manöver und Bewegungsbefehl bewegen verschiedene Schiffe in verschiedene 
   expect(match.submit(0, moves(null, strike(1), command(2), strike(4), 4))).toBeNull();
 });
 
+test("Ein Manöver innerhalb der Ziel-Lane des Bewegungsbefehls und eine Drohne zählen dort nicht zusätzlich zur Lane-Grenze", () => {
+  const match = midGame();
+  const player = match.players[0]!;
+  const ship = player.shipHand[0]!;
+  for (const index of [0, 1, 2]) match.board.place(match.board.lane("player", "strike"), index, ship);
+  for (const index of [1, 3]) match.board.place(match.board.lane("player", "command"), index, ship);
+  match.board.place(match.board.lane("player", "command"), 5, shipById("drone"));
+  player.commandHand.splice(0, player.commandHand.length, commandById("intercept"));
+  const intercept = (from: SlotTarget, destination: SlotTarget): TurnPlan =>
+    plan({ command: { handIndex: 0, target: command(3), destination: 4 }, maneuver: { ship: from, destination } });
+  // Strike: 3 Schiffe und das verlegte macht 4; das manövrierende bleibt in der Lane, die Drohne zählt nicht.
+  expect(match.submit(0, intercept(strike(0), strike(5)))).toBeNull();
+  player.plan = null;
+  expect(match.submit(0, intercept(command(5), strike(5)))).toBeNull();
+  player.plan = null;
+  // Ein Schiff aus der Command-Lane wäre das fünfte; in den Slot des Manövers wechselt der Befehl nie.
+  expect(match.submit(0, intercept(command(1), strike(5)))).toBe("destination_unavailable");
+  expect(match.submit(0, intercept(strike(0), strike(4)))).toBe("destination_unavailable");
+});
+
 test("Ein Befehl auf das manövrierte Schiff folgt ihm; es feuert nicht, wird aber beschossen", () => {
   const match = midGame();
   match.players[0]!.commandHand.splice(0, match.players[0]!.commandHand.length, commandById("overcharge"));

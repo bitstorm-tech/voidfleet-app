@@ -25,7 +25,7 @@
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
 import { canTargetLane, needsTarget, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
-import { isSameSlot, maxDeploys, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, overdriveBonus, slotTarget, type Slot } from "../../shared/board.ts";
+import { isSameSlot, maxDeploys, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, overdriveBonus, slotTarget, type PlannedMove, type Slot } from "../../shared/board.ts";
 import type { MatchResult, OpponentView, ServerMessage, SlotRef } from "../../shared/protocol.ts";
 import { setMusicMood } from "./audio/music.ts";
 import { say } from "./audio/radio.ts";
@@ -33,7 +33,7 @@ import { playUiSound } from "./audio/uiSounds.ts";
 import { powerAdmiral } from "./data/admirals.ts";
 import { color3 } from "./data/palette.ts";
 import type { RadioCue } from "./data/radio.ts";
-import { Match, type PlannedMove, type ShipPick } from "./game/match.ts";
+import { Match, type ShipPick } from "./game/match.ts";
 import { previewRound, type RoundPreview } from "./game/preview.ts";
 import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";

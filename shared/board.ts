@@ -39,6 +39,17 @@ export function slotTarget(slot: Slot): SlotTarget {
   return { lane: slot.lane.type, slotIndex: slot.index };
 }
 
+/** Eine eingeplante Bewegung: der Slot des Schiffs und der Slot, in den es geht (beim Phasentausch belegt). */
+export interface PlannedMove {
+  from: Slot;
+  to: Slot;
+}
+
+/** Ob die Bewegung ein Schiff aus der anderen Lane nach `lane` bringt, das zur Lane-Grenze zählt (kein Token). */
+function joins(move: PlannedMove, lane: Lane): boolean {
+  return move.to.lane === lane && move.from.lane !== lane && !(move.from.card && isToken(move.from.card));
+}
+
 export const SLOT_COUNT = 6;
 export const MAX_SHIPS_PER_LANE = 4;
 export const MAX_SHIPS_PER_SIDE = 6;
@@ -324,36 +335,39 @@ export class Board {
 
   /**
    * Ob das Schiff in `from` in den freien Slot `to` seiner Seite wechseln kann, in der anderen oder
-   * derselben Lane. `arrivals` sind die Slots, die dieselbe Seite in dieser Runde sonst noch belegt:
-   * die Deploys (sie landen vor allen Bewegungen) und das Ziel der zweiten Bewegung (Grundmanöver bzw.
-   * Bewegungsbefehl). Sie gelten als besetzt und zählen zur Lane-Grenze. Bewusst streng: Ein Schiff,
-   * das sich bewegt, gibt seinen Slot und seinen Platz in der Lane für die anderen Bewegungen dieser
-   * Runde nicht frei. Nur die eigene Bewegung innerhalb der Lane ändert deren Schiffszahl nicht. Eine
-   * Drohne zählt nicht zur Lane-Grenze und braucht nur einen freien Slot.
+   * derselben Lane. `deploys` sind die Slots, auf denen dieselbe Seite in dieser Runde Schiffe legt (sie
+   * landen vor allen Bewegungen), `other` ist ihre zweite Bewegung (Grundmanöver bzw. Bewegungsbefehl;
+   * ein Phasentausch ändert die Schiffszahl keiner Lane und gehört nicht hierher). Ihre Slots gelten
+   * als besetzt. Zur Lane-Grenze zählen die Deploys und die zweite Bewegung, wenn sie ein Schiff aus der
+   * anderen Lane bringt. Bewusst streng: Ein Schiff, das sich bewegt, gibt seinen Slot und seinen Platz
+   * in der Lane für die anderen Bewegungen dieser Runde nicht frei. Eine Bewegung innerhalb der Lane
+   * ändert deren Schiffszahl nicht. Eine Drohne zählt nicht zur Lane-Grenze und braucht nur einen
+   * freien Slot.
    */
-  canMove(from: Slot, to: SlotTarget, arrivals: readonly (SlotTarget | null)[] = []): boolean {
+  canMove(from: Slot, to: SlotTarget, deploys: readonly SlotTarget[] = [], other: PlannedMove | null = null): boolean {
     const lane = this.lane(from.lane.side, to.lane);
     const slot = lane.slots[to.slotIndex];
-    if (slot === undefined || slot.isOccupied) return false;
-    const incoming = arrivals.filter((arrival) => arrival?.lane === lane.type);
-    if (incoming.some((arrival) => arrival!.slotIndex === to.slotIndex)) return false;
+    if (slot === undefined || slot.isOccupied || slot === other?.to) return false;
+    const incoming = deploys.filter((deploy) => deploy.lane === lane.type);
+    if (incoming.some((deploy) => deploy.slotIndex === to.slotIndex)) return false;
     // `from` ist noch leer, wenn das Schiff erst in dieser Runde landet.
     if (from.card && isToken(from.card)) return true;
+    const joining = other && joins(other, lane) ? 1 : 0;
     const staying = lane === from.lane ? 1 : 0;
-    return lane.shipCount + incoming.length - staying < MAX_SHIPS_PER_LANE;
+    return lane.shipCount + incoming.length + joining - staying < MAX_SHIPS_PER_LANE;
   }
 
   /** Slots der anderen Lane, in die das Schiff in `from` per Bewegungsbefehl wechseln kann (siehe `canMove`). */
-  laneSwitchDestinations(from: Slot, arrivals: readonly (SlotTarget | null)[] = []): Slot[] {
+  laneSwitchDestinations(from: Slot, deploys: readonly SlotTarget[] = [], other: PlannedMove | null = null): Slot[] {
     const lane = this.lane(from.lane.side, otherLane(from.lane.type));
-    return lane.slots.filter((slot) => this.canMove(from, slotTarget(slot), arrivals));
+    return lane.slots.filter((slot) => this.canMove(from, slotTarget(slot), deploys, other));
   }
 
   /** Slots beider eigenen Lanes, in die das Schiff in `from` per Grundmanöver wechseln kann (siehe `canMove`). */
-  maneuverDestinations(from: Slot, arrivals: readonly (SlotTarget | null)[] = []): Slot[] {
+  maneuverDestinations(from: Slot, deploys: readonly SlotTarget[] = [], other: PlannedMove | null = null): Slot[] {
     return this.lanesFor(from.lane.side)
       .flatMap((lane) => lane.slots)
-      .filter((slot) => this.canMove(from, slotTarget(slot), arrivals));
+      .filter((slot) => this.canMove(from, slotTarget(slot), deploys, other));
   }
 
   /** Platziert ein Schiff; gibt den Slot zurück oder null bei Regelverstoß. */
