@@ -1,8 +1,8 @@
-// Einstellungen: Zahnrad-Knopf oben rechts neben dem Vollbild-Knopf öffnet einen modalen Dialog
+// Einstellungen: Zahnrad-Knopf oben rechts neben dem Ansichts-Knopf öffnet einen modalen Dialog
 // mit Reglern für die Lautstärke von Musik, Effekten und Bordfunk, je einer Geschwindigkeitswahl für Angriffe,
-// Schiffsbewegungen und die übrigen Animationen, der Sprache und, solange der Browser es anbietet,
-// dem Installieren als eigene App (`install.ts`). Jede Auswahl wird gespeichert
-// (`settings.ts`); Lautstärken und Geschwindigkeiten gelten sofort, ein Sprachwechsel lädt die Seite neu.
+// Schiffsbewegungen und die übrigen Animationen, der Ansicht, mit der das Brett startet, der Sprache und, solange der
+// Browser es anbietet, dem Installieren als eigene App (`install.ts`). Jede Auswahl wird gespeichert
+// (`settings.ts`); Lautstärken, Geschwindigkeiten und Ansicht gelten sofort, ein Sprachwechsel lädt die Seite neu.
 
 import { locale, LOCALE_NAMES, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
@@ -25,6 +25,7 @@ export class SettingsDialog {
       speedChoice("attackSpeed"),
       speedChoice("movementSpeed"),
       speedChoice("animationSpeed"),
+      choice("cameraView", t.settings.cameraView, t.settings.cameraViews, settings.cameraView, (next) => updateSettings({ cameraView: next })),
       choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
       installRow(),
     );

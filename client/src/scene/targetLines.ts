@@ -38,6 +38,7 @@ const ALPHA = 0.75;
 export class TargetLines {
   private readonly materials: Record<Side, StandardMaterial>;
   private meshes: Mesh[] = [];
+  private lines: readonly TargetLine[] = [];
   /** Die gezeigten Bögen als Schlüssel, damit unveränderte nicht neu entstehen. */
   private shown = "";
 
@@ -61,7 +62,15 @@ export class TargetLines {
     if (shown === this.shown) return;
     this.clear();
     this.shown = shown;
+    this.lines = lines;
     for (const line of lines) this.meshes.push(...this.arc(line));
+  }
+
+  /** Zeichnet die Bögen an der jetzigen Stelle der Pads neu, während das Brett beim Wechsel der Ansicht umzieht. */
+  refresh(): void {
+    const lines = this.lines;
+    this.clear();
+    this.show(lines);
   }
 
   private arc({ from, to, side }: TargetLine): Mesh[] {

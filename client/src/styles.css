@@ -70,7 +70,7 @@ body {
   position: absolute;
   top: 24px;
   left: 32px;
-  right: 212px;
+  right: 248px;
   display: flex;
   align-items: flex-start;
   gap: 24px;
@@ -116,7 +116,7 @@ body {
   gap: 4px;
 }
 
-/* Unauffällige Icon-Knöpfe oben rechts: Log, Vollbild, Einstellungen, Regeln und Aufgeben. */
+/* Unauffällige Icon-Knöpfe oben rechts: Log, Vollbild, Ansicht, Einstellungen, Regeln und Aufgeben. */
 .icon-button {
   width: 32px;
   height: 32px;
@@ -142,22 +142,28 @@ body {
   right: 44px;
 }
 
-.settings-toggle {
+.view-toggle {
   position: absolute;
   top: 8px;
   right: 80px;
 }
 
-.rules-toggle {
+.settings-toggle {
   position: absolute;
   top: 8px;
   right: 116px;
 }
 
-.surrender-toggle {
+.rules-toggle {
   position: absolute;
   top: 8px;
   right: 152px;
+}
+
+.surrender-toggle {
+  position: absolute;
+  top: 8px;
+  right: 188px;
 }
 
 .surrender-toggle[hidden] {

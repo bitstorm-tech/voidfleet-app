@@ -125,7 +125,7 @@ export async function destroyShip(ship: ShipView, view: MatchScene): Promise<voi
  */
 async function agony(ship: ShipView, profile: DestructionProfile, view: MatchScene): Promise<void> {
   const center = ship.center;
-  const groan = playSound("hull_stress", { x: center.x, volume: Math.min(profile.agony / 1600, 1) });
+  const groan = playSound("hull_stress", { at: center, volume: Math.min(profile.agony / 1600, 1) });
   const points = ship.surfacePoints(profile.pops);
   const schedule = points.map(() => 0.12 + 0.8 * Math.random() ** 0.7).sort((a, b) => a - b);
   let next = 0;

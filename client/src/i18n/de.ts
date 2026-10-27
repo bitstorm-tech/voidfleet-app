@@ -58,6 +58,8 @@ export const de: Messages = {
     install: "App",
     installButton: "Voidfleet als App installieren",
     speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
+    cameraView: "Standardansicht",
+    cameraViews: { side: "Von der Seite", top: "Von hinten oben" },
   },
   rules: {
     title: "Spielregeln",
@@ -229,6 +231,9 @@ export const de: Messages = {
   fullscreen: {
     enter: "Vollbild (F)",
     exit: "Vollbild beenden (F)",
+  },
+  cameraView: {
+    toggle: "Ansicht wechseln (V)",
   },
   surrender: {
     title: "Aufgeben",

@@ -102,8 +102,6 @@ const COMMAND_SOUNDS: Record<CommandId, SoundId | null> = {
   bombardment: "orbital_strike",
   crossfire: "laser_medium",
 };
-/** Mitte einer Brettseite (Welt-x), für Sounds ohne Schiff. */
-const SIDE_X: Record<Side, number> = { player: -4.5, enemy: 4.5 };
 
 /** Pause zwischen zwei Schritten, damit man sie auseinanderhalten kann. */
 const STEP_PAUSE = 200;
@@ -364,7 +362,7 @@ export class RoundPlayback {
     const sound = COMMAND_SOUNDS[event.cardId];
     if (event.kind === "noEffect") return playUiSound("denied");
     if (!sound) return;
-    playSound(sound, { x: event.kind === "effect" || event.kind === "miss" ? this.centerOf(this.padOf(eventSlot(event))).x : SIDE_X[event.side] });
+    playSound(sound, { at: event.kind === "effect" || event.kind === "miss" ? this.centerOf(this.padOf(eventSlot(event))) : this.view.sideCenter(event.side) });
   }
 
   private async playEvent(event: RoundEvent): Promise<void> {
@@ -433,7 +431,7 @@ export class RoundPlayback {
   private async power(event: Extract<RoundEvent, { kind: "power" }>): Promise<void> {
     if (event.power === "decoy") return;
     const pad = this.padOf(event.target);
-    playSound("power_up", { x: this.centerOf(pad).x });
+    playSound("power_up", { at: this.centerOf(pad) });
     await pad.ship!.addMarker({ kind: event.power, color: color3(powerAdmiral(event.power)) });
   }
 
@@ -443,7 +441,7 @@ export class RoundPlayback {
     const ship = new ShipView(this.view.scene, shipById("decoy"), false);
     pad.attachShip(ship);
     const center = this.centerOf(pad);
-    playSound("shield_up", { x: center.x });
+    playSound("shield_up", { at: center });
     void this.view.effects.pulse(center, color3("moreau"), 1.6, 700);
     this.float(pad, t.float.decoy, "buff");
     await ship.materialize();
@@ -454,7 +452,7 @@ export class RoundPlayback {
     const pad = this.padOf(event.ship);
     const color = color3("kerr");
     const pendulum = this.view.pads.find((candidate) => candidate.slot.lane.side === event.side && candidate.ship?.card.id === "pendulum");
-    playSound("jammer", { x: this.centerOf(pad).x });
+    playSound("jammer", { at: this.centerOf(pad) });
     if (pendulum) void this.view.effects.beam(this.centerOf(pendulum), this.centerOf(pad), color, LOCK_BEAM_WIDTH);
     this.float(pad, t.float.locked, "debuff");
     await pad.ship!.addMarker({ kind: "lock", color });
@@ -473,7 +471,7 @@ export class RoundPlayback {
     const a = this.padOf(event.a);
     const b = this.padOf(event.b);
     const color = color3("moreau");
-    playSound("power_up", { x: this.centerOf(a).x });
+    playSound("power_up", { at: this.centerOf(a) });
     for (const pad of [a, b]) void this.view.effects.pulse(this.centerOf(pad), color, 1.5, 450);
     await Promise.all([a.ship!.phaseOut(), b.ship!.phaseOut()]);
     const mirage = a.detachShip();
@@ -586,7 +584,7 @@ export class RoundPlayback {
     const back = this.centerOf(this.view.pad(slot.side, "command", slot.slotIndex));
     const origin = this.pierceOrigin(side, back);
     const exit = back.add(new Vector3(Math.sign(back.x - origin.x) * PIERCE_OVERSHOOT, 0, 0));
-    playSound("cannon_heavy", { x: origin.x, rate: 0.9 });
+    playSound("cannon_heavy", { at: origin, rate: 0.9 });
     void this.view.effects.pulse(origin, SIDE_COLORS[side], 1, 260);
     void this.view.effects.beam(origin, exit, SIDE_COLORS[side], 0.8);
     this.view.shake(0.1);
@@ -594,7 +592,7 @@ export class RoundPlayback {
 
   /** Woher der Durchschlag kommt: aus der Mitte der Seite, die ihn spielt, auf Höhe von `target`. */
   private pierceOrigin(side: Side, target: Vector3): Vector3 {
-    return new Vector3(SIDE_X[side], target.y, target.z);
+    return new Vector3(this.view.sideCenter(side).x, target.y, target.z);
   }
 
   /** Startpunkt des Wärmesuchers: vor der eigenen Strike-Lane, auf Höhe des Ziels. */
@@ -640,7 +638,7 @@ export class RoundPlayback {
     pad.attachShip(ship);
     ship.root.setEnabled(true);
     ship.setStats(event.after.hp, event.after.shield);
-    playSound("power_up", { x: this.centerOf(pad).x });
+    playSound("power_up", { at: this.centerOf(pad) });
     void this.view.effects.pulse(this.centerOf(pad), TONE_COLORS.shield, JUMP_PULSE, 450);
     await ship.phaseIn();
   }
@@ -689,7 +687,7 @@ export class RoundPlayback {
    */
   private async tow(side: Side, from: SlotPad, to: SlotPad): Promise<void> {
     const ship = from.ship!;
-    const origin = new Vector3(SIDE_X[side], 0, this.centerOf(from).z).add(TRACTOR_ORIGIN);
+    const origin = new Vector3(this.view.sideCenter(side).x, 0, this.centerOf(from).z).add(TRACTOR_ORIGIN);
     const release = this.view.effects.tether(origin, () => ship.root.getAbsolutePosition().add(SHIP_CENTER), SIDE_COLORS[side]);
     void this.view.effects.pulse(this.centerOf(from), SIDE_COLORS[side], 1.3, 400);
     await wait(this.view.scene, TRACTOR_GRIP);
@@ -713,15 +711,15 @@ export class RoundPlayback {
         return this.damage(event.ship, effect.amount, after, source, color);
       }
       case "heal":
-        playSound("repair", { x: source.x });
+        playSound("repair", { at: source });
         await this.view.effects.pulse(source, SIDE_COLORS[event.source.side], 1.2, 350);
         pad.ship!.setStats(after.hp, after.shield);
         return this.mark(pad, t.float.heal(effect.amount), "heal");
       case "attack":
-        playSound("power_up", { x: source.x });
+        playSound("power_up", { at: source });
         return this.mark(pad, t.float.attack(effect.delta), "buff");
       case "shield":
-        playSound("shield_up", { x: source.x });
+        playSound("shield_up", { at: source });
         pad.ship!.setStats(after.hp, after.shield);
         this.float(pad, t.float.shield(effect.amount), "shield");
         return this.view.effects.bubble(this.centerOf(pad), color3("osei"), GUARDIAN_BUBBLE);
@@ -744,7 +742,7 @@ export class RoundPlayback {
     const target = this.padOf(event.target);
     const color = color3("kerr");
     const origin = this.centerOf(this.padOf(event.source));
-    playSound("cannon_heavy", { x: origin.x, rate: 0.8 });
+    playSound("cannon_heavy", { at: origin, rate: 0.8 });
     void this.view.effects.pulse(origin, color, 1.1, 260);
     this.view.shake(0.12);
     target.ship!.removeMarker("lock");
@@ -770,7 +768,7 @@ export class RoundPlayback {
 
   /** Mündungsblitz und Schuss bei `origin`, dann fliegt der Bolzen bis auf die Hülle des Ziels. */
   private async shoot(origin: Vector3, to: SlotPad, color: Color3, sound: SoundId): Promise<void> {
-    playSound(sound, { x: origin.x });
+    playSound(sound, { at: origin });
     void this.view.effects.pulse(origin, color, 0.7, 180);
     await this.view.effects.bolt(origin, this.impactFrom(to, origin), color);
   }
@@ -792,7 +790,7 @@ export class RoundPlayback {
   /** Das Trugbild löst sich auf: am Rundenende oder durch Funkstille. */
   private async vanish(pad: SlotPad): Promise<void> {
     const ship = pad.detachShip();
-    playSound("jammer", { x: ship.root.getAbsolutePosition().x, volume: 0.6 });
+    playSound("jammer", { at: ship.root.getAbsolutePosition(), volume: 0.6 });
     await ship.dematerialize();
     ship.dispose();
   }

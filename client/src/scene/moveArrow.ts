@@ -78,6 +78,13 @@ export class MoveArrow {
     }
   }
 
+  /** Zeichnet den Pfeil an der jetzigen Stelle der Pads neu, während das Brett beim Wechsel der Ansicht umzieht. */
+  refresh(): void {
+    const shown = this.shown;
+    this.hide();
+    if (shown) this.show(shown.from, shown.to);
+  }
+
   hide(): void {
     for (const mesh of this.meshes) {
       this.glow.removeIncludedOnlyMesh(mesh);

@@ -4,7 +4,6 @@
 
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
@@ -67,7 +66,6 @@ export class SlotPad {
     scene: Scene,
     parent: TransformNode,
     readonly slot: Slot,
-    position: Vector3,
     /** Blickrichtung der Schiffe: +1 für die Spielerseite (nach rechts), -1 für den Gegner. */
     facing: 1 | -1,
     materials: PadMaterials,
@@ -75,7 +73,6 @@ export class SlotPad {
     const name = `pad-${slot.lane.side}-${slot.lane.type}-${slot.index}`;
     this.root = new TransformNode(name, scene);
     this.root.parent = parent;
-    this.root.position = position;
 
     this.baseMesh = CreateBox(`${name}-base`, { width: PAD_WIDTH, height: 0.08, depth: PAD_DEPTH }, scene);
     this.baseMesh.material = materials.base;

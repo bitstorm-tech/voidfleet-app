@@ -143,6 +143,11 @@ export interface Wreck {
 export class ShipView {
   readonly root: TransformNode;
   private readonly modelRoot: TransformNode;
+  /**
+   * Halter über dem Modell für Balken, Totenkopf und Krone, als Billboard zur Kamera gedreht: Babylon versetzt Billboards
+   * entlang der Weltachsen, ihre Kinder dagegen in seinem Raum. So stehen die Teile in jeder Ansicht nebeneinander im Bild.
+   */
+  private readonly overlay: TransformNode;
   private readonly statusBars: TransformNode;
   private readonly hpFill: Mesh;
   private readonly shieldRow: TransformNode;
@@ -191,9 +196,13 @@ export class ShipView {
     this.floor.position.y = -SHIP_ANCHOR_HEIGHT / BOARD_SCALE;
     this.floor.scaling.setAll(1 / BOARD_SCALE);
 
+    this.overlay = new TransformNode("overlay", scene);
+    this.overlay.parent = this.root;
+    this.overlay.billboardMode = TransformNode.BILLBOARDMODE_ALL;
+    this.overlay.position.y = BAR_MIN_HEIGHT;
+
     this.statusBars = new TransformNode("status", scene);
-    this.statusBars.parent = this.root;
-    this.statusBars.position.y = BAR_MIN_HEIGHT;
+    this.statusBars.parent = this.overlay;
     this.statusBars.setEnabled(!isGhost);
 
     this.createBar("hp-track", TRACK_WIDTH, 0.3, BAR_TRACK_COLOR, 0.92, this.statusBars, 1);
@@ -209,11 +218,11 @@ export class ShipView {
 
     this.skull = CreatePlane("skull", { size: SKULL_SIZE }, scene);
     this.skull.material = skullMaterial(scene);
-    this.skull.billboardMode = Mesh.BILLBOARDMODE_ALL;
     this.skull.isPickable = false;
     this.skull.renderingGroupId = 1;
     this.skull.alphaIndex = 3;
-    this.skull.parent = this.root;
+    this.skull.parent = this.overlay;
+    this.skull.position.set(-(TRACK_WIDTH + SKULL_SIZE) / 2 - 0.08, -0.05, 0);
     this.skull.setEnabled(false);
     // Verlust und Totenkopf blinken im selben Takt, über alle Schiffe gleich.
     this.pulse = scene.onBeforeRenderObservable.add(() => {
@@ -404,10 +413,10 @@ export class ShipView {
 
   /** Ein Flug im Takt der Bewegungen: Das Triebwerk folgt dem Schiff im Stereobild und verklingt nach der Landung. */
   private async fly(duration: number, update: (progress: number) => void, withEngine = true): Promise<void> {
-    const engine = withEngine ? loopSound(ENGINE_SOUNDS[this.card.shipClass], { x: this.root.getAbsolutePosition().x }) : null;
+    const engine = withEngine ? loopSound(ENGINE_SOUNDS[this.card.shipClass], { at: this.root.getAbsolutePosition() }) : null;
     await tween(this.scene, duration, (progress) => {
       update(progress);
-      engine?.follow(this.root.getAbsolutePosition().x);
+      engine?.follow(this.root.getAbsolutePosition());
     }, "movement");
     engine?.stop(ENGINE_FADE);
   }
@@ -505,8 +514,7 @@ export class ShipView {
     const size = Vector3.TransformCoordinates(max, toShip).subtract(Vector3.TransformCoordinates(min, toShip)).scale(BOARD_SCALE);
     this.footprint = { width: Math.abs(size.x), length: Math.abs(size.z) };
     const top = Vector3.TransformCoordinates(max, toShip).y;
-    this.statusBars.position.y = Math.max(BAR_MIN_HEIGHT, top + BAR_MARGIN);
-    this.skull.position.set(-(TRACK_WIDTH + SKULL_SIZE) / 2 - 0.08, this.statusBars.position.y - 0.05, 0);
+    this.overlay.position.y = Math.max(BAR_MIN_HEIGHT, top + BAR_MARGIN);
   }
 
   private prepareMesh(mesh: AbstractMesh): void {
@@ -526,7 +534,6 @@ export class ShipView {
   private createCrown(): void {
     const crown = CreatePlane("crown", { size: CROWN_SIZE }, this.scene);
     crown.material = crownMaterial(this.scene);
-    crown.billboardMode = Mesh.BILLBOARDMODE_ALL;
     crown.isPickable = false;
     crown.renderingGroupId = 1;
     crown.alphaIndex = 3;
@@ -571,7 +578,6 @@ export class ShipView {
     this.bars.push({ material, alpha });
     const mesh = CreatePlane(name, { width, height }, this.scene);
     mesh.material = material;
-    mesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
     mesh.isPickable = false;
     mesh.renderingGroupId = 1;
     mesh.alphaIndex = order;

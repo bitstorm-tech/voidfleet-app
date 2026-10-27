@@ -5,7 +5,7 @@ import { ABILITY_VALUES, type AdmiralId, type PowerId, type PowerTarget } from "
 import type { LaneType, Side } from "../../../shared/board.ts";
 import { shipById, type CommandId, type CommandType, type ShipClass, type ShipId, type TargetMode } from "../../../shared/cards.ts";
 import type { ErrorCode, MatchResult } from "../../../shared/protocol.ts";
-import type { AnimationSpeed } from "../settings.ts";
+import type { AnimationSpeed, CameraView } from "../settings.ts";
 
 export interface CardText {
   name: string;
@@ -140,6 +140,8 @@ export const en = {
     install: "App",
     installButton: "Install Voidfleet as an app",
     speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
+    cameraView: "Default view",
+    cameraViews: { side: "From the side", top: "From behind" } satisfies Record<CameraView, string>,
   },
   rules: {
     title: "Rules",
@@ -312,6 +314,9 @@ export const en = {
   fullscreen: {
     enter: "Fullscreen (F)",
     exit: "Exit fullscreen (F)",
+  },
+  cameraView: {
+    toggle: "Switch view (V)",
   },
   surrender: {
     title: "Surrender",

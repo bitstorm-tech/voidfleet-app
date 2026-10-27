@@ -1,16 +1,17 @@
 // Soundeffekte aus `data/sounds.ts`. Alle Dateien werden beim Start geladen (`loadSounds`) und auf gleiche
 // Lautheit gebracht; der stille Vorlauf wird übersprungen, damit der Ton genau mit dem Bild einsetzt. Jedes
 // Abspielen wählt eine zufällige Variante (nie zweimal dieselbe hintereinander) und verstimmt sie leicht; die
-// Stereoposition folgt dem Geschehen auf dem Brett (eigene Seite links, Gegner rechts). Solange Animationen
+// Stereoposition folgt dem Geschehen im Bild, in jeder Kameraansicht (`setScreenSide`). Solange Animationen
 // übersprungen werden, der Ton nicht freigegeben oder stumm geschaltet ist, bleibt es still. Der Bordfunk lädt
 // seine Aufnahmen ebenso (`loadSample`), spielt sie aber selbst ab (`radio.ts`).
 
+import type { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { SOUNDS, type SoundId } from "../data/sounds.ts";
 import { animationsSkipped } from "../scene/tween.ts";
 import { context, effectsBus, isAudible } from "./mixer.ts";
 
-/** Ab diesem Welt-x liegt ein Sound ganz außen im Stereobild (etwa der Bildrand auf Brett-Höhe); ganz hart schwenkt nichts. */
-const PAN_WIDTH = 9;
+/** Ab diesem Anteil der halben Bildbreite liegt ein Sound ganz außen im Stereobild (etwa das Brett von der Seite); ganz hart schwenkt nichts. */
+const PAN_EDGE = 0.8;
 const MAX_PAN = 0.8;
 /** Zufällige Verstimmung als Anteil der Abspielrate, damit wiederholte Samples nicht mechanisch klingen. */
 const DETUNE = 0.06;
@@ -27,8 +28,8 @@ const LOOP_FADE_IN = 0.15;
 const STOP_FADE = 0.12;
 
 export interface PlayOptions {
-  /** Welt-x des Geschehens. */
-  x?: number;
+  /** Wo es geschieht (Weltpunkt); ohne Angabe klingt es aus der Mitte. */
+  at?: Vector3;
   /** Faktor auf die Lautstärke des Sounds. */
   volume?: number;
   /** Abspielrate: unter 1 tiefer und länger, darüber höher und kürzer. */
@@ -38,8 +39,8 @@ export interface PlayOptions {
 }
 
 export interface SoundHandle {
-  /** Schwenkt den Sound sanft an die Stelle (Welt-x). */
-  follow(x: number): void;
+  /** Schwenkt den Sound sanft an die Stelle (Weltpunkt). */
+  follow(at: Vector3): void;
   /** Blendet in `fade` Sekunden aus und beendet den Sound. */
   stop(fade?: number): void;
 }
@@ -57,6 +58,12 @@ const samples = new Map<SoundId, Sample[]>();
 const lastVariant = new Map<SoundId, number>();
 const voices = new Map<SoundId, Set<SoundHandle>>();
 let isMuted = false;
+/** Wo ein Weltpunkt waagerecht im Bild liegt, von -1 (linker Rand) bis 1 (rechter Rand); die Szene kennt die Kamera. */
+let screenSide: (at: Vector3) => number = () => 0;
+
+export function setScreenSide(map: (at: Vector3) => number): void {
+  screenSide = map;
+}
 
 /** Lädt und dekodiert alle Effekte; im Spiel über `preload.ts`, Dev-Seiten rufen es selbst auf. */
 export function loadSounds(): Promise<void>[] {
@@ -94,7 +101,7 @@ function start(id: SoundId, options: PlayOptions, loop: boolean): SoundHandle {
   const playbackRate = (options.rate ?? 1) * (1 + (Math.random() - 0.5) * DETUNE);
   const source = new AudioBufferSourceNode(context, { buffer, loop, playbackRate });
   const volume = new GainNode(context, { gain: level });
-  const panner = new StereoPannerNode(context, { pan: panAt(options.x ?? 0) });
+  const panner = new StereoPannerNode(context, { pan: panAt(options.at) });
   if (loop) {
     volume.gain.setValueAtTime(0, now);
     volume.gain.linearRampToValueAtTime(level, now + LOOP_FADE_IN);
@@ -104,7 +111,7 @@ function start(id: SoundId, options: PlayOptions, loop: boolean): SoundHandle {
 
   let isStopped = false;
   const voice: SoundHandle = {
-    follow: (x) => panner.pan.setTargetAtTime(panAt(x), context.currentTime, 0.05),
+    follow: (at) => panner.pan.setTargetAtTime(panAt(at), context.currentTime, 0.05),
     stop: (fade = STOP_FADE) => {
       if (isStopped) return;
       isStopped = true;
@@ -129,8 +136,8 @@ export function pickVariant<Id>(last: Map<Id, number>, id: Id, count: number): n
   return index;
 }
 
-function panAt(x: number): number {
-  return Math.min(Math.max(x / PAN_WIDTH, -MAX_PAN), MAX_PAN);
+function panAt(at: Vector3 | undefined): number {
+  return at ? MAX_PAN * Math.min(Math.max(screenSide(at) / PAN_EDGE, -1), 1) : 0;
 }
 
 /** Lädt und dekodiert eine Datei samt Verstärkung auf die gemeinsame Lautheit und stillem Vorlauf. */

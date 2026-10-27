@@ -71,6 +71,7 @@ import { slotLabel } from "./ui/roundLog.ts";
 import { RulesDialog } from "./ui/rulesDialog.ts";
 import { SettingsDialog } from "./ui/settingsDialog.ts";
 import { SurrenderDialog } from "./ui/surrenderDialog.ts";
+import { installViewToggle } from "./ui/viewToggle.ts";
 
 /** Den Ausgang meldet der Bordfunk kurz nach dem Einsatz der Fanfare (Millisekunden). */
 const RESULT_REPORT_DELAY = 1500;
@@ -129,6 +130,7 @@ export class MatchController {
     this.admiralSelect = new AdmiralSelect(ui, (admiral) => this.chooseAdmiral(admiral));
     this.resultScreen = new ResultScreen(ui, () => this.startNewMatch());
     installFullscreen(ui);
+    installViewToggle(ui, () => this.view.toggleCameraView());
     new SettingsDialog(ui);
     new RulesDialog(ui);
     this.opponentPanel = new OpponentPanel(ui);

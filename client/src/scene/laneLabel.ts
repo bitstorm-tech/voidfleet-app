@@ -3,7 +3,6 @@
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { TransformNode } from "@babylonjs/core/Meshes/transformNode";
@@ -33,7 +32,8 @@ export class LaneLabel {
     this.mesh.billboardMode = Mesh.BILLBOARDMODE_ALL;
     this.mesh.isPickable = false;
     this.mesh.parent = parent;
-    this.mesh.position = new Vector3(0, 0.35, 6.4);
+    // Wo entlang der Lane sie steht, hängt von der Kameraansicht ab (`MatchScene`).
+    this.mesh.position.y = 0.35;
   }
 
   set visible(value: boolean) {

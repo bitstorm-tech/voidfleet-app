@@ -11,6 +11,9 @@ export const ANIMATION_SPEEDS = { slow: 2, normal: 1, fast: 0.6, veryFast: 0.35 
 
 export type AnimationSpeed = keyof typeof ANIMATION_SPEEDS;
 
+/** Blick auf das Brett: schräg von der Seite (eigene Seite links) oder von hinten oben (eigene Seite unten). */
+export type CameraView = "side" | "top";
+
 export interface Settings {
   /** Lautstärke von Musik, Effekten und Bordfunk, jeweils 0..1; Bordfunk auf 0 schaltet ihn samt Untertiteln ab. */
   musicVolume: number;
@@ -22,6 +25,8 @@ export interface Settings {
   movementSpeed: AnimationSpeed;
   /** Alle übrigen Animationen. */
   animationSpeed: AnimationSpeed;
+  /** Ansicht, mit der das Brett startet; im Spiel schaltet der Ansichts-Knopf (Taste V) um. */
+  cameraView: CameraView;
   /** Gewählte Sprache; ohne Wahl gilt die Browsersprache. */
   language?: Locale;
 }
@@ -34,6 +39,7 @@ const DEFAULTS: Settings = {
   attackSpeed: "normal",
   movementSpeed: "normal",
   animationSpeed: "normal",
+  cameraView: "top",
 };
 
 export const settings: Settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") };
