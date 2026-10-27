@@ -7,3 +7,7 @@ Das Besondere an Voidfleet ist der asynchrone Spielmodus mit Simultaneous Blind 
 ## Status
 
 Wir sind momentan noch in der Entwicklungsphase. Das Spiel ist also nicht live. Aus diesem Grund können wir den Code jederzeit komplett ändern und es ist nicht notwendig, defensiven Code, Kompatibilitätslayer oder Sonstiges zu implementieren. Wir müssen also keine Rücksicht auf Legacy Code nehmen, sondern können den Code so einfach, schlank und elegant wie möglich halten. 
+
+## Linting und Formatierung
+
+Biome für das ganze Repo (`biome.json` und `package.json` im Wurzelverzeichnis, einmal `bun install`): `bun run lint` prüft Lint, Formatierung und Import-Reihenfolge, `bun run fix` behebt, was sich automatisch beheben lässt. Der bestehende Code ist noch nicht formatiert und gelintet, das kommt in einem eigenen Commit, sobald die großen Branches gemergt sind. Bis dahin `bun run fix` nicht über das ganze Repo laufen lassen. Abgeschaltet sind Regeln, die gegen bewusste Muster im Code gehen: `!` nach Indexzugriffen (wegen `noUncheckedIndexedAccess`), `return f()` in `void`-Funktionen, Zuweisungen in Ausdrücken, Fallthrough (prüft TypeScript) und in CSS `!important` und absteigende Spezifität.
