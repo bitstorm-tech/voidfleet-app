@@ -5,7 +5,7 @@ import { ABILITY_VALUES, type AdmiralId, type PowerId, type PowerTarget } from "
 import type { LaneType, Side } from "../../../shared/board.ts";
 import { shipById, type CommandId, type CommandType, type ShipClass, type ShipId, type TargetMode } from "../../../shared/cards.ts";
 import type { ErrorCode, MatchResult } from "../../../shared/protocol.ts";
-import type { AnimationSpeed, CameraView } from "../settings.ts";
+import type { AnimationSpeed } from "../settings.ts";
 
 export interface CardText {
   name: string;
@@ -140,8 +140,6 @@ export const en = {
     install: "App",
     installButton: "Install Voidfleet as an app",
     speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
-    cameraView: "Default view",
-    cameraViews: { side: "From the side", top: "From behind" } satisfies Record<CameraView, string>,
   },
   rules: {
     title: "Rules",
@@ -252,7 +250,7 @@ export const en = {
         paragraphs: [
           "Tap a card in your hand, then a glowing slot or ship on the board; the status line at the top tells you what the selected card needs. Tapping the card again takes it back, as does tapping a ghost ship. In round 1 your flagship stands at the front of your ship hand with a golden frame. To maneuver, tap one of your ships on the board without a card selected, then the destination slot; tap the ship again or press Escape to cancel. Your admiral ability is the card to the left of your commands, Admiral Kerr's target lock the button above it. The checklist below “End turn” shows which parts of your turn are planned, still open or impossible.",
           "While you plan, the board previews the round as if your opponent did nothing: arcs show which ship fires at which, hull bars blink with the damage a ship would take, and a skull marks every ship that would be destroyed — your planned ships included. Chance, like the Plasma Frigate's shot, isn't included. The panel at the top right shows what you know about your opponent: whether they have ended their turn, how many cards they hold and have left in their decks, and how many copies of each command they haven't played yet.",
-          "“End turn” submits your plan. While the round is resolved you can skip the animation; the log button at the top right lists every event of the match. Scroll or hold ↑/↓ to zoom the board, and drag to pan while zoomed in. The camera button at the top right or V switches between the side view and the view from behind; hold ← or → to turn the camera freely in between. Sound, radio chatter, animation speed, default view and language live in the settings next to this dialog; the flag next to it surrenders the match after a confirmation, and your opponent wins immediately.",
+          "“End turn” submits your plan. While the round is resolved you can skip the animation; the log button at the top right lists every event of the match. Scroll or hold ↑/↓ to zoom the board, and drag to pan while zoomed in. The camera button at the top right or V switches between the side view and the view from behind; hold ← or → or drag with the middle mouse button to turn the camera freely in between. Angle and zoom carry over to your next match. Sound, radio chatter, animation speed and language live in the settings next to this dialog; the flag next to it surrenders the match after a confirmation, and your opponent wins immediately.",
         ],
       },
     } satisfies Record<string, RulesSection>,
@@ -316,7 +314,7 @@ export const en = {
     exit: "Exit fullscreen (F)",
   },
   cameraView: {
-    toggle: "Switch view (V), hold ← or → to turn freely",
+    toggle: "Switch view (V); turn freely with ← → or the middle mouse button",
   },
   surrender: {
     title: "Surrender",

@@ -58,8 +58,6 @@ export const de: Messages = {
     install: "App",
     installButton: "Voidfleet als App installieren",
     speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
-    cameraView: "Standardansicht",
-    cameraViews: { side: "Von der Seite", top: "Von hinten oben" },
   },
   rules: {
     title: "Spielregeln",
@@ -169,7 +167,7 @@ export const de: Messages = {
         paragraphs: [
           "Tippe eine Karte auf deiner Hand an, dann einen leuchtenden Slot oder ein Schiff auf dem Brett; die Statuszeile oben sagt dir, was die gewählte Karte braucht. Nochmal auf die Karte tippen nimmt sie zurück, ebenso ein Klick auf einen Geist. In Runde 1 steht dein Flaggschiff mit goldenem Rahmen vorn in der Schiffshand. Zum Manövrieren tippst du ohne gewählte Karte eines deiner Schiffe auf dem Brett an, dann den Ziel-Slot; nochmal auf das Schiff oder Escape bricht ab. Deine Admiralsfähigkeit ist die Karte links neben deinen Befehlen, die Zielerfassung von Admiral Kerr der Knopf darüber. Die Checkliste unter „Zug beenden“ zeigt, welche Teile deines Zugs eingeplant, noch offen oder nicht möglich sind.",
           "Während du planst, zeigt das Brett die Runde so, als täte dein Gegner nichts: Bögen zeigen, welches Schiff auf welches feuert, die Hüllenbalken blinken mit dem Schaden, den ein Schiff nehmen würde, und ein Totenkopf markiert jedes Schiff, das zerstört würde — auch deine eingeplanten. Zufall wie der Schuss der Plasma-Fregatte ist nicht eingerechnet. Das Feld oben rechts zeigt, was du über deinen Gegner weißt: ob er seinen Zug schon beendet hat, wie viele Karten er auf der Hand und noch in den Decks hat und wie viele Kopien jedes Befehls er noch nicht gespielt hat.",
-          "„Zug beenden“ schickt deinen Plan ab. Während die Runde aufgelöst wird, kannst du die Animation überspringen; der Log-Knopf oben rechts listet jedes Ereignis des Matches. Mit dem Mausrad oder gehaltenem ↑ und ↓ zoomst du ins Brett, herangezoomt verschiebst du es durch Ziehen. Der Kamera-Knopf oben rechts oder die Taste V wechselt zwischen dem Blick von der Seite und von hinten oben; hältst du ← oder → gedrückt, dreht sich die Kamera stufenlos dazwischen. Ton, Bordfunk, Animationstempo, Standardansicht und Sprache findest du in den Einstellungen neben diesem Dialog; die Fahne daneben gibt das Match nach Rückfrage auf, der Gegner gewinnt sofort.",
+          "„Zug beenden“ schickt deinen Plan ab. Während die Runde aufgelöst wird, kannst du die Animation überspringen; der Log-Knopf oben rechts listet jedes Ereignis des Matches. Mit dem Mausrad oder gehaltenem ↑ und ↓ zoomst du ins Brett, herangezoomt verschiebst du es durch Ziehen. Der Kamera-Knopf oben rechts oder die Taste V wechselt zwischen dem Blick von der Seite und von hinten oben; hältst du ← oder → gedrückt oder ziehst mit gedrückter mittlerer Maustaste, dreht sich die Kamera stufenlos dazwischen. Drehung und Zoom bleiben fürs nächste Match erhalten. Ton, Bordfunk, Animationstempo und Sprache findest du in den Einstellungen neben diesem Dialog; die Fahne daneben gibt das Match nach Rückfrage auf, der Gegner gewinnt sofort.",
         ],
       },
     },
@@ -233,7 +231,7 @@ export const de: Messages = {
     exit: "Vollbild beenden (F)",
   },
   cameraView: {
-    toggle: "Ansicht wechseln (V), mit ← oder → stufenlos drehen",
+    toggle: "Ansicht wechseln (V); stufenlos drehen mit ← → oder der mittleren Maustaste",
   },
   surrender: {
     title: "Aufgeben",

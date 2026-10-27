@@ -1,5 +1,6 @@
 // Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe, Zoom per Mausrad und ↑ ↓, Verschieben per Ziehen, zwei
-// Ansichten mit jedem Stand dazwischen, Lichter, Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen.
+// Ansichten mit jedem Stand dazwischen (Drehen mit ← → oder der mittleren Maustaste), Lichter, Glow, Hintergrund und
+// die vier Lanes mit je sechs Landeplätzen.
 //
 // Koordinaten: Babylon ist linkshändig, die Godot-Szene rechtshändig. Alle
 // Z-Werte aus der Godot-Szene sind hier negiert; x (Lanes) und y bleiben.
@@ -27,7 +28,7 @@ import type { Board, Lane, LaneType, Side } from "../../../shared/board.ts";
 import { setScreenSide } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
 import { t, upper } from "../i18n/index.ts";
-import { type CameraView, onSettingsChange, settings } from "../settings.ts";
+import { settings, updateSettings } from "../settings.ts";
 import { Background } from "./background.ts";
 import { BoardEffects } from "./effects.ts";
 import { LaneLabel } from "./laneLabel.ts";
@@ -64,7 +65,7 @@ interface ViewSpec {
  * auseinander, damit das Brett über die Hand passt. Dazwischen ist jeder Stand möglich: Ausrichtung, Bildband und
  * Aufteilung werden gemischt, Lanes und Slots gleiten mit.
  */
-const VIEWS: Record<CameraView, ViewSpec> = {
+const VIEWS: Record<"side" | "top", ViewSpec> = {
   side: {
     yaw: 0,
     pitch: Tools.ToRadians(42),
@@ -84,13 +85,13 @@ const VIEWS: Record<CameraView, ViewSpec> = {
     labelZ: 9.1,
   },
 };
-/** Stand zwischen den Ansichten, an dem jede liegt. */
-const VIEW_BLEND: Record<CameraView, number> = { side: 0, top: 1 };
 /** Dauer der Kamerafahrt zwischen den Ansichten in ms, gestreckt wie die übrigen Animationen. */
 const VIEW_SWITCH_DURATION = 1100;
 /** Mit gehaltener Pfeiltaste dreht die Kamera in dieser Zeit (ms) von einer Ansicht zur anderen; An- und Auslauf in ms. */
 const ORBIT_DURATION = 1600;
 const ORBIT_RAMP = 150;
+/** Mit gedrückter mittlerer Maustaste dreht so viel Canvas-Breite die Kamera von einer Ansicht zur anderen. */
+const ORBIT_DRAG_WIDTH = 0.5;
 /** Lane-z eines Slots: Slot 0 am Ende mit dem größten z, die sechs Slots symmetrisch um die Lane-Mitte. */
 const slotZ = (index: number, step: number): number => (2.5 - index) * step;
 /** Neue Schiffe fliegen von hier aus ein, außerhalb des Bildes am Rand ihrer Seite (Welt-|x|). */
@@ -184,6 +185,8 @@ export class MatchScene {
   /** Gedrückte linke Maustaste: Startpunkt, letzte Position und ob schon verschoben wird. */
   private drag: { startX: number; startY: number; lastX: number; lastY: number; panning: boolean } | null = null;
   private panned = false;
+  /** Gedrückte mittlere Maustaste: letzte Zeiger-x (CSS-Pixel), solange die Kamera damit gedreht wird. */
+  private orbitDragX: number | null = null;
   /** Stärke des Kamerawackelns (Welteinheiten) und seine Uhr. */
   private shakeStrength = 0;
   private shakeTime = 0;
@@ -226,23 +229,24 @@ export class MatchScene {
     this.targetLines = new TargetLines(this.scene, this.glow);
 
     this.createBoard(board);
-    this.blend = VIEW_BLEND[settings.cameraView];
+    // Die Kamera steht, wo sie zuletzt stand (`rememberCamera`).
+    const { view, zoom } = settings.camera;
+    this.blend = view;
     this.applyView();
-    // Eine andere Standardansicht in den Einstellungen gilt sofort.
-    let defaultView = settings.cameraView;
-    onSettingsChange(() => {
-      if (settings.cameraView === defaultView) return;
-      defaultView = settings.cameraView;
-      this.turnTo(VIEW_BLEND[defaultView]);
-    });
+    this.zoomTarget.set(...zoom);
+    this.zoomOffset.copyFrom(this.zoomTarget);
     setScreenSide((at) => (this.screenPosition(at).x / this.canvas.clientWidth) * 2 - 1);
 
     this.scene.onBeforeRenderObservable.add(() => this.updateCamera());
     canvas.addEventListener("wheel", (event) => this.onWheel(event), { passive: false });
     canvas.addEventListener("pointerdown", (event) => this.onPointerDown(event));
     canvas.addEventListener("pointermove", (event) => this.onPointerMove(event));
-    canvas.addEventListener("pointerup", () => (this.drag = null));
-    canvas.addEventListener("pointercancel", () => (this.drag = null));
+    const release = () => {
+      this.drag = null;
+      this.orbitDragX = null;
+    };
+    canvas.addEventListener("pointerup", release);
+    canvas.addEventListener("pointercancel", release);
     window.addEventListener("resize", () => this.engine.resize());
     this.engine.runRenderLoop(() => this.scene.render());
   }
@@ -278,19 +282,17 @@ export class MatchScene {
   }
 
   /**
-   * Fährt zur anderen Ansicht, von einem Stand dazwischen zur ferneren, und kehrt eine laufende Fahrt um; herangezoomt geht
-   * es dabei zurück in die Ruhelage.
+   * Fährt zur anderen Ansicht, von einem Stand dazwischen zur ferneren, und kehrt eine laufende Fahrt um; der Zoom bleibt
+   * (`keepZoom`).
    */
   toggleCameraView(): void {
-    this.turnTo((this.viewGoal ?? this.blend) < 0.5 ? VIEW_BLEND.top : VIEW_BLEND.side);
+    this.viewGoal = (this.viewGoal ?? this.blend) < 0.5 ? 1 : 0;
   }
 
   /** Dreht die Kamera stufenlos zwischen den Ansichten, solange `direction` nicht 0 ist: 1 nach hinten oben, −1 zur Seite. */
   orbitCamera(direction: number): void {
     this.orbitDirection = direction;
-    if (direction === 0) return;
-    this.viewGoal = null;
-    this.zoomTarget.setAll(0);
+    if (direction !== 0) this.viewGoal = null;
   }
 
   /** Zoomt stetig auf die Mitte des Brettbands zu bzw. zurück, solange `direction` nicht 0 ist: 1 hinein, −1 heraus. */
@@ -317,9 +319,16 @@ export class MatchScene {
     for (const { label } of this.lanes) label.visible = value;
   }
 
-  private turnTo(goal: number): void {
-    this.viewGoal = goal;
-    this.zoomTarget.setAll(0);
+  /**
+   * Speichert Stand und Zoom fürs nächste Match, sobald sich die Kamera geändert hat und wieder ruht: nicht während einer
+   * Fahrt oder Drehung, solange ↑ oder ↓ gedrückt ist und solange das Brett verschoben oder mit der Maus gedreht wird.
+   */
+  private rememberCamera(): void {
+    if (this.isTurning || this.zoomDirection !== 0 || this.drag?.panning || this.orbitDragX !== null) return;
+    const { x, y, z } = this.zoomTarget;
+    const { view, zoom } = settings.camera;
+    if (this.blend === view && x === zoom[0] && y === zoom[1] && z === zoom[2]) return;
+    updateSettings({ camera: { view: this.blend, zoom: [x, y, z] } });
   }
 
   private get isTurning(): boolean {
@@ -442,10 +451,9 @@ export class MatchScene {
 
   /**
    * Ändert die Kamerahöhe um `factor`: kleiner zoomt auf den Brettpunkt unter dem Canvas-Punkt (x, y) zu, größer zurück in
-   * Richtung Ruhelage; nicht, während sich die Ansicht dreht.
+   * Richtung Ruhelage.
    */
   private zoom(factor: number, x: number, y: number): void {
-    if (this.isTurning) return;
     const rest = this.rest;
     const height = rest.y + this.zoomTarget.y;
 
@@ -472,16 +480,29 @@ export class MatchScene {
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
+  /** Die linke Taste klickt oder verschiebt, die mittlere dreht die Kamera und beendet dabei eine Kamerafahrt. */
   private onPointerDown(event: PointerEvent): void {
-    if (event.button !== 0) return;
+    if (event.button !== 0 && event.button !== 1) return;
     const { x, y } = this.canvasPoint(event);
-    this.drag = { startX: x, startY: y, lastX: x, lastY: y, panning: false };
-    this.panned = false;
+    if (event.button === 1) {
+      this.orbitDragX = x;
+      this.viewGoal = null;
+      this.blendSpeed = 0;
+    } else {
+      this.drag = { startX: x, startY: y, lastX: x, lastY: y, panning: false };
+      this.panned = false;
+    }
     this.canvas.setPointerCapture(event.pointerId);
   }
 
   /** Verschieben gibt es nur herangezoomt; in der Ruhelage ist das ganze Brett zu sehen. */
   private onPointerMove(event: PointerEvent): void {
+    if (this.orbitDragX !== null) {
+      const { x } = this.canvasPoint(event);
+      this.dragOrbit(x - this.orbitDragX);
+      this.orbitDragX = x;
+      return;
+    }
     const drag = this.drag;
     if (!drag || this.zoomTarget.y >= 0) return;
     const { x, y } = this.canvasPoint(event);
@@ -536,6 +557,7 @@ export class MatchScene {
       const factor = Math.exp(-this.zoomDirection * ZOOM_KEY_SPEED * seconds);
       this.zoom(factor, this.canvas.clientWidth / 2, this.canvas.clientHeight * this.bandMiddle);
     }
+    this.rememberCamera();
     this.updateCameraParallax(seconds);
     this.updateShake(seconds);
     const t = Math.min(seconds * ZOOM_FOLLOW_SPEED, 1);
@@ -559,9 +581,41 @@ export class MatchScene {
     const blend = clamp(this.blend + this.blendSpeed * seconds, 0, 1);
     if (blend === 0 || blend === 1) this.blendSpeed = 0;
     if (blend === this.viewGoal) this.viewGoal = null;
+    this.setBlend(blend);
+  }
+
+  /**
+   * Dreht die Kamera mit der Maus: Das Brett folgt dem Zeiger, als würde man es greifen, nach rechts also Richtung hinten
+   * oben. Der Winkel folgt der Maus gleichmäßig, ohne das Bremsen von `easeInOutSine` an den Ansichten.
+   */
+  private dragOrbit(dx: number): void {
+    const progress = clamp(easeInOutSine(this.blend) + dx / (this.canvas.clientWidth * ORBIT_DRAG_WIDTH), 0, 1);
+    this.setBlend(Math.acos(1 - 2 * progress) / Math.PI);
+  }
+
+  /** Setzt den Stand zwischen den Ansichten; herangezoomt bleibt der Zoom (`keepZoom`). */
+  private setBlend(blend: number): void {
     if (blend === this.blend) return;
+    const previousRest = this.rest.clone();
     this.blend = blend;
     this.applyView();
+    this.keepZoom(previousRest);
+  }
+
+  /**
+   * Hält den Zoom, während sich die Ansicht dreht: Herangezoomt steht die Kamera den Anteil `dive` ihrer Höhe weit auf dem
+   * Weg von der Ruhelage zum Brettpunkt, auf den sie zoomt. Punkt und Anteil bleiben, nur die Ruhelage wandert; tiefer als
+   * `ZOOM_MIN_HEIGHT` geht es dabei nicht. Ziel und geglätteter Versatz rücken gleich, damit nichts nachschwingt.
+   */
+  private keepZoom(previousRest: Vector3): void {
+    const deepest = 1 - ZOOM_MIN_HEIGHT / this.rest.y;
+    for (const offset of [this.zoomTarget, this.zoomOffset]) {
+      const dive = -offset.y / previousRest.y;
+      if (dive <= 0) continue;
+      const focus = previousRest.add(offset.scale(1 / dive));
+      offset.copyFrom(focus.subtractInPlace(this.rest).scaleInPlace(Math.min(dive, deepest)));
+    }
+    if (this.zoomTarget.y < 0) this.clampZoomTarget();
   }
 
   /** Zwei schnelle Schwingungen und ein langsames Schwanken, die mit der Stärke abklingen; läuft im Animationstakt. */

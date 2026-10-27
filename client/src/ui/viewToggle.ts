@@ -1,7 +1,7 @@
 // Ansicht: Icon-Knopf oben rechts neben dem Vollbild-Knopf und die Taste V fahren mit einer kurzen Kamerafahrt zur
 // anderen Ansicht, von der Seite oder von hinten oben (`MatchScene.toggleCameraView`); solange ← oder → gedrückt ist,
 // dreht sich die Kamera stufenlos dazwischen (`MatchScene.orbitCamera`), ↑ und ↓ zoomen hinein und heraus
-// (`MatchScene.zoomCamera`). Mit welcher Ansicht das Brett startet, steht in den Einstellungen.
+// (`MatchScene.zoomCamera`). Wo die Kamera zuletzt stand, gilt im nächsten Match wieder.
 
 import { t } from "../i18n/index.ts";
 
