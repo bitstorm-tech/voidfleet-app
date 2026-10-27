@@ -26,7 +26,7 @@
 // Wärmesucher und Traktorstrahl auf ein gegnerisches Schiff; Fadenkreuze markieren das Ziel.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner. Solange geplant wird, zeigt die
 // Zielvorschau (`game/preview.ts`), wie die Runde mit diesem Plan liefe, wenn der Gegner nichts tut: je Schuss ein
-// Bogen (verpuffende gestrichelt), auf gegnerischen Schiffen der Schaden, auf eigenen die Bedrohung.
+// Bogen (verpuffende gestrichelt), auf den Balken der Schaden.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 // „Neues Match“ wechselt nur die Verbindung; Szene und geladene Assets bleiben.
 // Die Musik folgt der Phase: ruhig beim Planen, angespannt während die Runde abläuft, still nach Spielende.
@@ -803,9 +803,9 @@ export class MatchController {
 
   /**
    * Die Zielvorschau auf dem Brett: je Schuss ein Bogen, der des gewählten Schützen hervorgehoben, verpuffende
-   * gestrichelt; auf den Balken der Verlust (bei eigenen Schiffen der schlimmste Fall der Bedrohung) und ein Totenkopf an
-   * jedem Schiff, das fällt bzw. fallen kann, auch an Geistern. Ein Schiff, das sich bewegt, steht dabei schon im
-   * Ziel-Slot; den Totenkopf trägt, wer nach den Bewegungen im Slot steht — der Geist, sonst das echte Schiff.
+   * gestrichelt; auf den Balken der drohende Verlust und ein Totenkopf an jedem Schiff, das fallen würde, auch an
+   * Geistern. Ein Schiff, das sich bewegt, steht dabei schon im Ziel-Slot; den Totenkopf trägt, wer nach den
+   * Bewegungen im Slot steht — der Geist, sonst das echte Schiff.
    */
   private showPreview(): void {
     const preview = this.preview;
