@@ -8,7 +8,7 @@
 import { TargetCamera } from "@babylonjs/core/Cameras/targetCamera";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import type { PointerInfo } from "@babylonjs/core/Events/pointerEvents";
-import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
+import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
@@ -31,6 +31,7 @@ import { t, upper } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { Background } from "./background.ts";
 import { BoardEffects } from "./effects.ts";
+import { createGlowLayer } from "./glow.ts";
 import { LaneLabel } from "./laneLabel.ts";
 import { MoveArrow } from "./moveArrow.ts";
 import type { ShipView } from "./ship.ts";
@@ -219,8 +220,7 @@ export class MatchScene {
     this.lights = this.createLights();
     this.createEnvironment();
     // Nur die Rahmen gültiger Ziele bekommen Bloom, alles andere bleibt scharf.
-    this.glow = new GlowLayer("glow", this.scene, { blurKernelSize: 48 });
-    this.glow.intensity = 0.7;
+    this.glow = createGlowLayer(this.scene);
     this.effects = new BoardEffects(this.scene, this.glow);
     this.moveArrow = new MoveArrow(this.scene, this.glow);
     this.maneuverArrow = new MoveArrow(this.scene, this.glow);

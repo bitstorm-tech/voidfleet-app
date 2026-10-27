@@ -36,6 +36,7 @@ import { color3, PALETTE, toCss } from "../data/palette.ts";
 import { allShipModels, shipModel, wreckModel } from "../data/shipModels.ts";
 import type { SoundId } from "../data/sounds.ts";
 import { randomInCone } from "./effects.ts";
+import { occludeGlow } from "./glow.ts";
 import { Maneuver } from "./maneuver.ts";
 import { FloorMarker, type Footprint, type MarkerKind, type MarkerSpec } from "./markers.ts";
 import { SHIP_ANCHOR_HEIGHT } from "./slotPad.ts";
@@ -522,6 +523,8 @@ export class ShipView {
   private prepareMesh(mesh: AbstractMesh): void {
     mesh.isPickable = false;
     if (this.isGhost && mesh.material) mesh.material = this.ghostMaterial(mesh.material);
+    // Der Rumpf verdeckt den Schein der Marken am Boden, das durchscheinende Trugbild nicht.
+    if (!this.isGhost) occludeGlow(this.scene, mesh);
   }
 
   /** Hologramm: Die Deckkraft schwankt, ab und zu setzt das Bild aus und springt seitlich. */
