@@ -1,4 +1,4 @@
-// Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe, Mausrad-Zoom und Verschieben per Ziehen, zwei
+// Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe, Zoom per Mausrad und ↑ ↓, Verschieben per Ziehen, zwei
 // Ansichten mit jedem Stand dazwischen, Lichter, Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen.
 //
 // Koordinaten: Babylon ist linkshändig, die Godot-Szene rechtshändig. Alle
@@ -119,12 +119,13 @@ const FOLLOW_SPEED = 4;
 const BACKGROUND_SCROLL_STRENGTH = new Vector2(0.0125, 0.011);
 
 /**
- * Mausrad-Zoom: Die Kamera fährt auf den Brettpunkt unter dem Zeiger zu und
+ * Zoom: Die Kamera fährt auf den Brettpunkt unter dem Zeiger (Mausrad) bzw. in der Mitte des Brettbands (↑ ↓) zu und
  * beim Herauszoomen zurück in die Ruhelage. Höhe der Kamera als Grenze nach unten.
  */
 const ZOOM_MIN_HEIGHT = 2.6;
-/** Höhenfaktor pro Pixel Mausrad (exponentiell, damit Trackpads und Rasterräder gleich wirken). */
+/** Höhenfaktor pro Pixel Mausrad (exponentiell, damit Trackpads und Rasterräder gleich wirken) und pro Sekunde mit ↑ ↓. */
 const ZOOM_SPEED = 0.0018;
+const ZOOM_KEY_SPEED = 1.4;
 const ZOOM_FOLLOW_SPEED = 8;
 /** Ab dieser Zeigerbewegung in CSS-Pixeln wird aus einem Klick ein Verschieben der Kamera. */
 const PAN_THRESHOLD = 5;
@@ -165,14 +166,17 @@ export class MatchScene {
   /** Stand zwischen den Ansichten (0 von der Seite, 1 von hinten oben) und sein Tempo pro Sekunde. */
   private blend: number;
   private blendSpeed = 0;
-  /** Richtung der gedrückten Pfeiltasten: 1 nach hinten oben, −1 zur Seite. */
+  /** Richtung der gedrückten Pfeiltasten: ← → drehen (1 nach hinten oben, −1 zur Seite), ↑ ↓ zoomen (1 hinein, −1 heraus). */
   private orbitDirection = 0;
+  private zoomDirection = 0;
   /** Stand einer Ansicht, zu dem die Kamera per Knopf, Taste V oder Einstellung fährt. */
   private viewGoal: number | null = null;
   /** Ruhelage und Ausrichtung der Kamera beim jetzigen Stand zwischen den Ansichten. */
   private readonly rest = Vector3.Zero();
   private yaw = 0;
   private pitch = 0;
+  /** Bildhöhe (von oben) der Mitte des Bands, das die Pads in der Ruhelage füllen; dorthin zoomen ↑ ↓. */
+  private bandMiddle = 0.5;
   private readonly scrollOffset = new Vector2(0, 0);
   /** Versatz der Kamera aus der Ruhelage durch den Zoom: Ziel und geglätteter Ist-Wert. */
   private readonly zoomTarget = Vector3.Zero();
@@ -289,6 +293,11 @@ export class MatchScene {
     this.zoomTarget.setAll(0);
   }
 
+  /** Zoomt stetig auf die Mitte des Brettbands zu bzw. zurück, solange `direction` nicht 0 ist: 1 hinein, −1 heraus. */
+  zoomCamera(direction: number): void {
+    this.zoomDirection = direction;
+  }
+
   /** Bildschirmposition eines Weltpunkts in CSS-Pixeln, für DOM-Overlays. */
   screenPosition(world: Vector3): { x: number; y: number } {
     const { clientWidth: width, clientHeight: height } = this.canvas;
@@ -387,7 +396,9 @@ export class MatchScene {
     this.camera.fov = mix(side.fov, top.fov);
     const halfWidth = Math.max(...this.lanes.map(({ root }) => Math.abs(root.position.x))) + PAD_WIDTH / 2;
     const halfDepth = slotZ(0, slotStep) + PAD_DEPTH / 2;
-    this.frameBoard(halfWidth, halfDepth, mix(side.frame[0], top.frame[0]), mix(side.frame[1], top.frame[1]));
+    const [bandTop, bandBottom] = [mix(side.frame[0], top.frame[0]), mix(side.frame[1], top.frame[1])];
+    this.bandMiddle = (bandTop + bandBottom) / 2;
+    this.frameBoard(halfWidth, halfDepth, bandTop, bandBottom);
 
     const turn = Matrix.RotationY(this.yaw);
     this.lights.key.direction = Vector3.TransformNormal(KEY_DIRECTION, turn);
@@ -423,20 +434,26 @@ export class MatchScene {
     return new Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
   }
 
-  /** Zoomt auf den Brettpunkt unter dem Zeiger zu oder zurück in Richtung Ruhelage; nicht, während sich die Ansicht dreht. */
   private onWheel(event: WheelEvent): void {
     event.preventDefault();
-    if (this.isTurning) return;
     const pixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY;
-    const factor = Math.exp(pixels * ZOOM_SPEED);
+    this.zoom(Math.exp(pixels * ZOOM_SPEED), this.scene.pointerX, this.scene.pointerY);
+  }
+
+  /**
+   * Ändert die Kamerahöhe um `factor`: kleiner zoomt auf den Brettpunkt unter dem Canvas-Punkt (x, y) zu, größer zurück in
+   * Richtung Ruhelage; nicht, während sich die Ansicht dreht.
+   */
+  private zoom(factor: number, x: number, y: number): void {
+    if (this.isTurning) return;
     const rest = this.rest;
     const height = rest.y + this.zoomTarget.y;
 
     if (factor < 1) {
-      const focus = this.boardPointUnderPointer();
+      const focus = this.zoomFocus(x, y);
       if (!focus) return;
       const nextHeight = Math.max(height * factor, ZOOM_MIN_HEIGHT);
-      // Auf der Geraden Kamera → Fokus bleibt der Punkt unter dem Zeiger stehen.
+      // Auf der Geraden Kamera → Fokus bleibt der Punkt unter (x, y) stehen.
       const camera = rest.add(this.zoomTarget);
       const next = Vector3.Lerp(focus, camera, (nextHeight - focus.y) / (camera.y - focus.y));
       this.zoomTarget.copyFrom(next.subtract(rest));
@@ -496,9 +513,9 @@ export class MatchScene {
     this.zoomTarget.z += clamp(focusZ, ZOOM_FOCUS_Z[0], ZOOM_FOCUS_Z[1]) - focusZ;
   }
 
-  /** Schnittpunkt des Zeigerstrahls mit der Brettebene, auf den Brettbereich begrenzt. */
-  private boardPointUnderPointer(): Vector3 | null {
-    const point = this.boardPointAt(this.scene.pointerX, this.scene.pointerY);
+  /** Schnittpunkt des Strahls durch einen Canvas-Punkt (CSS-Pixel) mit der Brettebene, auf den Brettbereich begrenzt. */
+  private zoomFocus(x: number, y: number): Vector3 | null {
+    const point = this.boardPointAt(x, y);
     if (!point) return null;
     point.x = clamp(point.x, -ZOOM_FOCUS_X, ZOOM_FOCUS_X);
     point.z = clamp(point.z, ZOOM_FOCUS_Z[0], ZOOM_FOCUS_Z[1]);
@@ -515,6 +532,10 @@ export class MatchScene {
   private updateCamera(): void {
     const seconds = this.engine.getDeltaTime() / 1000;
     this.updateView(seconds);
+    if (this.zoomDirection !== 0) {
+      const factor = Math.exp(-this.zoomDirection * ZOOM_KEY_SPEED * seconds);
+      this.zoom(factor, this.canvas.clientWidth / 2, this.canvas.clientHeight * this.bandMiddle);
+    }
     this.updateCameraParallax(seconds);
     this.updateShake(seconds);
     const t = Math.min(seconds * ZOOM_FOLLOW_SPEED, 1);

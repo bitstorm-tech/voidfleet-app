@@ -130,7 +130,7 @@ export class MatchController {
     this.admiralSelect = new AdmiralSelect(ui, (admiral) => this.chooseAdmiral(admiral));
     this.resultScreen = new ResultScreen(ui, () => this.startNewMatch());
     installFullscreen(ui);
-    installViewToggle(ui, { toggle: () => this.view.toggleCameraView(), orbit: (direction) => this.view.orbitCamera(direction) });
+    installViewToggle(ui, this.view);
     new SettingsDialog(ui);
     new RulesDialog(ui);
     this.opponentPanel = new OpponentPanel(ui);
