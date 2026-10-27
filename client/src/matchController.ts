@@ -223,8 +223,10 @@ export class MatchController {
         break;
       }
       case "round":
-        // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht.
+        // Der Geist weicht dem echten Schiff; der neue Zustand folgt als nächste Nachricht. Wer als Zweiter abgibt,
+        // bekommt die Runde ohne Zwischenstand, eine offene Auswahl samt Gitter muss also hier weichen.
         this.isResolving = true;
+        this.selection = null;
         this.match.endRound();
         this.refreshSelectionVisuals();
         setMusicMood("battle");
