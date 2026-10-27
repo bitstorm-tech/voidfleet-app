@@ -1,5 +1,5 @@
 // Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe, Mausrad-Zoom und Verschieben per Ziehen, zwei
-// Ansichten mit einer kurzen Kamerafahrt dazwischen, Lichter, Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen.
+// Ansichten mit jedem Stand dazwischen, Lichter, Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen.
 //
 // Koordinaten: Babylon ist linkshändig, die Godot-Szene rechtshändig. Alle
 // Z-Werte aus der Godot-Szene sind hier negiert; x (Lanes) und y bleiben.
@@ -33,7 +33,7 @@ import { BoardEffects } from "./effects.ts";
 import { LaneLabel } from "./laneLabel.ts";
 import { MoveArrow } from "./moveArrow.ts";
 import type { ShipView } from "./ship.ts";
-import { SlotPad, createPadMaterials } from "./slotPad.ts";
+import { PAD_DEPTH, PAD_WIDTH, SlotPad, createPadMaterials } from "./slotPad.ts";
 import { TargetLines } from "./targetLines.ts";
 import { TargetReticle } from "./targetReticle.ts";
 import { animationTimeScale, easeInOutSine } from "./tween.ts";
@@ -41,15 +41,15 @@ import { animationTimeScale, easeInOutSine } from "./tween.ts";
 const BOARD_Z = 2.5;
 
 /**
- * Eine Kameraansicht samt Aufteilung des Bretts. Die Kamera blickt aus `distance` unter `pitch` auf den Brettpunkt
- * `look`, `yaw` dreht sie um die Hochachse.
+ * Eine Kameraansicht samt Aufteilung des Bretts. `yaw` dreht die Kamera um die Hochachse, `pitch` neigt sie nach unten;
+ * wo sie steht, folgt aus `frame` (`MatchScene.frameBoard`).
  */
 interface ViewSpec {
-  look: Vector3;
   yaw: number;
   pitch: number;
-  distance: number;
   fov: number;
+  /** Bildband, das die Pads senkrecht füllen: Ober- und Unterkante in Bildhöhen von oben. */
+  frame: [top: number, bottom: number];
   /** Welt-x der Lanes. */
   laneX: Record<Side, Record<LaneType, number>>;
   /** Abstand der Slots entlang der Lane; zwischen den Pads bleibt eine Fuge. */
@@ -61,32 +61,36 @@ interface ViewSpec {
 /**
  * Von der Seite liegt die eigene Seite links und Slot 0 hinten, die Beschriftung steht hinter ihm. Von hinten oben liegt
  * die eigene Seite unten und Slot 0 links, die Beschriftung links daneben; die Lanes rücken zusammen und die Slots
- * auseinander, damit das Brett über die Hand passt. Beim Umschalten gleiten Kamera, Lanes und Slots in die andere Ansicht.
+ * auseinander, damit das Brett über die Hand passt. Dazwischen ist jeder Stand möglich: Ausrichtung, Bildband und
+ * Aufteilung werden gemischt, Lanes und Slots gleiten mit.
  */
 const VIEWS: Record<CameraView, ViewSpec> = {
   side: {
-    look: new Vector3(0, 0, 0.63),
     yaw: 0,
     pitch: Tools.ToRadians(42),
-    distance: 21.97,
     fov: Tools.ToRadians(33.5),
+    frame: [0.175, 0.767],
     laneX: { player: { command: -6.15, strike: -2.75 }, enemy: { strike: 2.75, command: 6.15 } },
     slotStep: 2.2,
     labelZ: 6.4,
   },
   top: {
-    look: new Vector3(-2.83, 0, BOARD_Z),
     yaw: Math.PI / 2,
     pitch: Tools.ToRadians(50),
-    distance: 32.9,
     fov: Tools.ToRadians(30),
+    frame: [0.153, 0.679],
     laneX: { player: { command: -5.4, strike: -2 }, enemy: { strike: 2, command: 5.4 } },
     slotStep: 2.6,
     labelZ: 9.1,
   },
 };
+/** Stand zwischen den Ansichten, an dem jede liegt. */
+const VIEW_BLEND: Record<CameraView, number> = { side: 0, top: 1 };
 /** Dauer der Kamerafahrt zwischen den Ansichten in ms, gestreckt wie die übrigen Animationen. */
 const VIEW_SWITCH_DURATION = 1100;
+/** Mit gehaltener Pfeiltaste dreht die Kamera in dieser Zeit (ms) von einer Ansicht zur anderen; An- und Auslauf in ms. */
+const ORBIT_DURATION = 1600;
+const ORBIT_RAMP = 150;
 /** Lane-z eines Slots: Slot 0 am Ende mit dem größten z, die sechs Slots symmetrisch um die Lane-Mitte. */
 const slotZ = (index: number, step: number): number => (2.5 - index) * step;
 /** Neue Schiffe fliegen von hier aus ein, außerhalb des Bildes am Rand ihrer Seite (Welt-|x|). */
@@ -158,10 +162,14 @@ export class MatchScene {
   private readonly lights: { key: DirectionalLight; fill: PointLight; rim: PointLight };
   /** Je Lane ihr Knoten, dessen Welt-x der Ansicht folgt, und ihre Beschriftung. */
   private readonly lanes: { lane: Lane; root: TransformNode; label: LaneLabel }[] = [];
-  /** Gewählte Ansicht und Stand der Kamerafahrt: 0 von der Seite, 1 von hinten oben. */
-  private cameraView: CameraView;
+  /** Stand zwischen den Ansichten (0 von der Seite, 1 von hinten oben) und sein Tempo pro Sekunde. */
   private blend: number;
-  /** Ruhelage und Ausrichtung der Kamera beim jetzigen Stand der Kamerafahrt. */
+  private blendSpeed = 0;
+  /** Richtung der gedrückten Pfeiltasten: 1 nach hinten oben, −1 zur Seite. */
+  private orbitDirection = 0;
+  /** Stand einer Ansicht, zu dem die Kamera per Knopf, Taste V oder Einstellung fährt. */
+  private viewGoal: number | null = null;
+  /** Ruhelage und Ausrichtung der Kamera beim jetzigen Stand zwischen den Ansichten. */
   private readonly rest = Vector3.Zero();
   private yaw = 0;
   private pitch = 0;
@@ -214,15 +222,14 @@ export class MatchScene {
     this.targetLines = new TargetLines(this.scene, this.glow);
 
     this.createBoard(board);
-    this.cameraView = settings.cameraView;
-    this.blend = this.cameraView === "top" ? 1 : 0;
+    this.blend = VIEW_BLEND[settings.cameraView];
     this.applyView();
     // Eine andere Standardansicht in den Einstellungen gilt sofort.
     let defaultView = settings.cameraView;
     onSettingsChange(() => {
       if (settings.cameraView === defaultView) return;
       defaultView = settings.cameraView;
-      this.setCameraView(defaultView);
+      this.turnTo(VIEW_BLEND[defaultView]);
     });
     setScreenSide((at) => (this.screenPosition(at).x / this.canvas.clientWidth) * 2 - 1);
 
@@ -266,9 +273,20 @@ export class MatchScene {
     return new Vector3((this.laneX(side, "strike") + this.laneX(side, "command")) / 2, 0, BOARD_Z);
   }
 
-  /** Wechselt mit einer kurzen Kamerafahrt zur anderen Ansicht; herangezoomt geht es dabei zurück in die Ruhelage. */
+  /**
+   * Fährt zur anderen Ansicht, von einem Stand dazwischen zur ferneren, und kehrt eine laufende Fahrt um; herangezoomt geht
+   * es dabei zurück in die Ruhelage.
+   */
   toggleCameraView(): void {
-    this.setCameraView(this.cameraView === "side" ? "top" : "side");
+    this.turnTo((this.viewGoal ?? this.blend) < 0.5 ? VIEW_BLEND.top : VIEW_BLEND.side);
+  }
+
+  /** Dreht die Kamera stufenlos zwischen den Ansichten, solange `direction` nicht 0 ist: 1 nach hinten oben, −1 zur Seite. */
+  orbitCamera(direction: number): void {
+    this.orbitDirection = direction;
+    if (direction === 0) return;
+    this.viewGoal = null;
+    this.zoomTarget.setAll(0);
   }
 
   /** Bildschirmposition eines Weltpunkts in CSS-Pixeln, für DOM-Overlays. */
@@ -290,13 +308,13 @@ export class MatchScene {
     for (const { label } of this.lanes) label.visible = value;
   }
 
-  private setCameraView(view: CameraView): void {
-    this.cameraView = view;
+  private turnTo(goal: number): void {
+    this.viewGoal = goal;
     this.zoomTarget.setAll(0);
   }
 
-  private get isSwitchingView(): boolean {
-    return this.blend !== (this.cameraView === "top" ? 1 : 0);
+  private get isTurning(): boolean {
+    return this.viewGoal !== null || this.blendSpeed !== 0;
   }
 
   private laneX(side: Side, type: LaneType): number {
@@ -343,28 +361,13 @@ export class MatchScene {
   }
 
   /**
-   * Stellt Kamera, Lichter, Lanes, Slots und Beschriftungen auf den Stand der Kamerafahrt; Zielbögen und Pfeile folgen
-   * den Pads.
+   * Stellt Lanes, Slots, Beschriftungen, Kamera und Lichter auf den Stand zwischen den Ansichten; Zielbögen und Pfeile
+   * folgen den Pads.
    */
   private applyView(): void {
     const { side, top } = VIEWS;
     const progress = easeInOutSine(this.blend);
     const mix = (from: number, to: number) => from + (to - from) * progress;
-
-    this.yaw = mix(side.yaw, top.yaw);
-    this.pitch = mix(side.pitch, top.pitch);
-    this.cameraRig.rotation.y = this.yaw;
-    this.camera.rotation.x = this.pitch;
-    this.camera.fov = mix(side.fov, top.fov);
-    const { yaw, pitch } = this;
-    const forward = new Vector3(Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-    const look = Vector3.Lerp(side.look, top.look, progress);
-    this.rest.copyFrom(look.subtractInPlace(forward.scaleInPlace(mix(side.distance, top.distance))));
-
-    const turn = Matrix.RotationY(yaw);
-    this.lights.key.direction = Vector3.TransformNormal(KEY_DIRECTION, turn);
-    this.lights.fill.position = BOARD_CENTER.add(Vector3.TransformCoordinates(FILL_OFFSET, turn));
-    this.lights.rim.position = BOARD_CENTER.add(Vector3.TransformCoordinates(RIM_OFFSET, turn));
 
     for (const { lane, root, label } of this.lanes) {
       root.position.x = mix(side.laneX[lane.side][lane.type], top.laneX[lane.side][lane.type]);
@@ -376,8 +379,43 @@ export class MatchScene {
       // Erzwungen: Bögen und Pfeile lesen gleich die Weltlage, auch wenn ein Knoten in diesem Bild schon gerechnet war.
       pad.root.computeWorldMatrix(true);
     }
+
+    this.yaw = mix(side.yaw, top.yaw);
+    this.pitch = mix(side.pitch, top.pitch);
+    this.cameraRig.rotation.y = this.yaw;
+    this.camera.rotation.x = this.pitch;
+    this.camera.fov = mix(side.fov, top.fov);
+    const halfWidth = Math.max(...this.lanes.map(({ root }) => Math.abs(root.position.x))) + PAD_WIDTH / 2;
+    const halfDepth = slotZ(0, slotStep) + PAD_DEPTH / 2;
+    this.frameBoard(halfWidth, halfDepth, mix(side.frame[0], top.frame[0]), mix(side.frame[1], top.frame[1]));
+
+    const turn = Matrix.RotationY(this.yaw);
+    this.lights.key.direction = Vector3.TransformNormal(KEY_DIRECTION, turn);
+    this.lights.fill.position = BOARD_CENTER.add(Vector3.TransformCoordinates(FILL_OFFSET, turn));
+    this.lights.rim.position = BOARD_CENTER.add(Vector3.TransformCoordinates(RIM_OFFSET, turn));
+
     this.targetLines.refresh();
     for (const arrow of [this.moveArrow, this.maneuverArrow, this.swapArrow]) arrow.refresh();
+  }
+
+  /**
+   * Stellt die Kamera bei ihrer Ausrichtung so, dass die Brettmitte waagerecht in der Bildmitte liegt und die Pads senkrecht
+   * genau das Band von `top` bis `bottom` (Bildhöhen von oben) füllen. Alle Punkte auf einer Bildhöhe y (unten −1, oben 1)
+   * liegen in einer Ebene durch die Kamera mit der Normalen oben − y·tan(fov/2)·vorn; am höchsten bzw. tiefsten liegt eine
+   * Brettecke, `ahead` weit vor der parallelen Ebene durch die Brettmitte. Damit sind Abstand und Höhe der Kamera linear
+   * bestimmt. Schräg reicht das Brett in Blickrichtung weiter (`reach`), die Kamera rückt also zurück.
+   */
+  private frameBoard(halfWidth: number, halfDepth: number, top: number, bottom: number): void {
+    const { yaw, pitch } = this;
+    const tan = Math.tan(this.camera.fov / 2);
+    const reach = halfWidth * Math.sin(yaw) + halfDepth * Math.cos(yaw);
+    const screenY = (fromTop: number) => 1 - 2 * fromTop;
+    const ahead = (fromTop: number) => reach * (Math.sin(pitch) - screenY(fromTop) * tan * Math.cos(pitch));
+    const distance = (ahead(top) + ahead(bottom)) / (tan * (screenY(top) - screenY(bottom)));
+    const lift = ahead(top) - distance * screenY(top) * tan;
+    const forward = new Vector3(Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+    const up = new Vector3(Math.sin(yaw) * Math.sin(pitch), Math.cos(pitch), Math.cos(yaw) * Math.sin(pitch));
+    this.rest.copyFrom(BOARD_CENTER).addInPlace(up.scaleInPlace(lift)).subtractInPlace(forward.scaleInPlace(distance));
   }
 
   /** Waagerecht nach rechts im Bild. */
@@ -385,10 +423,10 @@ export class MatchScene {
     return new Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
   }
 
-  /** Zoomt auf den Brettpunkt unter dem Zeiger zu oder zurück in Richtung Ruhelage; nicht während der Kamerafahrt. */
+  /** Zoomt auf den Brettpunkt unter dem Zeiger zu oder zurück in Richtung Ruhelage; nicht, während sich die Ansicht dreht. */
   private onWheel(event: WheelEvent): void {
     event.preventDefault();
-    if (this.isSwitchingView) return;
+    if (this.isTurning) return;
     const pixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY;
     const factor = Math.exp(pixels * ZOOM_SPEED);
     const rest = this.rest;
@@ -476,7 +514,7 @@ export class MatchScene {
 
   private updateCamera(): void {
     const seconds = this.engine.getDeltaTime() / 1000;
-    this.updateViewSwitch(seconds);
+    this.updateView(seconds);
     this.updateCameraParallax(seconds);
     this.updateShake(seconds);
     const t = Math.min(seconds * ZOOM_FOLLOW_SPEED, 1);
@@ -487,12 +525,21 @@ export class MatchScene {
     this.cameraRig.position.y += this.scrollOffset.y + this.shakeOffset.y;
   }
 
-  /** Kamerafahrt zur gewählten Ansicht, im Takt der übrigen Animationen. */
-  private updateViewSwitch(seconds: number): void {
-    const target = this.cameraView === "top" ? 1 : 0;
-    if (this.blend === target) return;
-    const step = (seconds * 1000) / (VIEW_SWITCH_DURATION * animationTimeScale("general"));
-    this.blend = target > this.blend ? Math.min(this.blend + step, 1) : Math.max(this.blend - step, 0);
+  /**
+   * Dreht die Ansicht, solange eine Pfeiltaste gedrückt ist, sonst bis zum Ziel der Kamerafahrt im Takt der übrigen
+   * Animationen. Das Tempo läuft kurz an und aus; an den Ansichten selbst bremst `easeInOutSine` in `applyView` sanft.
+   */
+  private updateView(seconds: number): void {
+    const goal = this.orbitDirection === 0 ? this.viewGoal : null;
+    const direction = goal === null ? this.orbitDirection : Math.sign(goal - this.blend);
+    const topSpeed = 1000 / (goal === null ? ORBIT_DURATION : VIEW_SWITCH_DURATION * animationTimeScale("general"));
+    const change = (topSpeed * seconds * 1000) / ORBIT_RAMP;
+    this.blendSpeed = clamp(direction * topSpeed, this.blendSpeed - change, this.blendSpeed + change);
+    const blend = clamp(this.blend + this.blendSpeed * seconds, 0, 1);
+    if (blend === 0 || blend === 1) this.blendSpeed = 0;
+    if (blend === this.viewGoal) this.viewGoal = null;
+    if (blend === this.blend) return;
+    this.blend = blend;
     this.applyView();
   }
 
