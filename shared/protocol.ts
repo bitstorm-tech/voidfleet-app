@@ -35,7 +35,8 @@ export interface Deploy {
  * `destination` der anderen oder derselben Lane; dafür feuert es in dieser Runde nicht. Die Mirage darf dabei auch in einen
  * belegten eigenen Slot: Sie tauscht mit dem Schiff dort die Plätze (Phasentausch), und beide feuern. Eigene Ziele beziehen sich auf
  * die Stellung vor dem Manöver: Ein Befehl auf das manövrierte Schiff folgt ihm. Ein Slot der Gegnerseite
- * bleibt, was er ist: Getroffen wird, wer nach allen Bewegungen dort steht.
+ * bleibt, was er ist: Getroffen wird, wer nach allen Bewegungen dort steht. Im Kampf feuert nur, wer einen
+ * Feuerbefehl hat (`fire`); es gibt keine automatische Zielwahl.
  */
 export interface TurnPlan {
   ships: Deploy[];
@@ -47,6 +48,19 @@ export interface TurnPlan {
   power: { target: SlotTarget } | null;
   /** Pendulum: der Slot des gegnerischen Schiffs (Stellung beim Planen), das sie markiert; nur in Runden, in denen sie nicht feuert. */
   mark: SlotTarget | null;
+  /** Feuerbefehle: je eigenem Kampfschiff höchstens einer; jede Runde neu, ein Schiff ohne Feuerbefehl feuert nicht. */
+  fire: FireOrder[];
+}
+
+/**
+ * Ein Feuerbefehl: `ship` ist ein eigenes Kampfschiff (Slot beim Planen, auch eines, das in dieser Runde landet, nicht
+ * das Schiff des Grundmanövers), `target` ein gegnerisches Schiff, das beim Planen dort steht, auch ein gedecktes. Beide
+ * folgen ihrem Schiff, wenn es sich bewegt. Steht das Ziel zu Kampfbeginn gedeckt, fängt das Schiff davor den Schuss ab;
+ * ist es schon zerstört oder nicht mehr auf dem Brett, verpufft der Schuss.
+ */
+export interface FireOrder {
+  ship: SlotTarget;
+  target: SlotTarget;
 }
 
 /** Ein Schiff an einer Stelle des Bretts; die Karte steht dabei, weil der Slot danach leer sein kann. */
@@ -173,8 +187,28 @@ export type RoundEvent =
   | { kind: "railgun"; source: ShipRef; target: ShipRef; amount: number; after: ShipStats; blocked: boolean }
   /** Taktvorsprung: Das Schiff fiel durch einen Schuss, der vor allen anderen kam, und feuert nicht mehr. */
   | { kind: "silenced"; ship: ShipRef }
-  /** Ein Schuss im Kampf; `focus`/`swarm`/`headStart`: gelenkt bzw. beschleunigt von der Admiralsfähigkeit. */
-  | { kind: "attack"; attacker: ShipRef; target: ShipRef; amount: number; after: ShipStats; focus?: true; swarm?: true; headStart?: true }
+  /**
+   * Ein Schuss im Kampf; `focus`/`swarm`/`headStart`: verstärkt, gelenkt bzw. beschleunigt von der Admiralsfähigkeit.
+   * `aimedAt`: Das Schiff des Feuerbefehls, wenn der Schuss ein anderes trifft: die Deckung davor fängt ihn ab, oder
+   * (`taunt`) die Ablenkung zieht ihn auf sich.
+   */
+  | {
+      kind: "attack";
+      attacker: ShipRef;
+      target: ShipRef;
+      amount: number;
+      after: ShipStats;
+      focus?: true;
+      swarm?: true;
+      headStart?: true;
+      aimedAt?: ShipRef;
+      taunt?: true;
+    }
+  /**
+   * Ein Schuss, der verpufft: Sein Ziel ist schon zerstört (`target`) oder nicht mehr auf dem Brett (`target` null).
+   * Fängt eine schon zerstörte Deckung den Schuss ab, ist sie `target` und `aimedAt` das Schiff des Feuerbefehls dahinter.
+   */
+  | { kind: "fizzle"; attacker: ShipRef; target: ShipRef | null; aimedAt?: ShipRef; headStart?: true }
   /** Gegenfeuer nach dem Kampf: `ship` hat `source` getroffen und nimmt dafür Schaden. */
   | { kind: "counterfire"; source: ShipRef; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }
@@ -228,7 +262,9 @@ export type ErrorCode =
   | "destination_unavailable"
   | "maneuver_not_own_ship"
   | "maneuver_destination_unavailable"
-  | "maneuver_conflict";
+  | "maneuver_conflict"
+  | "fire_ship_invalid"
+  | "fire_target_invalid";
 
 export type ServerMessage =
   | { type: "state"; view: PlayerView }

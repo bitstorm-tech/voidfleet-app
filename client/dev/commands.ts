@@ -1,6 +1,8 @@
 // Vorschau der Befehlswirkungen ohne Server: Die echte Rundenwiedergabe (`RoundPlayback`) spielt nacheinander je
-// Befehl erfundene Ereignisse auf einem kleinen Brett ab, mit Banner, Log und Schwebetexten, in Dauerschleife.
-// `?card=<id>` zeigt nur die Szenen dieses Befehls, `?slow=4` bremst die Szene um den Faktor, `?lang=de` auf Deutsch.
+// Befehl erfundene Ereignisse auf einem kleinen Brett ab, mit Banner, Log und Schwebetexten, in Dauerschleife; dazu
+// Schüsse im Kampf, die die Deckung abfängt oder die verpuffen (`combat`).
+// `?card=<id>` zeigt nur die Szenen dieses Befehls (`?card=combat` die Kampfszenen), `?slow=4` bremst die Szene um den
+// Faktor, `?lang=de` auf Deutsch.
 
 import { Board, type LaneType, type Side } from "../../shared/board.ts";
 import { shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
@@ -39,7 +41,8 @@ type Placement = [side: Side, lane: LaneType, slotIndex: number, cardId: ShipId]
 
 /** Eine Szene: die Schiffe auf dem Brett und die Ereignisse, die darauf abgespielt werden. */
 interface Scene {
-  card: CommandId;
+  /** Der Befehl der Szene; `combat` für Schüsse im Kampf ohne Befehl. */
+  card: CommandId | "combat";
   name: string;
   ships: Placement[];
   /** Vorbereitung nach dem Aufstellen, etwa eine Admiralsmarke, die Funkstille wieder wegnimmt. */
@@ -93,6 +96,40 @@ const SCENES: Scene[] = [
   { card: "rapid_deployment", name: "Schnellverlegung", ships: FLEET, events: [{ kind: "rule", side: "player", cardId: "rapid_deployment" }] },
   { card: "carte_blanche", name: "Freie Hand", ships: FLEET, events: [{ kind: "rule", side: "enemy", cardId: "carte_blanche" }] },
   { card: "draw_fire", name: "Ablenkung", ships: FLEET, events: [effect("player", "draw_fire", P_STRIKE_3, { type: "taunt" })] },
+  {
+    card: "draw_fire", name: "Ablenkung im Kampf", ships: FLEET,
+    events: [
+      effect("player", "draw_fire", P_STRIKE_3, { type: "taunt" }),
+      { kind: "attack", attacker: E_STRIKE_2, target: P_STRIKE_3, amount: 2, after: stats("horizon_cruiser", 2), aimedAt: P_STRIKE_2, taunt: true },
+      { kind: "attack", attacker: E_COMMAND_3, target: P_STRIKE_3, amount: 1, after: stats("horizon_cruiser", 3), taunt: true },
+    ],
+  },
+  {
+    card: "combat", name: "Deckung fängt ab", ships: FLEET,
+    events: [
+      { kind: "attack", attacker: P_STRIKE_2, target: E_STRIKE_3, amount: 3, after: stats("iron_dreadnought", 1, -2), aimedAt: E_COMMAND_3 },
+      { kind: "attack", attacker: E_STRIKE_2, target: P_STRIKE_3, amount: 2, after: stats("horizon_cruiser", 2), aimedAt: P_COMMAND_3 },
+    ],
+  },
+  {
+    card: "combat", name: "Verpufft: schon zerstört", ships: FLEET,
+    prepare: async () => view.pad("enemy", "strike", 2).ship!.setStats(3, 0),
+    events: [
+      { kind: "attack", attacker: P_STRIKE_2, target: E_STRIKE_2, amount: 3, after: { hp: 0, shield: 0 } },
+      { kind: "attack", attacker: E_STRIKE_3, target: P_STRIKE_2, amount: 2, after: stats("void_interceptor", 2) },
+      { kind: "fizzle", attacker: P_STRIKE_3, target: E_STRIKE_2 },
+      { kind: "destroyed", ship: E_STRIKE_2 },
+    ],
+  },
+  {
+    card: "combat", name: "Verpufft: Ziel nicht mehr auf dem Brett", ships: FLEET,
+    events: [
+      effect("player", "micro_jump", P_STRIKE_3, { type: "jump" }),
+      { kind: "fizzle", attacker: E_STRIKE_3, target: null },
+      { kind: "fizzle", attacker: E_COMMAND_3, target: null },
+      { kind: "return", ship: P_STRIKE_3, after: stats("horizon_cruiser") },
+    ],
+  },
   {
     card: "shield_grid", name: "Schildgitter", ships: FLEET,
     events: [P_STRIKE_2, P_STRIKE_3, P_COMMAND_3].map((ship) => effect("player", "shield_grid", ship, { type: "shield", amount: 1 }, stats(ship.cardId, 0, 1))),

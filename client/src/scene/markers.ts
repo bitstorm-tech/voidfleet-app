@@ -2,7 +2,9 @@
 // die Zielerfassung der Pendulum (Fadenkreuz mit Rauten) und die Marken der Admiralsfähigkeiten — Stacheln beim
 // Gegenfeuer, ein Fadenkreuz aus Zielklammern beim Fokusfeuer, kreisende Drohnen beim Schwarmangriff, eine Uhr beim
 // Taktvorsprung — und die Ablenkung (Befehl): ein pulsierender Leuchtring mit Winkeln, die das Feuer nach innen
-// ziehen. Sie hängen am Schiff (`ShipView`) und folgen ihm, wenn es den Slot wechselt. Jede Marke besteht aus
+// ziehen. Beim Planen der Feuerbefehle zeigt ein gestrichelter Ring mit drei Kerben die Bereitschaft (das Schiff kann
+// noch ein Ziel bekommen), das Visier aus Ring und vier nach außen zeigenden Spitzen den gewählten Schützen.
+// Sie hängen am Schiff (`ShipView`) und folgen ihm, wenn es den Slot wechselt. Jede Marke besteht aus
 // flachen Scheiben mit einer im Canvas gezeichneten Textur, die sich drehen oder pulsieren. Ihr Halter ist auf die
 // Grundfläche des Schiffs gestreckt, damit die Marke um den Rumpf herum sichtbar bleibt, auch bei langen Schlachtschiffen.
 
@@ -18,7 +20,7 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { PowerId } from "../../../shared/admirals.ts";
 import { easeOutCubic, tween } from "./tween.ts";
 
-export type MarkerKind = "halo" | "lock" | "taunt" | Exclude<PowerId, "decoy">;
+export type MarkerKind = "halo" | "lock" | "taunt" | "ready" | "aim" | Exclude<PowerId, "decoy">;
 
 export interface MarkerSpec {
   kind: MarkerKind;
@@ -34,7 +36,21 @@ interface Layer {
   pulse?: { rate: number; amount: number };
 }
 
-type Glyph = "halo" | "haloDashes" | "lock" | "lockRing" | "spikes" | "brackets" | "swarm" | "clock" | "clockHand" | "beacon" | "beaconChevrons";
+type Glyph =
+  | "halo"
+  | "haloDashes"
+  | "lock"
+  | "lockRing"
+  | "spikes"
+  | "brackets"
+  | "swarm"
+  | "clock"
+  | "clockHand"
+  | "beacon"
+  | "beaconChevrons"
+  | "ready"
+  | "aim"
+  | "aimPointers";
 
 /** Grundfläche eines Schiffs in Welteinheiten: Breite quer zur Nase, Länge entlang der Nase. */
 export interface Footprint {
@@ -51,6 +67,8 @@ const MARKERS: Record<MarkerKind, { margin: number; alpha: number; layers: reado
   swarm_strike: { margin: 0.6, alpha: 0.9, layers: [{ glyph: "swarm", spin: 1.3 }] },
   head_start: { margin: 0.6, alpha: 0.9, layers: [{ glyph: "clock" }, { glyph: "clockHand", spin: 2.4 }] },
   taunt: { margin: 0.6, alpha: 0.95, layers: [{ glyph: "beacon", pulse: { rate: 1.2, amount: 0.08 } }, { glyph: "beaconChevrons", spin: -0.4 }] },
+  ready: { margin: 0.6, alpha: 0.6, layers: [{ glyph: "ready", spin: 0.25, pulse: { rate: 0.9, amount: 0.04 } }] },
+  aim: { margin: 0.6, alpha: 0.95, layers: [{ glyph: "aim", pulse: { rate: 1.4, amount: 0.03 } }, { glyph: "aimPointers", spin: 0.8 }] },
 };
 
 /** Quer zur Nase bleibt jede Marke in ihrem Slot (sie liegen 2,2 auseinander), aber nie kleiner als dieser Kreis. */
@@ -293,6 +311,38 @@ const GLYPHS: Record<Glyph, (context: CanvasRenderingContext2D) => void> = {
     context.fillStyle = "white";
     ring(context, 0.74, 0.04);
     ring(context, 0.84, 0.02);
+  },
+  /** Gestrichelter Ring mit drei Kerben nach außen: Die Geschütze warten auf ein Ziel. */
+  ready: (context) => {
+    context.lineWidth = 0.035;
+    context.setLineDash([0.12, 0.09]);
+    context.beginPath();
+    context.arc(0, 0, 0.82, 0, 2 * Math.PI);
+    context.stroke();
+    for (let index = 0; index < 3; index++) {
+      context.save();
+      context.rotate((index / 3) * 2 * Math.PI);
+      context.fillRect(-0.025, -0.99, 0.05, 0.12);
+      context.restore();
+    }
+  },
+  /** Kräftiger Ring mit feinem Innenring: Dieses Schiff wählt gerade sein Ziel. */
+  aim: (context) => {
+    ring(context, 0.8, 0.05);
+    ring(context, 0.7, 0.015);
+  },
+  /** Vier Spitzen außen auf dem Ring, nach außen gerichtet: Von hier geht der Schuss aus. */
+  aimPointers: (context) => {
+    for (let quarter = 0; quarter < 4; quarter++) {
+      context.save();
+      context.rotate((quarter * Math.PI) / 2);
+      context.beginPath();
+      context.moveTo(-0.09, -0.84);
+      context.lineTo(0, -0.99);
+      context.lineTo(0.09, -0.84);
+      context.fill();
+      context.restore();
+    }
   },
   /** Acht Winkel außen um den Ring, die Spitzen nach innen: Hierher zielt das Feuer. */
   beaconChevrons: (context) => {

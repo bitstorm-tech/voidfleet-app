@@ -1,6 +1,6 @@
-// Illustrationen des Regel-Dialogs: Brett mit Deckungsregel und Zielwahl je Klasse als
-// Inline-SVG, Phasenfolge, Overdrive-Verlauf und die Teile eines Zugs als DOM (Schiff, Befehl,
-// Manöver oder Admiralsfähigkeit). Beschriftet aus `t.rules.figures`; Farben kommen aus den
+// Illustrationen des Regel-Dialogs: Brett mit Deckungsregel und Feuerbefehle als Inline-SVG,
+// Phasenfolge, Overdrive-Verlauf und die Teile eines Zugs als DOM (Schiff, Befehl, Manöver oder
+// Admiralsfähigkeit, Feuerbefehle). Beschriftet aus `t.rules.figures`; Farben kommen aus den
 // CSS-Variablen der Palette (`styles.css`).
 
 import { overdriveBonus } from "../../../shared/board.ts";
@@ -106,37 +106,60 @@ export function boardFigure(): SVGSVGElement {
   return svg;
 }
 
-/** Zielwahl im Kampf: je Klasse ein Block mit drei Gegnern oben und dem Angreifer unten. */
-export function targetingFigure(): SVGSVGElement {
-  const svg = svgRoot(640, 172);
+type FigureRow = "command" | "strike" | "own";
+/** Ein Slot in einer Spalte der Feuerbefehl-Figur: Reihe (gegnerische Command- und Strike-Lane, eigene Strike-Lane) und Nummer. */
+type Spot = readonly [row: FigureRow, slot: number];
+
+/**
+ * Feuerbefehle im Kampf, drei Fälle nebeneinander, oben die Gegnerseite (Command, Strike), unten eigene Schiffe:
+ * freie Wahl unter allen gegnerischen Schiffen, auch quer über die Lanes; ein Schuss auf ein gedecktes Schiff, den das
+ * Schiff davor abfängt (gepunktet der Feuerbefehl, rot der Schuss); und ein zweiter Schuss auf ein Schiff, das der
+ * erste schon zerstört hat — er verpufft. Rot markiert sind die getroffenen Slots, grün der gedeckte.
+ */
+export function fireOrdersFigure(): SVGSVGElement {
+  const svg = svgRoot(640, 162);
   svg.append(arrowheadDefs());
-  const blocks = [
-    { shipClass: "fighter", chosen: 1, reason: labels.lowestHp },
-    { shipClass: "battleship", chosen: 2, reason: labels.highestAtk },
-    { shipClass: "cruiser", chosen: 0, reason: labels.opposite },
-  ] as const;
-  const targets: readonly [number, number][] = [
-    [8, 2],
-    [5, 1],
-    [12, 3],
-  ];
-  const slotWidth = 62;
-  const step = 68;
-  const slotHeight = 34;
-  blocks.forEach((block, blockIndex) => {
-    const ox = blockIndex * 218;
-    const cx = (index: number) => ox + index * step + slotWidth / 2;
-    svg.append(text(ox, 12, t.shipClasses[block.shipClass], "class-label"));
-    targets.forEach(([hp, atk], index) => {
-      svg.append(slot(ox + index * step, 24, slotWidth, slotHeight, "enemy", index === block.chosen ? "exposed" : undefined));
-      svg.append(ship(cx(index), 24 + slotHeight / 2, "enemy"));
-      svg.append(text(cx(index), 72, labels.stat(hp, atk), "stat", "middle"));
-    });
-    svg.append(slot(ox, 104, slotWidth, slotHeight, "player"));
-    svg.append(ship(cx(0), 104 + slotHeight / 2, "player"));
-    svg.append(arrow([cx(0) + 4, 100], [cx(block.chosen) - (block.chosen === 0 ? 0 : 6), 24 + slotHeight + 18], "shot"));
-    svg.append(text(ox + slotWidth + 10, 126, block.reason, "badge exposed"));
-  });
+  const slotWidth = 58;
+  const step = 64;
+  const slotHeight = 30;
+  const rows: Record<FigureRow, number> = { command: 24, strike: 60, own: 126 };
+  const same = (a: Spot, b: Spot) => a[0] === b[0] && a[1] === b[1];
+  /** Zeichnet Titel, Slots und Schiffe eines Falls und gibt zurück, wo seine Slots liegen (`edge` -1 oben, 1 unten, 0 Mitte). */
+  const block = (index: number, title: string, ships: readonly Spot[], hit: readonly Spot[], covered?: Spot) => {
+    const ox = index * 222;
+    const at = ([row, slotIndex]: Spot, edge = 0): [number, number] => [ox + slotIndex * step + slotWidth / 2, rows[row] + ((1 + edge) * slotHeight) / 2];
+    svg.append(text(ox, 12, title, "class-label"));
+    for (const row of ["command", "strike", "own"] as const) {
+      for (let slotIndex = 0; slotIndex < 3; slotIndex++) {
+        const spot: Spot = [row, slotIndex];
+        const highlight = hit.some((other) => same(other, spot)) ? "exposed" : covered && same(covered, spot) ? "covered" : undefined;
+        svg.append(slot(ox + slotIndex * step, rows[row], slotWidth, slotHeight, row === "own" ? "player" : "enemy", highlight));
+      }
+    }
+    for (const spot of ships) svg.append(ship(...at(spot), spot[0] === "own" ? "player" : "enemy"));
+    return at;
+  };
+
+  const free = block(0, labels.anyShip, [["command", 1], ["strike", 0], ["strike", 2], ["own", 0], ["own", 2]], [["command", 1], ["strike", 0]]);
+  svg.append(arrow(free(["own", 0], -1), free(["command", 1], 1), "shot"), arrow(free(["own", 2], -1), free(["strike", 0], 1), "shot"));
+
+  const cover = block(1, labels.coverTakes, [["command", 1], ["strike", 1], ["own", 0]], [["strike", 1]], ["command", 1]);
+  svg.append(arrow(cover(["own", 0], -1), cover(["command", 1], 1), "order"), arrow(cover(["own", 0], -1), cover(["strike", 1], 1), "shot"));
+
+  const fizzle = block(2, labels.fizzles, [["own", 0], ["own", 2]], [["strike", 1]]);
+  const [wx, wy] = fizzle(["strike", 1]);
+  svg.append(ship(wx, wy, "enemy", true));
+  for (const [dx, dy] of [[-9, -9], [9, -9]] as const) svg.append(svgElement("line", { x1: wx + dx, y1: wy + dy, x2: wx - dx, y2: wy - dy, class: "wreck" }));
+  svg.append(arrow(fizzle(["own", 0], -1), fizzle(["strike", 1], 1), "shot"));
+  // Der zweite Schuss endet auf halbem Weg in einem matten Wölkchen.
+  const [fromX, fromY] = fizzle(["own", 2], -1);
+  const [toX, toY] = fizzle(["strike", 1], 1);
+  const [endX, endY] = [fromX + (toX - fromX) * 0.55, fromY + (toY - fromY) * 0.55];
+  svg.append(svgElement("line", { x1: fromX, y1: fromY, x2: endX, y2: endY, class: "shot" }), svgElement("circle", { cx: endX, cy: endY, r: 6, class: "fizzle" }));
+  for (const [label, spot] of [["1", ["own", 0]], ["2", ["own", 2]]] as const) {
+    const [x, y] = fizzle(spot);
+    svg.append(text(x + 16, y + 4, label, "note"));
+  }
   return svg;
 }
 
@@ -173,7 +196,10 @@ export function overdriveFigure(): HTMLElement {
   return container;
 }
 
-/** Die drei Teile eines Zugs: Schiffskarte, Befehlskarte und das Manöver-Symbol oder die Admiralsfähigkeit. */
+/**
+ * Die Teile eines Zugs: Schiffskarte, Befehlskarte, das Manöver-Symbol oder die Admiralsfähigkeit und die Feuerbefehle
+ * (zwei eigene Schiffe feuern über Kreuz auf zwei gegnerische).
+ */
 export function turnFigure(): HTMLElement {
   const container = Object.assign(document.createElement("div"), { className: "rules-turn" });
   const frame = (content: Element) => {
@@ -193,7 +219,11 @@ export function turnFigure(): HTMLElement {
   maneuverIcon.append(arrowheadDefs());
   maneuverIcon.append(slot(20, 120, 100, 50, "player"), slot(20, 26, 100, 50, "player"), ship(70, 145, "player", true), ship(70, 51, "player"));
   maneuverIcon.append(svgElement("path", { d: "M100,118 C130,90 130,56 112,52", class: "move", "marker-end": "url(#rules-arrowhead)" }));
-  const [shipPart, commandPart, maneuverPart] = labels.turnParts;
+  const fireIcon = svgRoot(140, 196);
+  fireIcon.append(arrowheadDefs());
+  for (const x of [8, 76]) fireIcon.append(slot(x, 26, 56, 50, "enemy"), slot(x, 120, 56, 50, "player"), ship(x + 28, 51, "enemy"), ship(x + 28, 145, "player"));
+  fireIcon.append(arrow([40, 116], [100, 80], "shot"), arrow([100, 116], [40, 80], "shot"));
+  const [shipPart, commandPart, maneuverPart, firePart] = labels.turnParts;
   const or = Object.assign(document.createElement("span"), { className: "or", textContent: labels.or });
   container.append(
     part([frame(createCard(shipById("void_interceptor")))], shipPart!),
@@ -201,6 +231,8 @@ export function turnFigure(): HTMLElement {
     part([frame(createCard(commandById("overcharge")))], commandPart!),
     plus(),
     part([frame(maneuverIcon), or, frame(createPowerCard("kerr"))], maneuverPart!),
+    plus(),
+    part([frame(fireIcon)], firePart!),
   );
   container.append(Object.assign(document.createElement("span"), { className: "note", textContent: labels.roundOne }));
   return container;

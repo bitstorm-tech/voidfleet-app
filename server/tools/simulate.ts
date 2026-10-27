@@ -22,10 +22,14 @@ interface Game {
 
 const games: Game[] = [];
 const firstKills: number[] = [];
+/** Je Partie die Runde, in der das erste Flaggschiff fiel. */
+const flagshipFalls: number[] = [];
 let kills = 0;
 let roundsWithoutKill = 0;
 let combatDamage = 0;
 let commandDamage = 0;
+/** Schüsse im Kampf (ohne Railgun): alle, verpufft (`fizzle`), von der Deckung abgefangen (`aimedAt` ohne `taunt`), von Ablenkung gezogen (`taunt`). */
+const shots = { all: 0, fizzled: 0, covered: 0, taunted: 0 };
 let commands = 0;
 let commandsWithoutEffect = 0;
 const emptyCommandHand = [0, 0];
@@ -90,7 +94,7 @@ function newCardEffect(event: Extract<RoundEvent, { kind: "effect" }>, flagships
 
 /** Ersatzzug, falls die Zugprüfung einen Bot-Zug ablehnt: nur das Flaggschiff in Runde 1, sonst passen. */
 function fallback(round: number): TurnPlan {
-  return { ships: [], command: null, maneuver: null, flagship: round === 1 ? { lane: "command", slotIndex: 2 } : null, power: null, mark: null };
+  return { ships: [], command: null, maneuver: null, flagship: round === 1 ? { lane: "command", slotIndex: 2 } : null, power: null, mark: null, fire: [] };
 }
 
 function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
@@ -101,6 +105,7 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
   const side = (seat: Seat) => match.players[seat]!.side;
   const admiralOf = (of: Side) => admirals[side(0) === of ? 0 : 1];
   let firstKill: number | null = null;
+  let flagshipFall: number | null = null;
   while (match.winner === null && match.round <= ROUND_LIMIT) {
     for (const player of match.players) {
       if (player.commandHand.length === 0) emptyCommandHand[player.seat]! += 1;
@@ -121,6 +126,11 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
     else firstKill ??= round;
     if (round > 1) for (const of of [side(0), side(1)]) usage.get(admiralOf(of))!.rounds += 1;
     for (const event of events) {
+      if (event.kind === "attack" || event.kind === "fizzle") shots.all += 1;
+      if (event.kind === "fizzle") shots.fizzled += 1;
+      if (event.kind === "attack" && event.aimedAt && !event.taunt) shots.covered += 1;
+      if (event.kind === "attack" && event.taunt) shots.taunted += 1;
+      if (event.kind === "destroyed" && isFlagship(shipById(event.ship.cardId))) flagshipFall ??= round;
       if (event.kind === "attack") combatDamage += event.amount;
       if (event.kind === "effect" && event.effect.type === "damage") commandDamage += event.effect.amount;
       if (event.kind === "command") {
@@ -153,6 +163,7 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
     }
   }
   if (firstKill !== null) firstKills.push(firstKill);
+  if (flagshipFall !== null) flagshipFalls.push(flagshipFall);
   for (const admiral of admirals) usage.get(admiral)!.games += 1;
   const winner = match.winner === null ? null : match.winner === "draw" ? "draw" : match.winner === side(0) ? 0 : 1;
   return { admirals, winner, rounds: Math.min(match.round, ROUND_LIMIT) };
@@ -204,7 +215,11 @@ for (const id of ADMIRAL_IDS) {
   console.log(`  ${name(id).padEnd(20)} Fähigkeit ${percent(powers, own).padStart(7)}, Grundmanöver ${percent(maneuvers, own).padStart(7)}; ${perGame}`);
 }
 console.log(`Abschüsse pro Runde: ${(kills / totalRounds).toFixed(2)}, Runden ohne Abschuss: ${percent(roundsWithoutKill, totalRounds)}`);
-console.log(`Erster Abschuss: Ø Runde ${average(firstKills)}`);
+console.log(`Erster Abschuss: Ø Runde ${average(firstKills)}; erstes Flaggschiff fällt: Ø Runde ${average(flagshipFalls)}`);
+console.log(
+  `Schüsse im Kampf: ${(shots.all / totalRounds).toFixed(2)} je Runde, davon verpufft ${percent(shots.fizzled, shots.all)}, ` +
+    `von Deckung abgefangen ${percent(shots.covered, shots.all)}, von Ablenkung gezogen ${percent(shots.taunted, shots.all)}`,
+);
 console.log(`Schaden durch Befehle: ${percent(commandDamage, commandDamage + combatDamage)} (Nennwerte, ohne Eigenschaden)`);
 console.log(`Befehle ohne Wirkung: ${percent(commandsWithoutEffect, commands)} (noEffect und Fehlschüsse)`);
 console.log(`Leere Befehlshand: Seat 0 ${percent(emptyCommandHand[0]!, totalRounds)}, Seat 1 ${percent(emptyCommandHand[1]!, totalRounds)}`);

@@ -13,8 +13,9 @@ export type PowerId = "counterfire" | "focus_fire" | "swarm_strike" | "decoy" | 
  * Wohin eine Admiralsfähigkeit zielt (`TurnPlan.power.target`, gültig zur Stellung beim Planen):
  * - `own_ship`: ein eigenes Schiff, auch eines, das in dieser Runde gelegt wird (Gegenfeuer)
  * - `own_combat_ship`: ebenso, aber nur ein Kampfschiff mit ATK > 0 (Taktvorsprung)
- * - `enemy_ship`: ein gegnerisches Schiff (Fokusfeuer; es wirkt nur, solange das Ziel im Kampf ungedeckt ist)
- * - `enemy_ship_not_flagship`: ein gegnerisches Schiff außer dem Flaggschiff, auch ein gedecktes (Schwarmangriff)
+ * - `enemy_ship`: ein gegnerisches Schiff, auch ein gedecktes (Fokusfeuer: Jeder Treffer darauf macht mehr Schaden)
+ * - `enemy_ship_not_flagship`: ein gegnerisches Schiff außer dem Flaggschiff, auch ein gedecktes (Schwarmangriff: Die Drohnen
+ *   feuern darauf, auch durch Deckung und ohne eigenen Feuerbefehl)
  * - `free_own_strike_slot`: ein freier eigener Strike-Slot, in dem in dieser Runde nichts anderes landet (Trugbild)
  * Die Marke einer Fähigkeit folgt ihrem Schiff, wenn es sich in der Runde bewegt.
  */
@@ -56,16 +57,18 @@ export function targetsEnemy(power: PowerId): boolean {
 
 /** Die Zahlen der Flaggschiff- und Admiralsfähigkeiten, abgestimmt per Bot-Simulation; der Regel-Dialog nennt sie. */
 export const ABILITY_VALUES = {
-  /** Bastion (Wächterschild): Schild für sie und das Schiff im Strike-Slot vor ihr, jede Runde. */
+  /** Bastion (Wächterschild): Schild für sie, jede Runde … */
   guardianShield: 2,
+  /** … und für das Schiff im Strike-Slot vor ihr (seit den Feuerbefehlen 1 statt 2, sonst gewann Osei 62 %). */
+  guardianShieldFront: 1,
   /** Vanguard (Speerspitze): ATK-Bonus des Kampfschiffs im Strike-Slot vor ihr. */
   spearhead: 1,
   /** Hive (Brutkammer): höchstens so viele Drohnen gleichzeitig auf ihrer Seite … */
   maxDrones: 2,
-  /** … und so viele startet sie im ganzen Match (seit den neuen Befehlen 7 statt 10, sonst gewann Halvorsen 60 %). */
-  hiveBudget: 7,
-  /** Pendulum (Railgun): Schaden auf das markierte Schiff, wenn es zu Kampfbeginn ungedeckt ist. */
-  railgun: 6,
+  /** … und so viele startet sie im ganzen Match (mit den neuen Befehlen 7 statt 10, mit den Feuerbefehlen wieder 8). */
+  hiveBudget: 8,
+  /** Pendulum (Railgun): Schaden auf das markierte Schiff, wenn es zu Kampfbeginn ungedeckt ist (seit den Feuerbefehlen 5 statt 6). */
+  railgun: 5,
   /** Gegenfeuer: Schaden je Treffer am Schützen (Flaggschiffe ausgenommen). */
   counterfire: 1,
   /** Fokusfeuer: zusätzlicher Schaden je Treffer auf das Ziel. */

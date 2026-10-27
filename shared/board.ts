@@ -99,6 +99,13 @@ export class Slot {
   taunting = false;
   /** Gegnerische Befehle, die dieses Schiff erfasst haben (Wärmesucher, Traktorstrahl); sie folgen ihm. */
   locks: readonly CommandId[] = NO_LOCKS;
+  /** Feuerbefehl dieser Runde: die Kennung (`uid`) des gegnerischen Schiffs, auf das es im Kampf feuert; null: Es feuert nicht. */
+  aim: number | null = null;
+  /**
+   * Kennung des Schiffs, solange es auf dem Brett steht (`Board.nextUid`), 0 im leeren Slot; zieht mit ihm um. Gehört
+   * nicht in den Snapshot: Feuerbefehle verweisen darauf nur innerhalb einer Runde.
+   */
+  uid = 0;
 
   constructor(
     readonly lane: Lane,
@@ -147,6 +154,7 @@ export class Slot {
   place(card: ShipCard): void {
     this.clear();
     this.card = card;
+    this.uid = this.lane.board.nextUid();
     this.hp = card.hp;
     this.shield = card.shield;
   }
@@ -167,6 +175,8 @@ export class Slot {
     this.arrived = false;
     this.taunting = false;
     this.locks = NO_LOCKS;
+    this.aim = null;
+    this.uid = 0;
   }
 
   /** Schaden geht erst auf den Schild, der Rest auf die HP. */
@@ -200,6 +210,7 @@ export class Slot {
     this.arrived = false;
     this.taunting = false;
     this.locks = NO_LOCKS;
+    this.aim = null;
   }
 
   /** Übernimmt Schiff samt Live-Zustand eines anderen Slots und leert diesen; das Schiff gilt als bewegt. */
@@ -234,6 +245,8 @@ export class Slot {
     this.arrived = other.arrived;
     this.taunting = other.taunting;
     this.locks = other.locks;
+    this.aim = other.aim;
+    this.uid = other.uid;
   }
 
   get state(): SlotState | null {
@@ -244,6 +257,7 @@ export class Slot {
     this.clear();
     if (state === null) return;
     this.card = shipById(state.cardId);
+    this.uid = this.lane.board.nextUid();
     this.hp = state.hp;
     this.shield = state.shield;
     this.scrapBonus = state.scrapBonus;
@@ -309,6 +323,13 @@ export class Board {
    * Runden leer; gehört nicht in den Snapshot.
    */
   jumping: Slot[] = [];
+  /** Zuletzt vergebene Schiffskennung (`Slot.uid`). */
+  private lastUid = 0;
+
+  /** Eine neue Kennung für ein Schiff, das aufs Brett kommt. */
+  nextUid(): number {
+    return ++this.lastUid;
+  }
 
   lane(side: Side, type: LaneType): Lane {
     return this.lanes.find((lane) => lane.side === side && lane.type === type)!;

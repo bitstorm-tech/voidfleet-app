@@ -1,6 +1,7 @@
 // Ein Schiff auf dem Brett. Die Nase zeigt nach lokal +Z, die Ausrichtung
 // bestimmt allein der Elternknoten (der Anker des SlotPads). Beim Planen zeigt es die
-// Zielvorschau: auf den Balken den drohenden Verlust, neben ihnen einen Totenkopf, wenn es fällt.
+// Zielvorschau: auf den Balken den drohenden Verlust, neben ihnen einen Totenkopf, wenn es fällt — bei eigenen
+// Schiffen, was der Gegner ihnen höchstens antun kann, der Totenkopf heißt dort „kann fallen“.
 // Flaggschiffe sind etwas größer, tragen einen Ring in der Farbe ihres Admirals am Boden und eine Krone
 // rechts neben dem Hüllenbalken; am Boden liegen auch die Marken von Fähigkeiten und Zielerfassung
 // (`markers.ts`). Das Trugbild flackert als Hologramm, baut sich auf und löst sich wieder auf. Beim Rammkurs fliegt
@@ -250,15 +251,16 @@ export class ShipView {
   }
 
   /**
-   * Zielvorschau: HP und Schild nach der Runde, `null`, wenn das Schiff fällt, `undefined` ohne Vorschau.
-   * Die Füllung zeigt dann, was bleibt, der blinkende Rest dahinter, was verloren geht.
+   * Zielvorschau: HP und Schild nach der Runde (bei eigenen Schiffen im schlimmsten Fall), `null`, wenn das Schiff fällt
+   * bzw. fallen kann, `undefined` ohne Vorschau. Die Füllung zeigt dann, was bleibt, der blinkende Rest dahinter, was
+   * verloren geht.
    */
   setPreview(after: ShipStats | null | undefined): void {
     this.preview = after;
     this.updateBars();
   }
 
-  /** Totenkopf links neben dem Hüllenbalken: Laut Zielvorschau fällt das Schiff in dieser Runde. */
+  /** Totenkopf links neben dem Hüllenbalken: Laut Zielvorschau fällt das Schiff in dieser Runde, ein eigenes kann fallen. */
   setDoomed(value: boolean): void {
     this.skull.setEnabled(value);
   }

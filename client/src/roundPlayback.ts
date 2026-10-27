@@ -3,7 +3,9 @@
 // gleichzeitig. Die Schüsse im Kampf laufen als Salve kurz versetzt und
 // überlappend ab, Einschläge auf dasselbe Ziel mit etwas Abstand, damit man bei
 // vollem Brett nachvollziehen kann, wer wen trifft; vor ihnen feuert die Railgun, dann der Taktvorsprung,
-// nach ihnen schlägt das Gegenfeuer zurück. Angriffsbefehle unterscheiden sich im Bild: Orbitalschlag, Torpedo und
+// nach ihnen schlägt das Gegenfeuer zurück. Fängt die Deckung einen Schuss ab oder zieht die Ablenkung ihn auf sich,
+// zeigt eine Zielmarke, worauf er gezielt war; ein Schuss, der verpufft, verlischt ohne Einschlag.
+// Angriffsbefehle unterscheiden sich im Bild: Orbitalschlag, Torpedo und
 // Sperrfeuer kommen von oben, der Wärmesucher als Rakete, das Minenfeld explodiert am Schiff, der Durchschlag geht als
 // Strahl durch beide Schiffe einer Slot-Nummer, das Bombardement schlägt mehrfach ein, das Kreuzfeuer kommt von beiden
 // Seiten, der Gnadenstoß als heller Präzisionsschuss. Der Bordfunk kündigt Schritte an und reagiert auf ihren
@@ -46,7 +48,7 @@ const TONE_COLORS: Record<FloatTone, Color3> = {
   buff: color3("buff"),
   debuff: color3("debuff"),
 };
-/** Schüsse, die eine Admiralsfähigkeit lenkt oder beschleunigt, ziehen ihre Leuchtspur in der Farbe ihres Admirals. */
+/** Schüsse, die eine Admiralsfähigkeit verstärkt, lenkt oder beschleunigt, ziehen ihre Leuchtspur in der Farbe ihres Admirals. */
 const POWER_TRACERS = { focus: color3("vance"), swarm: color3("halvorsen"), headStart: color3("kerr") } as const;
 
 /** Waffe je Schiff; das Trugbild feuert nie. */
@@ -117,6 +119,10 @@ const ABOVE_SHIP = new Vector3(0, 0.9, 0);
 const ORBIT_OFFSET = new Vector3(0, 9, 0);
 /** Schüsse enden nicht im Mittelpunkt, sondern so weit davor auf der Hülle. */
 const HULL_RADIUS = 0.45;
+/** Ein verpuffender Schuss verlischt so weit vor der Hülle seines schon zerstörten Ziels. */
+const FIZZLE_SHORT = 0.9;
+/** Steht sein Ziel nicht mehr auf dem Brett, verlischt er über der Brettmitte, so weit über der Höhe des Schützen. */
+const VOID_RISE = 0.6;
 /** Durchmesser der Schildblase des Wächterschilds. */
 const GUARDIAN_BUBBLE = 2.1;
 /** Der Zielstrahl der Zielerfassung ist dünner als der Schuss der Railgun. */
@@ -150,11 +156,24 @@ const TRACTOR_GRIP = 350;
 type CommandOutcome = Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" | "miss" | "countered" | "rule" }>;
 const COMMAND_OUTCOMES: ReadonlySet<RoundEvent["kind"]> = new Set(["effect", "draw", "noEffect", "miss", "countered", "rule"]);
 const isCommandOutcome = (event: RoundEvent): event is CommandOutcome => COMMAND_OUTCOMES.has(event.kind);
-/** Ein Schuss einer Salve: im Kampf vom Angreifer aufs Ziel, beim Gegenfeuer vom getroffenen Schiff auf den Schützen. */
-type Shot = Extract<RoundEvent, { kind: "attack" | "counterfire" }>;
+/**
+ * Ein Schuss einer Salve: im Kampf vom Angreifer aufs Ziel, auch einer, der verpufft (`fizzle`), beim Gegenfeuer vom
+ * getroffenen Schiff auf den Schützen.
+ */
+type Shot = Extract<RoundEvent, { kind: "attack" | "fizzle" | "counterfire" }>;
+/** Ein Schuss im Kampf, der trifft oder verpufft. */
+type CombatShot = Extract<Shot, { kind: "attack" | "fizzle" }>;
 
-const shooterOf = (shot: Shot): ShipRef => (shot.kind === "attack" ? shot.attacker : shot.source);
-const targetOf = (shot: Shot): ShipRef => (shot.kind === "attack" ? shot.target : shot.ship);
+const shooterOf = (shot: Shot): ShipRef => (shot.kind === "counterfire" ? shot.source : shot.attacker);
+/** Das getroffene Schiff, beim Verpuffen das schon zerstörte; null, wenn das Ziel nicht mehr auf dem Brett steht. */
+const targetOf = (shot: Shot): ShipRef | null => (shot.kind === "counterfire" ? shot.ship : shot.target);
+
+/** Die Leuchtspur eines Schusses im Kampf: in der Farbe des Admirals, dessen Fähigkeit ihn verstärkt, lenkt oder beschleunigt. */
+function tracer(shot: CombatShot): Color3 {
+  if (shot.kind === "attack" && shot.focus) return POWER_TRACERS.focus;
+  if (shot.kind === "attack" && shot.swarm) return POWER_TRACERS.swarm;
+  return shot.headStart ? POWER_TRACERS.headStart : SIDE_COLORS[shot.attacker.side];
+}
 
 function bannerSubtitle(event: CommandOutcome): string | null {
   switch (event.kind) {
@@ -206,6 +225,7 @@ function stepKey(event: RoundEvent): string {
     case "spawn":
       return `spawn-${event.source.side}`;
     case "attack":
+    case "fizzle":
       return event.headStart ? "attack-headStart" : "attack";
     default:
       return event.kind;
@@ -224,7 +244,7 @@ function groupSteps(events: readonly RoundEvent[]): RoundEvent[][] {
 }
 
 /** Schritte des Kampfs laufen mit dem Regler für Angriffe. */
-const COMBAT_KINDS: ReadonlySet<RoundEvent["kind"]> = new Set(["attack", "railgun", "silenced", "counterfire"]);
+const COMBAT_KINDS: ReadonlySet<RoundEvent["kind"]> = new Set(["attack", "fizzle", "railgun", "silenced", "counterfire"]);
 
 /** Schlüssel eines Slots, um Ereignisse am selben Schiff nacheinander abzuspielen. */
 const slotKey = (slot: SlotRef): string => `${slot.side}-${slot.lane}-${slot.slotIndex}`;
@@ -279,9 +299,9 @@ export class RoundPlayback {
 
   private async playEvents(step: readonly RoundEvent[]): Promise<void> {
     const first = step[0]!;
-    if (first.kind === "attack" && first.headStart) this.announce(first.attacker.side, t.powers.head_start.name, null, "kerr");
+    if ((first.kind === "attack" || first.kind === "fizzle") && first.headStart) this.announce(first.attacker.side, t.powers.head_start.name, null, "kerr");
     if (first.kind === "counterfire") this.announce(first.source.side, t.powers.counterfire.name, null, "osei");
-    if (first.kind === "attack" || first.kind === "counterfire") {
+    if (first.kind === "attack" || first.kind === "fizzle" || first.kind === "counterfire") {
       if (first.kind === "counterfire" || first.headStart) await wait(this.view.scene, BANNER_LEAD);
       return this.salvo(step as Shot[]);
     }
@@ -332,7 +352,8 @@ export class RoundPlayback {
   /**
    * Die Schüsse starten im Abstand `SALVO_STAGGER` und kommen dabei je Schuss ins Log; ein Schuss wartet
    * zusätzlich, bis sein Einschlag `SAME_TARGET_GAP` nach dem vorigen auf dasselbe Ziel liegt. So treffen
-   * die Schüsse jedes Ziel in der gemeldeten Reihenfolge, und die Statusbalken springen nicht zurück.
+   * die Schüsse jedes Ziel in der gemeldeten Reihenfolge, und die Statusbalken springen nicht zurück. Ein Schuss, der
+   * vor einem zerstörten Schiff verpufft, zählt dort wie ein Einschlag: Er kommt erst nach dem Treffer, der es zerstört.
    */
   private async salvo(shots: readonly Shot[]): Promise<void> {
     const impacts = new Map<SlotPad, number>();
@@ -340,10 +361,11 @@ export class RoundPlayback {
     await Promise.all(
       shots.map((shot) => {
         const origin = this.centerOf(this.padOf(shooterOf(shot)));
-        const target = this.padOf(targetOf(shot));
-        const flight = boltDuration(origin, this.impactFrom(target, origin));
-        start = Math.max(start + SALVO_STAGGER, (impacts.get(target) ?? -Infinity) + SAME_TARGET_GAP - flight);
-        impacts.set(target, start + flight);
+        const ref = targetOf(shot);
+        const target = ref && this.padOf(ref);
+        const flight = boltDuration(origin, this.shotEnd(shot, origin));
+        start = Math.max(start + SALVO_STAGGER, target ? (impacts.get(target) ?? -Infinity) + SAME_TARGET_GAP - flight : -Infinity);
+        if (target) impacts.set(target, start + flight);
         return wait(this.view.scene, start).then(() => {
           this.hud.appendLog([describeEvent(shot)]);
           return this.playEvent(shot);
@@ -389,12 +411,10 @@ export class RoundPlayback {
         return this.spawn(event);
       case "railgun":
         return this.railgun(event);
-      case "attack": {
-        const color = event.focus ? POWER_TRACERS.focus : event.swarm ? POWER_TRACERS.swarm : event.headStart ? POWER_TRACERS.headStart : SIDE_COLORS[event.attacker.side];
-        const origin = this.centerOf(this.padOf(event.attacker));
-        await this.shoot(origin, this.padOf(event.target), color, SHOT_SOUNDS[event.attacker.cardId]);
-        return this.damage(event.target, event.amount, event.after, origin, color);
-      }
+      case "attack":
+        return this.attack(event);
+      case "fizzle":
+        return this.fizzle(event);
       case "silenced":
         return this.silence(event.ship);
       case "counterfire": {
@@ -766,11 +786,55 @@ export class RoundPlayback {
     return this.mark(pad, t.float.silenced, "debuff", 1.2);
   }
 
+  /**
+   * Ein Schuss im Kampf. Trifft er nicht das Schiff seines Feuerbefehls (`aimedAt`), zieht sich beim Abfeuern eine
+   * Zielmarke um das anvisierte Schiff zusammen, und beim Einschlag steht dort, warum: „Gedeckt“, weil das Schiff davor
+   * ihn abfängt, oder „Abgelenkt“, weil die Ablenkung (`taunt`) ihn auf sich zieht.
+   */
+  private async attack(event: Extract<RoundEvent, { kind: "attack" }>): Promise<void> {
+    const color = tracer(event);
+    const origin = this.centerOf(this.padOf(event.attacker));
+    const aimed = event.aimedAt ? this.padOf(event.aimedAt) : null;
+    if (aimed) void this.view.effects.reticle(this.centerOf(aimed), color);
+    await this.shoot(origin, this.padOf(event.target), color, SHOT_SOUNDS[event.attacker.cardId]);
+    if (aimed) this.float(aimed, event.taunt ? t.float.diverted : t.float.covered, event.taunt ? "debuff" : "shield");
+    return this.damage(event.target, event.amount, event.after, origin, color);
+  }
+
+  /**
+   * Ein Schuss, der verpufft: Mündungsfeuer wie sonst, dann verlischt der Bolzen vor dem schon zerstörten Schiff bzw.
+   * über der Brettmitte, wenn sein Ziel nicht mehr auf dem Brett steht; kein Einschlag, kein Schaden, nur „Verpufft“.
+   */
+  private async fizzle(event: Extract<RoundEvent, { kind: "fizzle" }>): Promise<void> {
+    const color = tracer(event);
+    const origin = this.centerOf(this.padOf(event.attacker));
+    const end = this.shotEnd(event, origin);
+    this.muzzle(origin, color, SHOT_SOUNDS[event.attacker.cardId]);
+    await this.view.effects.fizzle(origin, end, color);
+    if (event.target) this.float(this.padOf(event.target), t.float.fizzle, "debuff");
+    else this.floatAt(end, t.float.fizzle, "debuff");
+  }
+
   /** Mündungsblitz und Schuss bei `origin`, dann fliegt der Bolzen bis auf die Hülle des Ziels. */
   private async shoot(origin: Vector3, to: SlotPad, color: Color3, sound: SoundId): Promise<void> {
+    this.muzzle(origin, color, sound);
+    await this.view.effects.bolt(origin, this.impactFrom(to, origin), color);
+  }
+
+  /** Mündungsblitz und Schussgeräusch bei `origin`. */
+  private muzzle(origin: Vector3, color: Color3, sound: SoundId): void {
     playSound(sound, { at: origin });
     void this.view.effects.pulse(origin, color, 0.7, 180);
-    await this.view.effects.bolt(origin, this.impactFrom(to, origin), color);
+  }
+
+  /**
+   * Wo der Bolzen eines Schusses aus `origin` endet: auf der Hülle des Ziels. Verpufft er, verlischt er schon vor der
+   * Hülle des zerstörten Schiffs bzw. über der Brettmitte, wenn sein Ziel nicht mehr auf dem Brett steht.
+   */
+  private shotEnd(shot: Shot, origin: Vector3): Vector3 {
+    const target = targetOf(shot);
+    if (target === null) return new Vector3(0, origin.y + VOID_RISE, origin.z);
+    return this.impactFrom(this.padOf(target), origin, shot.kind === "fizzle" ? HULL_RADIUS + FIZZLE_SHORT : HULL_RADIUS);
   }
 
   /** Treffer eines Schusses aus Richtung `origin`: Einschlag auf der Hülle (`hit`, sonst zufällig), Hüllenblitz und Schadenszahl. */
@@ -820,10 +884,10 @@ export class RoundPlayback {
     return pad.shipAnchor.getAbsolutePosition().add(SHIP_CENTER);
   }
 
-  /** Wo ein Schuss aus Richtung `origin` die Hülle des Schiffs auf `pad` trifft. */
-  private impactFrom(pad: SlotPad, origin: Vector3): Vector3 {
+  /** Wo ein Schuss aus Richtung `origin` die Hülle des Schiffs auf `pad` trifft; `distance` vor dessen Mitte. */
+  private impactFrom(pad: SlotPad, origin: Vector3, distance = HULL_RADIUS): Vector3 {
     const center = this.centerOf(pad);
-    return center.subtract(center.subtract(origin).normalize().scale(HULL_RADIUS));
+    return center.subtract(center.subtract(origin).normalize().scale(distance));
   }
 
   private float(pad: SlotPad, text: string, tone: FloatTone): void {

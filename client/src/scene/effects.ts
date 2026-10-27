@@ -1,6 +1,6 @@
-// Kurzlebige Effekte auf dem Brett: Laserbolzen, der Strahl der Railgun, die Rakete des Wärmesuchers mit Leuchtspur,
-// der Traktorstrahl, Impulse, Schildblasen, Einschläge, Sekundärexplosionen, Detonationen und brennende Trümmer.
-// Alle räumen sich nach dem Abspielen selbst weg.
+// Kurzlebige Effekte auf dem Brett: Laserbolzen (auch verpuffende), die Zielmarke eines umgelenkten Schusses, der
+// Strahl der Railgun, die Rakete des Wärmesuchers mit Leuchtspur, der Traktorstrahl, Impulse, Schildblasen, Einschläge,
+// Sekundärexplosionen, Detonationen und brennende Trümmer. Alle räumen sich nach dem Abspielen selbst weg.
 
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
@@ -28,6 +28,11 @@ import { animationTimeScale, easeInCubic, easeOutCubic, tween, wait } from "./tw
 /** Welteinheiten pro Sekunde. */
 const BOLT_SPEED = 15;
 const BOLT_STRETCH = 5;
+/** Ein verpuffender Bolzen verblasst auf diesem letzten Anteil seiner Flugzeit und schrumpft dabei auf ein Drittel. */
+const FIZZLE_FADE = 0.45;
+/** Zielmarke eines umgelenkten Schusses: Ein Ring zieht sich von der ersten auf die zweite Größe zusammen (Welteinheiten, ms). */
+const RETICLE_SIZE: readonly [number, number] = [3.4, 1.9];
+const RETICLE_DURATION = 420;
 /** Impulse werden additiv gemischt und wirken so wie Licht statt wie eine Kugel. */
 const PULSE_ALPHA = 0.55;
 /** Strahl der Railgun: weißer Kern, Mantel in der Schussfarbe, der sich beim Verblassen weitet (ms). */
@@ -180,6 +185,14 @@ const HIT_SOUNDS: Record<HitName, SoundId> = {
   discharge: "impact_energy",
 };
 
+/** Verpuffen: ein paar matte Funken in der Schussfarbe ziehen langsam in Flugrichtung weiter und verlöschen, ohne Blitz. */
+const FIZZLE: Burst = {
+  count: 16, cone: Tools.ToRadians(70), speed: [0.4, 1.6], lifeTime: [0.25, 0.55], size: [0.05, 0.11], stretch: 1.5, gravity: 0, colors: (shot) => [
+    [0, Color4.FromColor3(shot, 0.7)],
+    [1, Color4.FromColor3(shot.scale(0.4), 0)],
+  ],
+};
+
 /** Leuchtspur der Rakete: ein Dauerstrom kleiner, langsam verwehender Funken in der Schussfarbe hinter dem Kopf. */
 const TRAIL: Omit<Burst, "count" | "cone"> = {
   speed: [0.1, 0.5], lifeTime: [0.35, 0.7], size: [0.1, 0.16], grow: 0.2, stretch: 1, gravity: 0.3, colors: (shot) => [
@@ -265,6 +278,38 @@ export class BoardEffects {
     mesh.position.copyFrom(from);
     mesh.lookAt(to);
     await tween(this.scene, boltDuration(from, to), (progress) => Vector3.LerpToRef(from, to, easeInCubic(progress) * 0.4 + progress * 0.6, mesh.position));
+    this.disposeMesh(mesh);
+  }
+
+  /**
+   * Ein Bolzen, der verpufft: Er fliegt wie `bolt` auf `to` zu, verblasst und schrumpft auf dem letzten Stück und
+   * zerstiebt dort in ein paar matten Funken, ohne Einschlag, Blitz und Klang.
+   */
+  async fizzle(from: Vector3, to: Vector3, color: Color3): Promise<void> {
+    const mesh = this.createSphere("fizzle", 0.16, color, 1);
+    const material = mesh.material as StandardMaterial;
+    mesh.position.copyFrom(from);
+    mesh.lookAt(to);
+    await tween(this.scene, boltDuration(from, to), (progress) => {
+      Vector3.LerpToRef(from, to, easeInCubic(progress) * 0.4 + progress * 0.6, mesh.position);
+      const left = Math.min(1, (1 - progress) / FIZZLE_FADE);
+      const size = (1 + 2 * left) / 3;
+      mesh.scaling.set(size, size, BOLT_STRETCH * size);
+      material.alpha = left;
+    });
+    this.disposeMesh(mesh);
+    this.burst("fizzle", to, to.subtract(from).normalize(), FIZZLE, color);
+  }
+
+  /** Zielmarke: Ein Ring in der Schussfarbe zieht sich um `position` zusammen und verblasst; dorthin zielte ein Schuss. */
+  async reticle(position: Vector3, color: Color3): Promise<void> {
+    const mesh = this.createSprite("reticle", this.ring, Color3.Lerp(color, Color3.White(), 0.35), position, false);
+    const material = mesh.material as StandardMaterial;
+    const [from, to] = RETICLE_SIZE;
+    await tween(this.scene, RETICLE_DURATION, (progress) => {
+      mesh.scaling.setAll(from + (to - from) * easeOutCubic(progress));
+      material.alpha = Math.min(1, progress * 5) * (1 - progress) ** 1.5;
+    });
     this.disposeMesh(mesh);
   }
 

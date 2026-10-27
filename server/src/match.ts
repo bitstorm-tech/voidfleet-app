@@ -103,7 +103,7 @@ class Player implements Commander {
 
   /** Deckt den abgegebenen Zug auf: Seine Karten verlassen die Hand, der Befehl ist ab jetzt für den Gegner sichtbar. */
   reveal(): Turn {
-    const { ships, flagship, command, maneuver, power, mark } = this.plan!;
+    const { ships, flagship, command, maneuver, power, mark, fire } = this.plan!;
     const deploys = ships.map(({ handIndex, target }) => ({ card: this.shipHand[handIndex]!, target }));
     // Von hinten entfernen, damit die übrigen Hand-Indizes gültig bleiben.
     for (const index of ships.map((ship) => ship.handIndex).sort((a, b) => b - a)) this.shipHand.splice(index, 1);
@@ -117,6 +117,7 @@ class Player implements Commander {
       maneuver,
       power: power && { id: ADMIRALS[this.admiral!].power, target: power.target },
       mark,
+      fire,
     };
   }
 
@@ -307,6 +308,14 @@ export class Match {
     if (plan.mark) {
       if (!canMark(board, side)) return "mark_unavailable";
       if (!markTargets(board, side).some((target) => isSameSlot(target, plan.mark!))) return "mark_target_invalid";
+    }
+    // Feuerbefehle: je eigenem Kampfschiff höchstens einer, auch für ein gelegtes, nicht für das Schiff des Grundmanövers
+    // (es feuert nicht; beim Phasentausch feuern beide); Ziel ist ein gegnerisches Schiff beim Planen, auch ein gedecktes.
+    for (const [i, { ship, target }] of plan.fire.entries()) {
+      const shooter = board.lane(side, ship.lane).slots[ship.slotIndex]?.card ?? arrivals.find((arrival) => isSameSlot(arrival.target, ship))?.card;
+      if (!shooter || shooter.atk === 0 || plan.fire.slice(0, i).some((other) => isSameSlot(other.ship, ship))) return "fire_ship_invalid";
+      if (plan.maneuver && !swap && isSameSlot(plan.maneuver.ship, ship)) return "fire_ship_invalid";
+      if (!board.lane(opposite(side), target.lane).slots[target.slotIndex]?.isOccupied) return "fire_target_invalid";
     }
     return null;
   }

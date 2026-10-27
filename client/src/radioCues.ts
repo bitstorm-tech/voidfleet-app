@@ -76,7 +76,9 @@ export function reactions(step: readonly RoundEvent[]): RadioCue[] {
       if (ships.some((ship) => ship.side === "enemy")) cues.push("enemy_destroyed");
       return cues;
     }
-    case "attack": {
+    // Eine Salve kann mit einem Schuss beginnen, der verpufft.
+    case "attack":
+    case "fizzle": {
       // Je getroffenem eigenem Schiff zählt der letzte Treffer: Es übersteht den Kampf knapp.
       const hulls = new Map<string, number>();
       for (const event of step) {

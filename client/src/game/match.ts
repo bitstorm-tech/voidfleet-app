@@ -13,11 +13,12 @@ import {
   shipById,
   targetsEnemySide,
   type CommandCard,
+  type CommandId,
   type ShipCard,
 } from "../../../shared/cards.ts";
 import { Board, isSameSlot, maxDeploys, overdriveBonus, slotTarget, type PlannedMove, type Side, type Slot } from "../../../shared/board.ts";
 import { canMark, markTargets, powerTargets, railgunFires } from "../../../shared/powers.ts";
-import type { MatchResult, OpponentView, PlayerView, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
+import type { FireOrder, MatchResult, OpponentView, PlayerView, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
 
 /** Ein Schiff zum Legen: eine Karte der Schiffshand (Index) oder in Runde 1 das Flaggschiff. */
 export type ShipPick = number | "flagship";
@@ -43,9 +44,16 @@ export interface TurnProgress {
   power: TurnPartState | null;
   /** Pendulum: die Zielerfassung, nur in Runden, in denen sie markieren darf. */
   mark: TurnPartState | null;
+  /** Feuerbefehle: erledigt, wenn jedes Schiff, das feuern kann, ein Ziel hat; nicht möglich ohne Schütze oder ohne Gegner. */
+  fire: TurnPartState;
+  /** Wie viele dieser Schiffe schon ein Ziel haben (`assigned`) von allen, die eines bekommen können (`shooters`). */
+  fireOrders: { assigned: number; shooters: number };
 }
 
-const emptyPlan = (): TurnPlan => ({ ships: [], command: null, maneuver: null, flagship: null, power: null, mark: null });
+/** Befehle, deren eigenes Zielschiff in dieser Runde nicht feuert: Der Rammer rammt statt zu feuern, der Kurzsprung nimmt es vor dem Kampf vom Brett. */
+const HOLDS_FIRE: readonly CommandId[] = ["collision_course", "micro_jump"];
+
+const emptyPlan = (): TurnPlan => ({ ships: [], command: null, maneuver: null, flagship: null, power: null, mark: null, fire: [] });
 
 export class Match {
   readonly board = new Board();
@@ -173,10 +181,11 @@ export class Match {
 
   /**
    * Plant einen Befehl (null: keinen) und liefert, was dabei wegfällt. Weicht Schnellverlegung, fällt das zuletzt
-   * geplante überzählige Schiff weg (nicht das Ziel des neuen Befehls), samt Fähigkeit darauf; weicht Freie Hand, während
-   * Grundmanöver und Fähigkeit geplant sind, fällt die Fähigkeit weg.
+   * geplante überzählige Schiff weg (nicht das Ziel des neuen Befehls), samt Fähigkeit und Feuerbefehl darauf; weicht
+   * Freie Hand, während Grundmanöver und Fähigkeit geplant sind, fällt die Fähigkeit weg. Hält der neue Befehl sein
+   * Zielschiff vom Feuern ab (`HOLDS_FIRE`), fällt dessen Feuerbefehl weg (`fire`).
    */
-  setCommand(command: TurnPlan["command"]): { ship: ShipCard | null; power: boolean } {
+  setCommand(command: TurnPlan["command"]): { ship: ShipCard | null; power: boolean; fire: ShipCard | null } {
     const hadPower = this.plan.power !== null;
     this.plan.command = command;
     let ship: ShipCard | null = null;
@@ -187,7 +196,18 @@ export class Match {
       this.unplanShip(dropped.handIndex);
     }
     if (this.plan.maneuver && this.plan.power && !this.keepsManeuverAndPower) this.plan.power = null;
-    return { ship, power: hadPower && this.plan.power === null };
+    return { ship, power: hadPower && this.plan.power === null, fire: this.keepFire()[0] ?? null };
+  }
+
+  /**
+   * Plant das Grundmanöver (null: keins) und liefert, was dabei wegfällt: die Fähigkeit, außer mit Freier Hand, und
+   * der Feuerbefehl des manövrierenden Schiffs, außer beim Phasentausch (`fire`).
+   */
+  setManeuver(maneuver: TurnPlan["maneuver"]): { power: boolean; fire: ShipCard | null } {
+    const power = maneuver !== null && this.plan.power !== null && !this.keepsManeuverAndPower;
+    this.plan.maneuver = maneuver;
+    if (power) this.plan.power = null;
+    return { power, fire: this.keepFire()[0] ?? null };
   }
 
   /** Die eingeplanten Schiffe der Hand ohne `pick`; sind schon alle Deploys vergeben, weicht das zuerst geplante. */
@@ -200,14 +220,82 @@ export class Match {
   /**
    * Ein Befehl auf ein eingeplantes Schiff fällt mit weg, sobald auf dessen Slot nichts mehr landet; die Fähigkeit, sobald
    * ihr Ziel nicht mehr gilt (z. B. Taktvorsprung, wenn statt des Kampfschiffs ein Support-Schiff auf dem Slot landet).
+   * Der Feuerbefehl gehört dem Schiff: Wird es zurückgenommen oder umgeplant, fällt er weg, auch wenn danach ein anderes
+   * auf seinem Slot landet.
    */
   private setArrivals(flagship: SlotTarget | null, ships: TurnPlan["ships"]): void {
+    const before = this.arrivals;
     this.plan.flagship = flagship;
     this.plan.ships = ships;
+    const after = this.arrivals;
+    const gone = before.filter((old) => !after.some((arrival) => arrival.pick === old.pick && isSameSlot(arrival.target, old.target)));
+    this.plan.fire = this.plan.fire.filter((order) => !gone.some((old) => isSameSlot(old.target, order.ship)));
     const target = this.plannedOwnTarget;
     if (target && !this.canTargetOwn(this.plannedCommand!, this.ownSlot(target))) this.plan.command = null;
     const power = this.plannedPowerTarget;
     if (power && !this.powerTargets.some((ref) => ref.side === power.side && isSameSlot(ref, power))) this.plan.power = null;
+  }
+
+  /**
+   * Ob das eigene Schiff auf `slot` (Slot beim Planen, auch ein eingeplantes) einen Feuerbefehl bekommen kann: ein
+   * Kampfschiff, das in dieser Runde feuert. Das Schiff des Grundmanövers feuert nicht (beim Phasentausch feuern beide),
+   * ebenso wenig das Zielschiff von Rammkurs und Kurzsprung (`HOLDS_FIRE`).
+   */
+  canFire(slot: Slot): boolean {
+    const ship = this.shipAt(slot);
+    if (slot.lane.side !== "player" || ship === null || ship.atk === 0) return false;
+    const here = slotTarget(slot);
+    const maneuver = this.plan.maneuver;
+    if (maneuver && isSameSlot(maneuver.ship, here) && this.plannedSwap === null) return false;
+    const target = this.plannedOwnTarget;
+    return !(target && isSameSlot(target, here) && HOLDS_FIRE.includes(this.plannedCommand!.id));
+  }
+
+  /** Die eigenen Schiffe, die einen Feuerbefehl bekommen können (`canFire`), als Slot beim Planen. */
+  get shooters(): Slot[] {
+    return this.board.lanesFor("player").flatMap((lane) => lane.slots).filter((slot) => this.canFire(slot));
+  }
+
+  /** Der Feuerbefehl des eigenen Schiffs auf `slot` (Slot beim Planen). */
+  fireOrderAt(slot: Slot): FireOrder | null {
+    return this.plan.fire.find((order) => isSameSlot(order.ship, slotTarget(slot))) ?? null;
+  }
+
+  /** Plant den Feuerbefehl des eigenen Schiffs auf `ship` auf das gegnerische Schiff auf `target`; ein alter weicht. */
+  setFire(ship: Slot, target: Slot): void {
+    this.clearFire(ship);
+    this.plan.fire.push({ ship: slotTarget(ship), target: slotTarget(target) });
+  }
+
+  clearFire(ship: Slot): void {
+    this.plan.fire = this.plan.fire.filter((order) => !isSameSlot(order.ship, slotTarget(ship)));
+  }
+
+  /** Die Drohne fliegt den eigenen Schwarmangriff: Sie feuert auf dessen Ziel, auch ohne Feuerbefehl. */
+  fliesSwarm(slot: Slot): boolean {
+    return this.power === "swarm_strike" && this.plan.power !== null && this.shipAt(slot)?.id === "drone";
+  }
+
+  /** Das Schiff feuert in dieser Runde auf etwas: mit Feuerbefehl oder im eigenen Schwarmangriff. */
+  isArmed(slot: Slot): boolean {
+    return this.fireOrderAt(slot) !== null || this.fliesSwarm(slot);
+  }
+
+  /** Feuerbefehle von Schiffen, die nicht (mehr) feuern, fallen weg; geliefert werden diese Schiffe. */
+  private keepFire(): ShipCard[] {
+    const dropped = this.plan.fire.filter((order) => !this.canFire(this.ownSlot(order.ship)));
+    this.plan.fire = this.plan.fire.filter((order) => !dropped.includes(order));
+    return dropped.map((order) => this.shipAt(this.ownSlot(order.ship))!);
+  }
+
+  /** Der Plan, wie er mit `change` aussähe; der eigene bleibt dabei unverändert (Zielvorschau unter dem Zeiger). */
+  tryPlan(change: () => void): TurnPlan {
+    const plan = this.plan;
+    this.plan = structuredClone(plan);
+    change();
+    const tried = this.plan;
+    this.plan = plan;
+    return tried;
   }
 
   /**
@@ -347,6 +435,9 @@ export class Match {
     const canPower = this.powerTargets.length > 0;
     const state = (planned: boolean, possible: boolean): TurnPartState => (planned ? "done" : possible ? "open" : "blocked");
     const both = this.keepsManeuverAndPower;
+    // Ohne gegnerisches Schiff (Runde 1) kann keins feuern.
+    const shooters = this.board.ships("enemy").length > 0 ? this.shooters : [];
+    const assigned = shooters.filter((slot) => this.isArmed(slot)).length;
     return {
       flagship: this.needsFlagship ? (this.plan.flagship ? "done" : "open") : null,
       ships: canDeployMore ? "open" : this.plan.ships.length > 0 ? "done" : "blocked",
@@ -354,6 +445,8 @@ export class Match {
       maneuver: both ? state(this.plan.maneuver !== null, canManeuver) : state(this.plan.maneuver !== null || this.plan.power !== null, canManeuver || canPower),
       power: both ? state(this.plan.power !== null, canPower) : null,
       mark: this.canMark ? (this.plan.mark ? "done" : this.markTargets.length > 0 ? "open" : "blocked") : null,
+      fire: shooters.length === 0 ? "blocked" : assigned === shooters.length ? "done" : "open",
+      fireOrders: { assigned, shooters: shooters.length },
     };
   }
 

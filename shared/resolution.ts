@@ -20,7 +20,7 @@ import {
   type ShipCard,
 } from "./cards.ts";
 import { railgunFires } from "./powers.ts";
-import type { CommandEffect, RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget, TurnPlan } from "./protocol.ts";
+import type { CommandEffect, FireOrder, RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget, TurnPlan } from "./protocol.ts";
 
 const SIDES: readonly Side[] = ["player", "enemy"];
 
@@ -57,6 +57,8 @@ export interface Turn {
   power: { id: PowerId; target: SlotTarget } | null;
   /** Pendulum: das markierte gegnerische Schiff (Slot beim Planen). */
   mark: SlotTarget | null;
+  /** Feuerbefehle (Slots beim Planen); ein Kampfschiff ohne Feuerbefehl feuert nicht. */
+  fire: FireOrder[];
 }
 
 export function shipRef(slot: Slot): ShipRef {
@@ -84,8 +86,8 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
 
 /**
  * Löst eine Runde mit den Zügen beider Seiten auf und gibt ihre Ereignisse zurück: Deploy samt Flaggschiff,
- * Admiralsfähigkeiten, Erfassung durch Wärmesucher und Traktorstrahl (`Slot.locks`), Fähigkeiten beim Deploy,
- * Markierung der Pendulum, Manöver und Phasentausch,
+ * Feuerbefehle (`Slot.aim`), Admiralsfähigkeiten, Erfassung durch Wärmesucher und Traktorstrahl (`Slot.locks`),
+ * Fähigkeiten beim Deploy, Markierung der Pendulum, Manöver und Phasentausch,
  * Wächterschild, Effects, Combat, Cleanup, Brutkammer. `random` liefert Zahlen in [0, 1); ohne ihn
  * (Zielvorschau) feuern Plasma Frigates beim Deploy nicht, weil ihr Ziel Zufall ist.
  */
@@ -105,6 +107,10 @@ export function resolveTurns(board: Board, turns: readonly Turn[], random: (() =
       events.push({ kind: "deploy", side: commander.side, cardId: card.id, target });
     }
     if (arrivals.length === 0) events.push({ kind: "pass", side: commander.side });
+  }
+  // Die Feuerbefehle greifen, sobald alle Schiffe stehen, und folgen Schütze und Ziel bei jeder Bewegung.
+  for (const { commander, fire } of turns) {
+    for (const order of fire) aim(board, commander.side, order);
   }
   for (const { commander, power } of turns) {
     if (power) resolvePower(board, commander.side, power, events);
@@ -156,6 +162,13 @@ export function resolveTurns(board: Board, turns: readonly Turn[], random: (() =
 
 function ownSlot(board: Board, side: Side, { lane, slotIndex }: SlotTarget): Slot {
   return board.lane(side, lane).slots[slotIndex]!;
+}
+
+/** Feuerbefehl: Der Schütze merkt sich die Kennung des gegnerischen Schiffs im Ziel-Slot (`Slot.aim`). */
+function aim(board: Board, side: Side, { ship, target }: FireOrder): void {
+  const shooter = ownSlot(board, side, ship);
+  const aimed = ownSlot(board, opposite(side), target);
+  if (shooter.isOccupied && aimed.isOccupied) shooter.aim = aimed.uid;
 }
 
 /** Die Ziel-Slots der Bewegungen im Zug: Grundmanöver und Bewegungsbefehl (der nie das manövrierte Schiff verlegt). */
@@ -281,16 +294,18 @@ export function resolveSwap(mirage: Slot, other: Slot, events: RoundEvent[]): vo
 
 /**
  * Bastion (Wächterschild): Nach den Manövern bekommt sie Schild für diese Runde (wie Notschilde, er verfällt im
- * Cleanup); steht sie in der Command-Lane, auch das Schiff im Strike-Slot direkt vor ihr.
+ * Cleanup); steht sie in der Command-Lane, auch das Schiff im Strike-Slot direkt vor ihr, mit eigenem Wert
+ * (`guardianShieldFront`).
  */
-function resolveGuardianShields(board: Board, events: RoundEvent[]): void {
+export function resolveGuardianShields(board: Board, events: RoundEvent[]): void {
   for (const side of SIDES) {
     const bastion = board.flagship(side);
     if (bastion?.card!.id !== "bastion") continue;
     const front = bastion.lane.type === "command" ? board.lane(side, "strike").slots[bastion.index]! : null;
     for (const slot of front?.isOccupied ? [bastion, front] : [bastion]) {
-      slot.addShield(ABILITY_VALUES.guardianShield);
-      events.push({ kind: "ability", source: shipRef(bastion), ship: shipRef(slot), effect: { type: "shield", amount: ABILITY_VALUES.guardianShield }, after: stats(slot) });
+      const amount = slot === bastion ? ABILITY_VALUES.guardianShield : ABILITY_VALUES.guardianShieldFront;
+      slot.addShield(amount);
+      events.push({ kind: "ability", source: shipRef(bastion), ship: shipRef(slot), effect: { type: "shield", amount }, after: stats(slot) });
     }
   }
 }
@@ -616,22 +631,6 @@ function jamPowers(board: Board, side: Side, report: (ship: ShipRef, power: Powe
 
 // --- Combat ---
 
-/**
- * Zielwahl nach Schiffsklasse (Gleichstand: niedrigerer Slot-Index): Jäger das
- * niedrigste HP, Schlachtschiff das höchste ATK, Kreuzer das gegenüberliegende
- * Schiff, sonst das nächstgelegene. Support greift nie an.
- */
-function chooseTarget(attacker: Slot, ships: readonly Slot[]): Slot | null {
-  switch (attacker.card!.shipClass) {
-    case "fighter":
-      return highest(ships, (slot) => -slot.hp);
-    case "battleship":
-      return highest(ships, (slot) => slot.attack);
-    default:
-      return nearest(ships, attacker.index);
-  }
-}
-
 /** Ein Treffer auf ein Schiff mit Gegenfeuer (`source`); der Schütze nimmt dafür nach dem Kampf Schaden. */
 interface Counterfire {
   attacker: Slot;
@@ -639,26 +638,26 @@ interface Counterfire {
 }
 
 /**
- * Beide Seiten feuern gleichzeitig: Wer zu Kampfbeginn schießen kann (`Slot.canAttack`,
- * also weder per EMP gelähmt noch manövriert), schießt, auch wenn er im selben Kampf zerstört wird. Ziel sind nur ungedeckte Schiffe
- * (`Board.exposedShips`); die Deckung gilt für die ganze Runde, auch wenn das
- * deckende Schiff im selben Kampf zerstört wird. Flaggschiffe durchschauen Trugbilder: Sie beschießen
- * keins, und keins deckt gegen sie. Innerhalb einer Seite zielen die Schiffe nacheinander in
- * Slot-Reihenfolge und überspringen Ziele, die ein eigener Schuss schon zerstört hat; so verpufft kein
- * Schuss. Findet ein Schiff kein Ziel mehr, verfällt sein Schuss. Die Seiten beeinflussen sich dabei
- * nicht, weil jede nur die Schiffe der anderen trifft. Gemeldet werden die
- * Schüsse abwechselnd, damit die Animation hin und her geht.
+ * Beide Seiten feuern gleichzeitig: Wer zu Kampfbeginn schießen kann (`Slot.canAttack`, also weder per EMP gelähmt
+ * noch manövriert) und einen Feuerbefehl hat (`Slot.aim`), schießt, auch wenn er im selben Kampf zerstört wird; ohne
+ * Feuerbefehl feuert niemand. Der Schuss geht auf das Schiff des Feuerbefehls, wo es jetzt steht. Steht es für den
+ * Schützen gedeckt (`Board.isExposed`), fängt das Schiff davor den Schuss ab; die Deckung gilt für die ganze Runde,
+ * auch wenn das deckende Schiff im selben Kampf zerstört wird. Flaggschiffe durchschauen Trugbilder: Gegen sie deckt
+ * keins. Ist das getroffene Schiff schon zerstört oder das Ziel nicht mehr auf dem Brett, verpufft der Schuss
+ * (`fizzle`). Innerhalb einer Seite feuern die Schiffe nacheinander in Slot-Reihenfolge; die Seiten beeinflussen sich
+ * dabei nicht, weil jede nur die Schiffe der anderen trifft. Gemeldet werden die Schüsse abwechselnd, damit die
+ * Animation hin und her geht.
  *
  * Mit den Admiralen: Zuerst feuert die Railgun jeder Pendulum in `railguns` (ohne Angabe jede, deren Markierung
  * steht) auf ihr markiertes Schiff. Dann die Schiffe mit Taktvorsprung, beider Seiten gleichzeitig; wer dabei
- * fällt und noch stand, feuert nicht mehr (`silenced`), ein Ziel der Railgun dagegen schon. Dann alle übrigen:
- * Drohnen auf das Ziel des Schwarmangriffs, auch durch Deckung, solange es steht; sonst auf das Ziel des
- * Fokusfeuers, solange es steht und für den Schützen ungedeckt ist; sonst auf das Schiff mit Ablenkung, solange es
- * steht und für den Schützen ungedeckt ist; sonst nach der Klassenregel. Zuletzt das
- * Gegenfeuer: Wer ein Schiff damit getroffen hat, nimmt je Treffer Schaden, Flaggschiffe ausgenommen.
+ * fällt und noch stand, feuert nicht mehr (`silenced`), ein Ziel der Railgun dagegen schon. Dann alle übrigen.
+ * Drohnen feuern auf das Ziel des Schwarmangriffs, solange es auf dem Brett steht, auch durch Deckung und ohne
+ * eigenen Feuerbefehl. Die übrigen Schüsse zieht ein Schiff mit Ablenkung auf sich, solange es steht und für den
+ * Schützen ungedeckt ist. Jeder Treffer auf das Ziel des Fokusfeuers macht mehr Schaden. Zuletzt das Gegenfeuer:
+ * Wer ein Schiff damit getroffen hat, nimmt je Treffer Schaden, Flaggschiffe ausgenommen.
  */
 export function resolveCombat(board: Board, events: RoundEvent[], railguns: readonly Side[] = SIDES.filter((side) => railgunFires(board, side))): void {
-  const attackers = SIDES.map((side) => board.ships(side).filter((slot) => slot.canAttack));
+  const attackers = SIDES.map((side) => board.ships(side).filter((slot) => slot.canAttack && (slot.aim !== null || swarmTarget(board, slot) !== null)));
   const railgunShots = railguns.flatMap((side) => fireRailgun(board, side));
   const counterfire: Counterfire[] = [];
   const fire = (shooters: readonly (readonly Slot[])[]) => interleave(shooters.map((slots, index) => volley(board, SIDES[index]!, slots, counterfire)));
@@ -689,24 +688,34 @@ function fireRailgun(board: Board, side: Side): RoundEvent[] {
   return [{ kind: "railgun", source: shipRef(pendulum), target: shipRef(target), amount, after: stats(target), blocked }];
 }
 
+/** Das Ziel des Schwarmangriffs für eine Drohne: das gegnerische Schiff mit der Marke, solange es auf dem Brett steht. */
+function swarmTarget(board: Board, attacker: Slot): Slot | null {
+  if (attacker.card!.id !== "drone") return null;
+  return board.ships(opposite(attacker.lane.side)).find((slot) => slot.powers.includes("swarm_strike")) ?? null;
+}
+
 /** Die Schüsse einer Seite in Slot-Reihenfolge (siehe `resolveCombat`); Treffer auf ein Schiff mit Gegenfeuer landen in `counterfire`. */
 function volley(board: Board, side: Side, shooters: readonly Slot[], counterfire: Counterfire[]): RoundEvent[] {
   const enemy = opposite(side);
-  const targets = board.exposedShips(enemy);
-  const flagshipTargets = board.exposedShips(enemy, true);
-  const marked = (power: PowerId) => board.ships(enemy).find((slot) => slot.powers.includes(power)) ?? null;
-  const swarm = marked("swarm_strike");
-  const focus = marked("focus_fire");
-  const taunt = board.ships(enemy).find((slot) => slot.taunting) ?? null;
+  const ships = board.ships(enemy);
+  const taunt = ships.find((slot) => slot.taunting) ?? null;
   const shots: RoundEvent[] = [];
   for (const attacker of shooters) {
-    const view = (isFlagship(attacker.card!) ? flagshipTargets : targets).filter((slot) => !slot.isDestroyed);
-    const swarmed = attacker.card!.id === "drone" && swarm !== null && !swarm.isDestroyed ? swarm : null;
-    const focused = swarmed === null && focus !== null && view.includes(focus) ? focus : null;
-    const taunted = taunt !== null && view.includes(taunt) ? taunt : null;
-    const target = swarmed ?? focused ?? taunted ?? chooseTarget(attacker, view);
-    if (target === null) continue;
-    const amount = attacker.attack + (swarmed ? ABILITY_VALUES.swarmStrike : 0) + (focused ? ABILITY_VALUES.focusFire : 0);
+    const seeThrough = isFlagship(attacker.card!);
+    const headStart = attacker.powers.includes("head_start") ? { headStart: true as const } : {};
+    const swarm = swarmTarget(board, attacker);
+    const aimed = swarm ?? ships.find((slot) => slot.uid === attacker.aim) ?? null;
+    const taunted = swarm === null && taunt !== null && !taunt.isDestroyed && board.isExposed(taunt, seeThrough) ? taunt : null;
+    const cover = swarm === null && aimed !== null && !board.isExposed(aimed, seeThrough) ? board.lane(enemy, "strike").slots[aimed.index]! : null;
+    const target = taunted ?? cover ?? aimed;
+    if (target === null || target.isDestroyed) {
+      const covered = cover !== null && target === cover ? { aimedAt: shipRef(aimed!) } : {};
+      shots.push({ kind: "fizzle", attacker: shipRef(attacker), target: target && shipRef(target), ...covered, ...headStart });
+      continue;
+    }
+    const focused = target.powers.includes("focus_fire");
+    const amount = attacker.attack + (swarm ? ABILITY_VALUES.swarmStrike : 0) + (focused ? ABILITY_VALUES.focusFire : 0);
+    const aimedAt = aimed !== null && aimed !== target ? shipRef(aimed) : null;
     target.damage(amount);
     if (target.powers.includes("counterfire") && !isFlagship(attacker.card!)) counterfire.push({ attacker, source: target });
     shots.push({
@@ -716,8 +725,10 @@ function volley(board: Board, side: Side, shooters: readonly Slot[], counterfire
       amount,
       after: stats(target),
       ...(focused ? { focus: true as const } : {}),
-      ...(swarmed ? { swarm: true as const } : {}),
-      ...(attacker.powers.includes("head_start") ? { headStart: true as const } : {}),
+      ...(swarm ? { swarm: true as const } : {}),
+      ...headStart,
+      ...(aimedAt ? { aimedAt } : {}),
+      ...(taunted ? { taunt: true as const } : {}),
     });
   }
   return shots;

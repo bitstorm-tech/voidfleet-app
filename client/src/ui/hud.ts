@@ -1,6 +1,6 @@
 // Kopfzeile (Runde, Overdrive ab Runde 8, Status), Log-Panel, Banner für Befehle, Fähigkeiten und Admirale,
 // Ankündigung einer neuen Runde sowie der Aktionsknopf (Submit, Überspringen oder Computergegner, je nach Lage)
-// mit der Checkliste des Zugs darunter als DOM-Overlay.
+// mit der Checkliste des Zugs darunter (samt Feuerbefehlen) als DOM-Overlay.
 
 import type { AdmiralId } from "../../../shared/admirals.ts";
 import { overdriveBonus, type Side } from "../../../shared/board.ts";
@@ -65,8 +65,9 @@ export class Hud {
   }
 
   /**
-   * Füllt die Checkliste: in Runde 1 zuerst das Flaggschiff, für Admiral Kerr zuletzt die Zielerfassung, wenn die
-   * Pendulum markieren darf. `null` blendet sie aus, ohne dass der Knopf darüber springt.
+   * Füllt die Checkliste: in Runde 1 zuerst das Flaggschiff, nach Grundmanöver und Fähigkeit die Feuerbefehle („Ziele
+   * zuweisen (2/4)“, sie halten „Zug beenden“ nicht auf), für Admiral Kerr zuletzt die Zielerfassung, wenn die Pendulum
+   * markieren darf. `null` blendet sie aus, ohne dass der Knopf darüber springt.
    */
   setChecklist(progress: TurnProgress | null, deploys: { planned: number; max: number }): void {
     this.checklist.classList.toggle("inactive", progress === null);
@@ -78,6 +79,7 @@ export class Hud {
       // Mit Freier Hand stehen Grundmanöver und Fähigkeit getrennt da.
       [progress.power === null ? t.hud.checklist.maneuver : t.hud.checklist.maneuverOnly, progress.maneuver],
       [t.hud.checklist.power, progress.power],
+      [t.hud.checklist.fire(progress.fireOrders.assigned, progress.fireOrders.shooters), progress.fire],
       [t.hud.checklist.mark, progress.mark],
     ];
     this.checklist.replaceChildren(

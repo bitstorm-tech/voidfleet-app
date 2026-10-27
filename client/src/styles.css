@@ -814,6 +814,28 @@ body {
   opacity: 0.45;
 }
 
+/* Feuerbefehl, wo der Schuss ein anderes Schiff trifft: dünn gepunktet in der eigenen Farbe. */
+.rules-svg .order {
+  stroke: rgb(var(--player) / 0.8);
+  stroke-width: 1.5;
+  stroke-dasharray: 1.5 3.5;
+  stroke-linecap: round;
+}
+
+/* Ein Schuss, der verpufft, endet in einem matten Wölkchen; ein zerstörtes Schiff ist durchgestrichen. */
+.rules-svg .fizzle {
+  fill: none;
+  stroke: rgb(var(--debuff));
+  stroke-width: 1.5;
+  stroke-dasharray: 2 3;
+}
+
+.rules-svg .wreck {
+  stroke: rgb(var(--damage));
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
 .rules-svg .move {
   fill: none;
   stroke: rgb(var(--select));
@@ -883,9 +905,10 @@ body {
   color: var(--text);
 }
 
-/* Die Teile eines Zugs: verkleinerte Karten und das Manöver-Symbol, mit Plus dazwischen. */
+/* Die Teile eines Zugs: verkleinerte Karten, das Manöver-Symbol und die Feuerbefehle, mit Plus dazwischen. */
 .rules-turn {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
 }

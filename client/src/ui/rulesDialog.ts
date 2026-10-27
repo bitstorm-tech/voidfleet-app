@@ -14,7 +14,7 @@ import { admiralTitle, cardText, t } from "../i18n/index.ts";
 import { createCard } from "./cardView.ts";
 import { iconDialog } from "./iconDialog.ts";
 import { createPowerCard } from "./powerCard.ts";
-import { boardFigure, overdriveFigure, phasesFigure, targetingFigure, turnFigure } from "./rulesFigures.ts";
+import { boardFigure, fireOrdersFigure, overdriveFigure, phasesFigure, turnFigure } from "./rulesFigures.ts";
 
 type SectionId = keyof Messages["rules"]["sections"];
 
@@ -31,7 +31,7 @@ const CHAPTERS: readonly { id: SectionId; figures?: (() => Element)[]; after?: n
   { id: "board", figures: [boardFigure], after: 2 },
   { id: "movement", figures: [() => screenshot(maneuverScreenshot)], after: 1 },
   { id: "resolution", figures: [phasesFigure] },
-  { id: "combat", figures: [targetingFigure], after: 1 },
+  { id: "combat", figures: [fireOrdersFigure], after: 2 },
   { id: "ships", figures: [shipGallery], after: 1 },
   { id: "commands", figures: [commandGallery] },
   { id: "hand" },
@@ -112,7 +112,7 @@ function admiralGallery(): HTMLElement {
   return grid;
 }
 
-/** Alle Schiffe als Karte mit Werten, Klasse und ihrem Zielverhalten, danach die Tokens wie die Drohne und die Flaggschiffe. */
+/** Alle Schiffe als Karte mit Klasse, Werten und Effekt, danach die Tokens wie die Drohne und die Flaggschiffe. */
 function shipGallery(): HTMLElement {
   return gallery(
     [...SHIPS, ...TOKENS, ...FLAGSHIPS].map((card) => {
@@ -124,7 +124,6 @@ function shipGallery(): HTMLElement {
         lines: [
           `${t.stats.hp} ${card.hp} · ${t.stats.atk} ${card.atk}${card.shield > 0 ? ` · ${t.stats.shield} ${card.shield}` : ""}`,
           admiral ? `${t.admirals[admiral].ability}: ${cardText(card).effect}` : cardText(card).effect,
-          `${t.shipClasses[card.shipClass]} ${t.rules.classes[card.shipClass]}`,
         ],
       };
     }),

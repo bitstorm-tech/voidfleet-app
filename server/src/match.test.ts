@@ -9,7 +9,7 @@ const command = (slotIndex: number): SlotTarget => ({ lane: "command", slotIndex
 
 /** Ein Zug; ohne Angaben passt er (in Runde 1 fehlt dann noch das Flaggschiff). */
 function plan(parts: Partial<TurnPlan> = {}): TurnPlan {
-  return { ships: [], command: null, maneuver: null, flagship: null, power: null, mark: null, ...parts };
+  return { ships: [], command: null, maneuver: null, flagship: null, power: null, mark: null, fire: [], ...parts };
 }
 
 const pass = plan();
@@ -86,6 +86,9 @@ test("Der Computergegner nimmt den freien Platz, wählt sofort seinen Admiral un
   expect(match.join("c")).toBeNull();
   expect(match.players[1]!.admiral).toBe("kerr");
   expect(match.view(0).opponent).toMatchObject({ admiral: null, submitted: false, playedCommands: [] });
+  // Die Hände sind gemischt; ohne Schnellverlegung legt der Bot in Runde 1 genau zwei Schiffe.
+  const bot = match.players[1]!;
+  bot.commandHand.splice(0, bot.commandHand.length, commandById("emergency_shields"));
 
   const opening = plan({ ...deploy, flagship: command(2) });
   expect(match.submit(0, opening)).toBe("admiral_required");
@@ -239,19 +242,27 @@ test("Ein anderes Schiff darf nicht in den Deploy-Slot wechseln und füllt die L
   expect(match.submit(0, recall(2, 1))).toBe("destination_unavailable");
 });
 
-test("Ein Befehl auf das gelegte Schiff wirkt in derselben Runde", () => {
+test("Ein Befehl auf das gelegte Schiff wirkt in derselben Runde, und es feuert schon mit seinem Feuerbefehl", () => {
   const match = midGame();
   for (const player of match.players) {
     player.shipHand.splice(0, player.shipHand.length, { ...interceptor, hp: 10 });
     player.commandHand.splice(0, player.commandHand.length, commandById("emergency_shields"), commandById("intercept"));
   }
-  const shielded = plan({ ...deploy, command: { handIndex: 0, target: strike(0), destination: null } });
-  const intercepted = plan({ ships: [{ handIndex: 0, target: command(2) }], command: { handIndex: 1, target: command(2), destination: 4 } });
-  playRound(match, [shielded, intercepted]);
-  // Schild 3 fängt den Treffer des Interceptors (3 + 2 ATK durch Intercept) bis auf 2 ab.
-  expect(match.board.lane("player", "strike").slots[0]!.state).toEqual({ cardId: "void_interceptor", hp: 8, shield: 0, scrapBonus: 0, marked: false });
+  for (const side of ["player", "enemy"] as const) match.board.place(match.board.lane(side, "strike"), 5, shipById("horizon_cruiser"));
+  const shielded = plan({ ...deploy, command: { handIndex: 0, target: strike(0), destination: null }, fire: [{ ship: strike(0), target: strike(5) }] });
+  const intercepted = plan({
+    ships: [{ handIndex: 0, target: command(2) }],
+    command: { handIndex: 1, target: command(2), destination: 4 },
+    fire: [{ ship: command(2), target: strike(5) }],
+  });
+  const events = playRound(match, [shielded, intercepted]);
+  expect(events).toContainEqual(expect.objectContaining({ kind: "effect", cardId: "emergency_shields", ship: expect.objectContaining({ side: "player", ...strike(0) }) }));
+  expect(match.board.lane("player", "strike").slots[0]!.state).toEqual({ cardId: "void_interceptor", hp: 10, shield: 0, scrapBonus: 0, marked: false });
   expect(match.board.lane("enemy", "command").slots[2]!.isOccupied).toBe(false);
-  expect(match.board.lane("enemy", "strike").slots[4]!.state).toEqual({ cardId: "void_interceptor", hp: 7, shield: 0, scrapBonus: 0, marked: false });
+  expect(match.board.lane("enemy", "strike").slots[4]!.state).toEqual({ cardId: "void_interceptor", hp: 10, shield: 0, scrapBonus: 0, marked: false });
+  // Der Interceptor des Gegners trifft nach dem Intercept mit 3 + 2 ATK, der eigene mit 3.
+  expect(match.board.lane("player", "strike").slots[5]!.hp).toBe(shipById("horizon_cruiser").hp - 5);
+  expect(match.board.lane("enemy", "strike").slots[5]!.hp).toBe(shipById("horizon_cruiser").hp - 3);
 });
 
 test("Das Grundmanöver verlegt ein eigenes Schiff vom Brett in einen freien Slot, auch in derselben Lane", () => {
@@ -342,7 +353,7 @@ test("Ein Befehl auf das manövrierte Schiff folgt ihm; es feuert nicht, wird ab
     command: { handIndex: 0, target: strike(0), destination: null },
     maneuver: { ship: strike(0), destination: command(2) },
   });
-  const events = playRound(match, [overchargeAndManeuver, pass]);
+  const events = playRound(match, [overchargeAndManeuver, plan({ fire: [{ ship: strike(0), target: strike(0) }] })]);
 
   expect(events.find((event) => event.kind === "maneuver")).toEqual({
     kind: "maneuver",
@@ -468,7 +479,8 @@ test("Wessen Flaggschiff fällt, verliert; danach gibt es keine Züge mehr", () 
   const match = midGame(["vance", "vance"]);
   match.board.place(match.board.lane("player", "strike"), 0, shipById("vanguard"))!.hp = 3;
   match.board.place(match.board.lane("enemy", "strike"), 0, shipById("vanguard"));
-  playRound(match);
+  const duel = plan({ fire: [{ ship: strike(0), target: strike(0) }] });
+  playRound(match, [duel, duel]);
   expect(match.view(0).result).toBe("lost");
   expect(match.view(1).result).toBe("won");
   expect(match.round).toBe(2);
@@ -478,8 +490,37 @@ test("Wessen Flaggschiff fällt, verliert; danach gibt es keine Züge mehr", () 
 test("Fallen beide Flaggschiffe in derselben Runde, endet das Match unentschieden", () => {
   const match = midGame(["vance", "vance"]);
   for (const side of ["player", "enemy"] as const) match.board.place(match.board.lane(side, "strike"), 0, shipById("vanguard"))!.hp = 3;
-  playRound(match);
+  const duel = plan({ fire: [{ ship: strike(0), target: strike(0) }] });
+  playRound(match, [duel, duel]);
   expect([match.view(0).result, match.view(1).result]).toEqual(["draw", "draw"]);
+});
+
+test("Feuerbefehle: je eigenes Kampfschiff einer, auch für ein gelegtes, nicht fürs manövrierende; Ziel ist ein gegnerisches Schiff, auch ein gedecktes", () => {
+  const match = midGame(["moreau", "osei"]);
+  const player = match.players[0]!;
+  setShipHands(match, [shipById("void_interceptor")], []);
+  const place = (side: "player" | "enemy", target: SlotTarget, id: Parameters<typeof shipById>[0]) => match.board.place(match.board.lane(side, target.lane), target.slotIndex, shipById(id));
+  place("player", strike(1), "horizon_cruiser");
+  place("player", strike(2), "repair_drone");
+  place("player", command(3), "mirage");
+  place("enemy", strike(4), "titan_carrier");
+  place("enemy", command(4), "signal_booster");
+  const submit = (parts: Partial<TurnPlan>) => {
+    const error = match.submit(0, plan(parts));
+    player.plan = null;
+    return error;
+  };
+  const at = (ship: SlotTarget, target: SlotTarget) => ({ ship, target });
+
+  expect(submit({ fire: [at(strike(1), strike(4)), at(command(3), command(4))] })).toBeNull();
+  expect(submit({ ships: [{ handIndex: 0, target: strike(0) }], fire: [at(strike(0), command(4))] })).toBeNull();
+  expect(submit({ fire: [at(strike(2), strike(4))] })).toBe("fire_ship_invalid");
+  expect(submit({ fire: [at(strike(0), strike(4))] })).toBe("fire_ship_invalid");
+  expect(submit({ fire: [at(strike(1), strike(4)), at(strike(1), command(4))] })).toBe("fire_ship_invalid");
+  expect(submit({ maneuver: { ship: strike(1), destination: strike(3) }, fire: [at(strike(1), strike(4))] })).toBe("fire_ship_invalid");
+  // Beim Phasentausch feuern beide.
+  expect(submit({ maneuver: { ship: command(3), destination: strike(1) }, fire: [at(command(3), strike(4)), at(strike(1), strike(4))] })).toBeNull();
+  expect(submit({ fire: [at(strike(1), strike(3))] })).toBe("fire_target_invalid");
 });
 
 test("Solange beide Flaggschiffe stehen, geht es weiter, auch ohne andere Kampfschiffe auf Brett und Hand", () => {
