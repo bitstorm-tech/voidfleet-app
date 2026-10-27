@@ -4,7 +4,7 @@
 // Seite des Betrachters; der Server spiegelt das Brett für den zweiten Spieler.
 
 import { ABILITY_VALUES, type PowerId } from "./admirals.ts";
-import { isFlagship, isToken, shipById, type ShipCard, type ShipId } from "./cards.ts";
+import { extraDeploys, isFlagship, isToken, shipById, type CommandCard, type CommandId, type ShipCard, type ShipId } from "./cards.ts";
 import type { SlotTarget } from "./protocol.ts";
 
 export type Side = "player" | "enemy";
@@ -54,9 +54,9 @@ export const SLOT_COUNT = 6;
 export const MAX_SHIPS_PER_LANE = 4;
 export const MAX_SHIPS_PER_SIDE = 6;
 
-/** Aufstellung: In Runde 1 darf jede Seite zwei Schiffe legen, danach eines. */
-export function maxDeploys(round: number): number {
-  return round === 1 ? 2 : 1;
+/** Aufstellung: In Runde 1 darf jede Seite zwei Schiffe legen, danach eines; mit Schnellverlegung (`command`) eines mehr. */
+export function maxDeploys(round: number, command: CommandCard | null = null): number {
+  return (round === 1 ? 2 : 1) + extraDeploys(command);
 }
 
 /** Ab dieser Runde bekommen alle Kampfschiffe Overdrive, damit Partien nicht im Patt enden. */
@@ -70,6 +70,7 @@ export function overdriveBonus(round: number): number {
 }
 
 const NO_POWERS: readonly PowerId[] = [];
+const NO_LOCKS: readonly CommandId[] = [];
 
 export class Slot {
   card: ShipCard | null = null;
@@ -92,6 +93,12 @@ export class Slot {
   selfDamageAfterCombat = 0;
   /** Admiralsfähigkeiten, die in dieser Runde auf dem Schiff liegen (Gegenfeuer, Fokusfeuer, Schwarmangriff, Taktvorsprung); sie folgen ihm. */
   powers: readonly PowerId[] = NO_POWERS;
+  /** Kam in dieser Runde aufs Brett: Deploy samt Flaggschiff, Drohne des Titan Carriers, Trugbild, Drohnenstaffel (Ziel des Minenfelds). */
+  arrived = false;
+  /** Ablenkung: Gegnerische Schützen nehmen diese Runde dieses Schiff, solange sie es beschießen können. */
+  taunting = false;
+  /** Gegnerische Befehle, die dieses Schiff erfasst haben (Wärmesucher, Traktorstrahl); sie folgen ihm. */
+  locks: readonly CommandId[] = NO_LOCKS;
 
   constructor(
     readonly lane: Lane,
@@ -100,6 +107,11 @@ export class Slot {
 
   get isOccupied(): boolean {
     return this.card !== null;
+  }
+
+  /** Leer und nicht für ein Schiff im Kurzsprung gesperrt (`Board.jumping`): Hier darf ein Schiff hinein. */
+  get isFree(): boolean {
+    return !this.isOccupied && !this.lane.board.jumping.some((ship) => ship.lane === this.lane && ship.index === this.index);
   }
 
   get isDestroyed(): boolean {
@@ -152,6 +164,9 @@ export class Slot {
     this.moved = false;
     this.selfDamageAfterCombat = 0;
     this.powers = NO_POWERS;
+    this.arrived = false;
+    this.taunting = false;
+    this.locks = NO_LOCKS;
   }
 
   /** Schaden geht erst auf den Schild, der Rest auf die HP. */
@@ -182,6 +197,9 @@ export class Slot {
     this.moved = false;
     this.selfDamageAfterCombat = 0;
     this.powers = NO_POWERS;
+    this.arrived = false;
+    this.taunting = false;
+    this.locks = NO_LOCKS;
   }
 
   /** Übernimmt Schiff samt Live-Zustand eines anderen Slots und leert diesen; das Schiff gilt als bewegt. */
@@ -200,7 +218,7 @@ export class Slot {
   }
 
   /** Schiff samt Live-Zustand eines anderen Slots. */
-  private copy(other: Slot): void {
+  copy(other: Slot): void {
     this.card = other.card;
     this.hp = other.hp;
     this.shield = other.shield;
@@ -213,6 +231,9 @@ export class Slot {
     this.moved = other.moved;
     this.selfDamageAfterCombat = other.selfDamageAfterCombat;
     this.powers = other.powers;
+    this.arrived = other.arrived;
+    this.taunting = other.taunting;
+    this.locks = other.locks;
   }
 
   get state(): SlotState | null {
@@ -245,19 +266,20 @@ export class Lane {
     return this.slots.filter((slot) => slot.isOccupied);
   }
 
-  /** Schiffe der Lane für die Lane-Grenze (`MAX_SHIPS_PER_LANE`); Tokens (Drohne, Trugbild) zählen nicht. */
+  /** Schiffe der Lane für die Lane-Grenze (`MAX_SHIPS_PER_LANE`), auch eines im Kurzsprung; Tokens (Drohne, Trugbild) zählen nicht. */
   get shipCount(): number {
-    return this.occupiedSlots.filter((slot) => !isToken(slot.card!)).length;
+    const jumping = this.board.jumping.filter((ship) => ship.lane === this);
+    return [...this.occupiedSlots, ...jumping].filter((slot) => !isToken(slot.card!)).length;
   }
 
   get isFull(): boolean {
     return this.shipCount >= MAX_SHIPS_PER_LANE;
   }
 
-  /** Freier Slot für ein Schiff, das hierher wechselt: derselbe Index, sonst der nächstgelegene. */
-  freeSlotNear(index: number): Slot | null {
-    if (this.isFull) return null;
-    return nearest(this.slots.filter((slot) => !slot.isOccupied), index);
+  /** Freier Slot für ein Schiff, das hierher wechselt: derselbe Index, sonst der nächstgelegene; ein Token braucht nur einen freien Slot. */
+  freeSlotNear(index: number, token = false): Slot | null {
+    if (this.isFull && !token) return null;
+    return nearest(this.slots.filter((slot) => slot.isFree), index);
   }
 }
 
@@ -281,6 +303,12 @@ export class Board {
   overdrive = 0;
   /** So viele Drohnen hat die Hive je Seite in diesem Match gestartet (`ABILITY_VALUES.hiveBudget`); gehört nicht in den Snapshot. */
   hiveLaunches: Record<Side, number> = { player: 0, enemy: 0 };
+  /**
+   * Kurzsprung: Schiffe, die in dieser Runde das Brett verlassen haben, je als abgelöster Slot samt Zustand; Lane und
+   * Index nennen den Slot, in den es im Cleanup zurückkehrt und der bis dahin gesperrt ist (`Slot.isFree`). Zwischen den
+   * Runden leer; gehört nicht in den Snapshot.
+   */
+  jumping: Slot[] = [];
 
   lane(side: Side, type: LaneType): Lane {
     return this.lanes.find((lane) => lane.side === side && lane.type === type)!;

@@ -1,6 +1,6 @@
 // Formuliert die aufgedeckten Ereignisse einer Runde als Log-Zeilen.
 
-import { isFlagship, shipById } from "../../../shared/cards.ts";
+import { isFlagship, shipById, type CommandId } from "../../../shared/cards.ts";
 import type { RoundEvent, ShipRef, SlotRef } from "../../../shared/protocol.ts";
 import { t } from "../i18n/index.ts";
 
@@ -10,6 +10,11 @@ export function slotLabel(slot: SlotRef): string {
 
 function shipLabel(ship: ShipRef): string {
   return t.log.ship(t.ships[ship.cardId].name, slotLabel(ship));
+}
+
+/** Was Schnellverlegung bzw. Freie Hand schon beim Planen erlaubt haben; für Banner und Log. */
+export function ruleSubtitle(cardId: CommandId): string {
+  return cardId === "rapid_deployment" ? t.banner.extraShip : t.banner.maneuverAndPower;
 }
 
 /** Welche Admiralsfähigkeit einen Schuss gelenkt oder beschleunigt hat; null ohne. */
@@ -53,13 +58,23 @@ export function describeEvent(event: RoundEvent): string {
         case "attack":
           return t.log.attackBonus(name, ship, effect.delta);
         case "shield":
-          return t.log.shield(name, ship, effect.amount);
+          return (effect.permanent ? t.log.shieldPermanent : t.log.shield)(name, ship, effect.amount);
         case "disable":
           return t.log.disable(name, ship);
         case "heal":
           return t.log.heal(name, ship, effect.amount);
         case "move":
-          return t.log.move(name, ship, slotLabel({ side: event.ship.side, ...effect.to }));
+          return (event.ship.side === event.side ? t.log.move : t.log.tow)(name, ship, slotLabel({ side: event.ship.side, ...effect.to }));
+        case "jump":
+          return t.log.jump(name, ship);
+        case "taunt":
+          return t.log.taunt(name, ship);
+        case "spawn":
+          return t.log.launch(name, ship);
+        case "ram":
+          return t.log.ram(name, ship, shipLabel(effect.target), effect.dealt, effect.taken);
+        case "jam":
+          return effect.power === "decoy" ? t.log.jamDecoy(name, ship) : t.log.jam(name, ship, t.powers[effect.power].name);
       }
     }
     case "ability": {
@@ -80,6 +95,10 @@ export function describeEvent(event: RoundEvent): string {
       return (event.source.cardId === "hive" ? t.log.brood : t.log.spawn)(shipLabel(event.source), shipLabel(event.ship));
     case "draw":
       return t.log.draw(t.commands[event.cardId].name, t.log.who[event.side], event.ships, event.commands);
+    case "countered":
+      return t.log.countered(t.commands[event.cardId].name, t.log.who[event.side], t.commands[event.countered].name);
+    case "rule":
+      return t.log.rule(t.commands[event.cardId].name, t.log.who[event.side], ruleSubtitle(event.cardId));
     case "noEffect":
       return t.log.noEffect(t.commands[event.cardId].name, t.log.who[event.side]);
     case "miss":
@@ -100,5 +119,7 @@ export function describeEvent(event: RoundEvent): string {
       return (isFlagship(shipById(event.ship.cardId)) ? t.log.flagshipDestroyed : t.log.destroyed)(shipLabel(event.ship));
     case "vanish":
       return t.log.vanish(shipLabel(event.ship));
+    case "return":
+      return t.log.rejoin(shipLabel(event.ship));
   }
 }

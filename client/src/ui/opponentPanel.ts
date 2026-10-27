@@ -2,18 +2,20 @@
 // Name, Flaggschiff und Admiralsfähigkeit, ihre Texte im Tooltip), ob er seinen Zug schon beendet hat, wie viele
 // Schiffs- und Befehlskarten er auf der Hand und noch im Deck hat und welche Befehle er noch spielen kann — jeder
 // Befehl mit den Kopien, die er noch nicht aufgedeckt hat (`deckCopies` minus gespielte). Ob eine davon auf der
-// Hand liegt, im Deck steckt oder beim vollen Handlimit verfallen ist, bleibt verdeckt. Angriffe stehen oben,
-// weil sie beim Planen am meisten zählen; der Effekttext steht im Tooltip.
+// Hand liegt, im Deck steckt oder beim vollen Handlimit verfallen ist, bleibt verdeckt. Die Befehle stehen nach Typ
+// gruppiert in der Typfarbe, kompakt als umbrechende Namen; Angriffe oben, weil sie beim Planen am meisten zählen,
+// dann die übrigen Typen in der Reihenfolge von `COMMAND_ORDER`. Eine Zahl steht nur bei mehr als einer offenen
+// Kopie; der Effekttext steht im Tooltip.
 
 import { ADMIRALS, type AdmiralId } from "../../../shared/admirals.ts";
-import { COMMAND_ORDER, COMMANDS, deckCopies, type CommandId } from "../../../shared/cards.ts";
+import { COMMAND_ORDER, COMMANDS, deckCopies, type CommandId, type CommandType } from "../../../shared/cards.ts";
 import type { OpponentView } from "../../../shared/protocol.ts";
 import { admiralPortrait } from "../data/admirals.ts";
 import { cardColor } from "../data/cardColors.ts";
 import { toCssChannels } from "../data/palette.ts";
 import { t } from "../i18n/index.ts";
 
-const LISTED = [...COMMAND_ORDER].reverse().flatMap((type) => COMMANDS.filter((card) => card.commandType === type));
+const TYPES: readonly CommandType[] = ["attack", ...COMMAND_ORDER.filter((type) => type !== "attack")];
 /** Die Kartenzahlen aus `OpponentView`, wie sie in der kleinen Tabelle stehen: Hand, dann Deck, je Schiffe und Befehle. */
 const COUNTS = ["shipHandSize", "commandHandSize", "shipDeckSize", "commandDeckSize"] as const;
 
@@ -60,14 +62,20 @@ export class OpponentPanel {
     this.panel.querySelector("h3")!.textContent = text.unplayed;
 
     const list = this.panel.querySelector(".opponent-commands")!;
-    for (const card of LISTED) {
-      const item = document.createElement("li");
-      item.style.setProperty("--card-rgb", toCssChannels(cardColor(card)));
-      item.title = t.commands[card.id].effect;
-      const count = document.createElement("b");
-      item.append(Object.assign(document.createElement("span"), { textContent: t.commands[card.id].name }), count);
-      list.append(item);
-      this.commands.set(card.id, { item, count });
+    for (const type of TYPES) {
+      const cards = COMMANDS.filter((card) => card.commandType === type);
+      const group = document.createElement("li");
+      group.style.setProperty("--card-rgb", toCssChannels(cardColor(cards[0]!)));
+      const names = document.createElement("div");
+      group.append(Object.assign(document.createElement("h4"), { textContent: t.rules.commandTypes[type] }), names);
+      for (const card of cards) {
+        const item = Object.assign(document.createElement("span"), { title: t.commands[card.id].effect, textContent: t.commands[card.id].name });
+        const count = document.createElement("b");
+        item.append(count);
+        names.append(item);
+        this.commands.set(card.id, { item, count });
+      }
+      list.append(group);
     }
   }
 
@@ -83,10 +91,10 @@ export class OpponentPanel {
     this.state.classList.toggle("ready", opponent.submitted);
     this.showAdmiral(opponent.admiral);
     COUNTS.forEach((key, index) => (this.counts[index]!.textContent = String(opponent[key])));
-    for (const card of LISTED) {
+    for (const card of COMMANDS) {
       const left = deckCopies(card) - opponent.playedCommands.filter((id) => id === card.id).length;
       const { item, count } = this.commands.get(card.id)!;
-      count.textContent = `${left}×`;
+      count.textContent = left > 1 ? ` ${left}×` : "";
       item.classList.toggle("spent", left === 0);
     }
   }

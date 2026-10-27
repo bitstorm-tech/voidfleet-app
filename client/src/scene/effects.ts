@@ -1,6 +1,6 @@
-// Kurzlebige Effekte auf dem Brett: Laserbolzen, der Strahl der Railgun, Impulse, Schildblasen, Einschläge,
-// Sekundärexplosionen, Detonationen und brennende Trümmer. Alle räumen sich
-// nach dem Abspielen selbst weg.
+// Kurzlebige Effekte auf dem Brett: Laserbolzen, der Strahl der Railgun, die Rakete des Wärmesuchers mit Leuchtspur,
+// der Traktorstrahl, Impulse, Schildblasen, Einschläge, Sekundärexplosionen, Detonationen und brennende Trümmer.
+// Alle räumen sich nach dem Abspielen selbst weg.
 
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
@@ -34,6 +34,15 @@ const PULSE_ALPHA = 0.55;
 const BEAM_CORE = 0.07;
 const BEAM_SHEATH = 0.26;
 const BEAM_DURATION = 520;
+/** Rakete des Wärmesuchers: Welteinheiten pro Sekunde entlang ihrer Bahn, Höhe und seitlicher Schwung der Kurve. */
+const MISSILE_SPEED = 8;
+const MISSILE_ARC = 3.2;
+const MISSILE_SWING = 2.4;
+/** Traktorstrahl: dünner als die Railgun, flimmert (Hz), blendet ein und aus (ms). */
+const TETHER_WIDTH = 0.6;
+const TETHER_SHIMMER = 9;
+const TETHER_FADE_IN = 220;
+const TETHER_FADE_OUT = 300;
 /** Schildblase: Sie wächst in einem Drittel der Zeit auf ihre Größe, leuchtet am Rand und verblasst am Ende (ms). */
 const BUBBLE_DURATION = 1100;
 const BUBBLE_ALPHA = 0.85;
@@ -171,6 +180,16 @@ const HIT_SOUNDS: Record<HitName, SoundId> = {
   discharge: "impact_energy",
 };
 
+/** Leuchtspur der Rakete: ein Dauerstrom kleiner, langsam verwehender Funken in der Schussfarbe hinter dem Kopf. */
+const TRAIL: Omit<Burst, "count" | "cone"> = {
+  speed: [0.1, 0.5], lifeTime: [0.35, 0.7], size: [0.1, 0.16], grow: 0.2, stretch: 1, gravity: 0.3, colors: (shot) => [
+    [0, new Color4(1, 1, 1, 0.9)],
+    [0.25, Color4.FromColor3(shot, 0.8)],
+    [1, Color4.FromColor3(shot, 0)],
+  ],
+};
+const TRAIL_RATE = 220;
+
 /** Sekundärexplosion: ein Riss in der Hülle, aus dem Feuer, Funken und ein Rauchpilz brechen. */
 const POP: readonly Burst[] = [
   { count: 24, cone: Tools.ToRadians(75), speed: [1.5, 4], lifeTime: [0.4, 0.8], size: [0.22, 0.4], grow: 0.5, stretch: 1.2, gravity: 0.6, colors: FIRE },
@@ -264,6 +283,59 @@ export class BoardEffects {
     });
     this.disposeMesh(core);
     this.disposeMesh(sheath);
+  }
+
+  /**
+   * Rakete des Wärmesuchers: Ein heller Kopf steigt von `from` auf, schwingt seitlich aus und stürzt auf `to`, hinter
+   * sich eine Leuchtspur aus Partikeln, die noch kurz nachglimmt.
+   */
+  async missile(from: Vector3, to: Vector3, color: Color3): Promise<void> {
+    const head = this.createSphere("missile", 0.15, Color3.Lerp(color, Color3.White(), 0.6), 1);
+    const swing = Math.random() < 0.5 ? -1 : 1;
+    const lift = from.add(new Vector3(0, MISSILE_ARC, swing * MISSILE_SWING));
+    const dive = to.add(new Vector3(0, MISSILE_ARC * 1.2, swing * MISSILE_SWING * 0.4));
+    const emitter = from.clone();
+    const trail = this.particles("missile-trail", { ...TRAIL, count: Math.ceil(TRAIL_RATE * TRAIL.lifeTime[1]) + 10, cone: SPHERE }, color, 1);
+    trail.emitter = emitter;
+    trail.emitRate = TRAIL_RATE;
+    trail.startDirectionFunction = (_world, direction) => randomInCone(Vector3.Up(), SPHERE).scaleToRef(randomBetween(TRAIL.speed), direction);
+    trail.start();
+    const length = Vector3.Distance(from, lift) + Vector3.Distance(lift, dive) + Vector3.Distance(dive, to);
+    await tween(this.scene, (length / MISSILE_SPEED) * 1000, (progress) => {
+      cubicBezierToRef(from, lift, dive, to, easeInCubic(progress) * 0.35 + progress * 0.65, emitter);
+      head.position.copyFrom(emitter);
+    });
+    this.disposeMesh(head);
+    trail.stop();
+    void wait(this.scene, (TRAIL.lifeTime[1] + 0.1) * 1000).then(() => trail.dispose(false));
+  }
+
+  /**
+   * Traktorstrahl: Ein flimmernder Strahl steht von `from` zu dem Punkt, den `target` in jedem Bild liefert, und folgt
+   * ihm so; er blendet ein und verblasst erst, wenn die zurückgegebene Funktion ihn freigibt.
+   */
+  tether(from: Vector3, target: () => Vector3, color: Color3): () => Promise<void> {
+    const core = this.createBeam("tether-core", BEAM_CORE * TETHER_WIDTH, 1, Color3.Lerp(color, Color3.White(), 0.6), from, target());
+    const sheath = this.createBeam("tether-sheath", BEAM_SHEATH * TETHER_WIDTH, 1, color, from, target());
+    let fade = 0;
+    const observer = this.scene.onBeforeRenderObservable.add(() => {
+      const to = target();
+      for (const mesh of [core, sheath]) {
+        Vector3.CenterToRef(from, to, mesh.position);
+        mesh.scaling.z = Vector3.Distance(from, to);
+        mesh.lookAt(to);
+      }
+      const shimmer = 0.75 + 0.25 * Math.sin((performance.now() / 1000) * TETHER_SHIMMER * 2 * Math.PI);
+      (core.material as StandardMaterial).alpha = fade * shimmer;
+      (sheath.material as StandardMaterial).alpha = 0.45 * fade * shimmer;
+    });
+    void tween(this.scene, TETHER_FADE_IN, (progress) => (fade = progress));
+    return async () => {
+      await tween(this.scene, TETHER_FADE_OUT, (progress) => (fade = 1 - progress));
+      this.scene.onBeforeRenderObservable.remove(observer);
+      this.disposeMesh(core);
+      this.disposeMesh(sheath);
+    };
   }
 
   /** Schildblase um ein Schiff: eine Kugel, die am Rand leuchtet, auf `size` wächst, kurz steht und verblasst. */
@@ -519,6 +591,13 @@ function createSpriteTexture(name: string, scene: Scene, alphaAt: (distance: num
   const texture = RawTexture.CreateRGBATexture(data, SPRITE_SIZE, SPRITE_SIZE, scene, true, false, Constants.TEXTURE_TRILINEAR_SAMPLINGMODE);
   texture.name = name;
   return texture;
+}
+
+/** Punkt der kubischen Bézierkurve `p0`…`p3` beim Anteil `t`, geschrieben nach `result`. */
+function cubicBezierToRef(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: number, result: Vector3): void {
+  const u = 1 - t;
+  result.copyFrom(p0).scaleInPlace(u ** 3);
+  result.addInPlace(p1.scale(3 * u ** 2 * t)).addInPlace(p2.scale(3 * u * t ** 2)).addInPlace(p3.scale(t ** 3));
 }
 
 /** Zufällige Richtung im Kegel um `axis`, gleichverteilt über den Raumwinkel. */

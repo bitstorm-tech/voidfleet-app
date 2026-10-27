@@ -5,25 +5,40 @@
 // Fähigkeiten der Flaggschiffe und Admirale (`admirals.ts`, Zahlen in `ABILITY_VALUES`).
 
 import { ABILITY_VALUES, targetsEnemy, type PowerId } from "./admirals.ts";
-import { isSameSlot, nearest, opposite, otherLane, slotTarget, type Board, type Side, type Slot } from "./board.ts";
-import { COMMAND_ORDER, isFlagship, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "./cards.ts";
+import { isSameSlot, nearest, opposite, otherLane, Slot, SLOT_COUNT, slotTarget, type Board, type Side } from "./board.ts";
+import {
+  COMMAND_ORDER,
+  destinationLane,
+  isFlagship,
+  isToken,
+  shipById,
+  targetsEnemyColumn,
+  targetsEnemyShip,
+  targetsEnemySide,
+  targetsEnemySlot,
+  type CommandCard,
+  type ShipCard,
+} from "./cards.ts";
 import { railgunFires } from "./powers.ts";
-import type { CommandEffect, RoundEvent, ShipRef, ShipStats, SlotTarget, TurnPlan } from "./protocol.ts";
+import type { CommandEffect, RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget, TurnPlan } from "./protocol.ts";
 
 const SIDES: readonly Side[] = ["player", "enemy"];
 
 export interface Commander {
   readonly side: Side;
-  /** Scavenge: zieht 1 Schiff + 1 Befehl zusätzlich; zählt, was auf der Hand gelandet ist. */
-  drawExtra(): { ships: number; commands: number };
+  /** Zieht zusätzlich (Plündern 1 + 1, Gegenmaßnahmen 0 + 1); zählt, was auf der Hand gelandet ist. */
+  drawExtra(ships: number, commands: number): { ships: number; commands: number };
 }
 
 export interface PlayedCommand {
   commander: Commander;
   card: CommandCard;
-  /** Das eigene Zielschiff, beim Torpedo der gewählte Slot der Gegnerseite (auch leer). */
+  /**
+   * Das eigene Zielschiff, beim Torpedo der gewählte Slot der Gegnerseite (auch leer), beim Durchschlag der Strike-Slot
+   * der Slot-Nummer. Wärmesucher und Traktorstrahl suchen ihr Ziel beim Wirken über die Erfassung (`Slot.locks`).
+   */
   target: Slot | null;
-  /** Bei Befehlen, die ihr Ziel verlegen: der freie Slot in der anderen Lane, geprüft beim Submit. */
+  /** Bei Befehlen, die ihr Ziel verlegen: der freie Slot der Ziel-Lane (`destinationLane`), geprüft beim Submit. */
   destination: Slot | null;
 }
 
@@ -52,6 +67,10 @@ function stats(slot: Slot): ShipStats {
   return { hp: slot.hp, shield: slot.shield };
 }
 
+function slotRef(slot: Slot): SlotRef {
+  return { side: slot.lane.side, ...slotTarget(slot) };
+}
+
 /** Element mit dem höchsten Wert; bei Gleichstand das erste (bei Schiffen: in `board.ships`-Reihenfolge). */
 export function highest<T>(items: readonly T[], value: (item: T) => number): T | null {
   let best: T | null = null;
@@ -65,7 +84,8 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
 
 /**
  * Löst eine Runde mit den Zügen beider Seiten auf und gibt ihre Ereignisse zurück: Deploy samt Flaggschiff,
- * Admiralsfähigkeiten, Fähigkeiten beim Deploy, Markierung der Pendulum, Manöver und Phasentausch,
+ * Admiralsfähigkeiten, Erfassung durch Wärmesucher und Traktorstrahl (`Slot.locks`), Fähigkeiten beim Deploy,
+ * Markierung der Pendulum, Manöver und Phasentausch,
  * Wächterschild, Effects, Combat, Cleanup, Brutkammer. `random` liefert Zahlen in [0, 1); ohne ihn
  * (Zielvorschau) feuern Plasma Frigates beim Deploy nicht, weil ihr Ziel Zufall ist.
  */
@@ -79,13 +99,21 @@ export function resolveTurns(board: Board, turns: readonly Turn[], random: (() =
   for (const { commander, ships, flagship } of turns) {
     const arrivals = flagship ? [flagship, ...ships] : ships;
     for (const { card, target } of arrivals) {
-      deployed.push(board.place(board.lane(commander.side, target.lane), target.slotIndex, card)!);
+      const slot = board.place(board.lane(commander.side, target.lane), target.slotIndex, card)!;
+      slot.arrived = true;
+      deployed.push(slot);
       events.push({ kind: "deploy", side: commander.side, cardId: card.id, target });
     }
     if (arrivals.length === 0) events.push({ kind: "pass", side: commander.side });
   }
   for (const { commander, power } of turns) {
     if (power) resolvePower(board, commander.side, power, events);
+  }
+  // Wärmesucher und Traktorstrahl erfassen ihr Schiff, bevor sich etwas bewegt; die Erfassung folgt ihm.
+  for (const { commander, command } of turns) {
+    if (!command?.target || !targetsEnemyShip(command.card)) continue;
+    const slot = ownSlot(board, opposite(commander.side), command.target);
+    if (slot.isOccupied) slot.locks = [...slot.locks, command.card.id];
   }
   resolveDeployAbilities(board, deployed, turns.flatMap((turn) => moveDestinations(board, turn)), random, events);
   for (const { commander, mark } of turns) {
@@ -113,8 +141,9 @@ export function resolveTurns(board: Board, turns: readonly Turn[], random: (() =
     .filter((turn) => turn.command !== null)
     .map((turn) => revealCommand(board, stayed.has(turn.commander.side) ? { ...turn, maneuver: null } : turn, swapped.has(turn.commander.side), events));
   resolveEffects(board, commands, events);
-  // Bewegt sich die Pendulum, fällt ihr Schuss aus: in dieser Runde und, wenn sie gerade markiert hat, in der nächsten.
-  const moved = SIDES.filter((side) => board.flagship(side)?.card!.id === "pendulum" && board.flagship(side)!.moved);
+  // Bewegt sich die Pendulum (auch per Kurzsprung), fällt ihr Schuss aus: in dieser Runde und, wenn sie gerade markiert hat, in der nächsten.
+  const pendulums = [...SIDES.flatMap((side) => board.ships(side)), ...board.jumping].filter((slot) => slot.card!.id === "pendulum");
+  const moved = SIDES.filter((side) => pendulums.some((slot) => slot.lane.side === side && slot.moved));
   resolveCombat(board, events, railguns.filter((side) => !moved.includes(side)));
   resolveCleanup(board, events);
   resolveBroodChamber(board, events);
@@ -131,22 +160,35 @@ function ownSlot(board: Board, side: Side, { lane, slotIndex }: SlotTarget): Slo
 
 /** Die Ziel-Slots der Bewegungen im Zug: Grundmanöver und Bewegungsbefehl (der nie das manövrierte Schiff verlegt). */
 function moveDestinations(board: Board, { commander, maneuver, command }: Turn): Slot[] {
-  const moved = command?.target && command.destination !== null ? { lane: otherLane(command.target.lane), slotIndex: command.destination } : null;
+  const moved = command?.target && command.destination !== null ? { lane: destinationLane(command.card, command.target.lane), slotIndex: command.destination } : null;
   return [maneuver?.destination, moved].filter((target) => target != null).map((target) => ownSlot(board, commander.side, target));
 }
 
-/** Deckt den Befehl auf: Ein eigenes Ziel folgt dem Manöver, ein Slot der Gegnerseite (Torpedo) bleibt stehen. */
+/**
+ * Deckt den Befehl auf: Ein eigenes Ziel folgt dem Manöver, ein Slot der Gegnerseite (Torpedo) bleibt stehen, der
+ * Durchschlag meldet den Strike-Slot seiner Slot-Nummer, ein erfasstes Schiff (Wärmesucher, Traktorstrahl) seinen
+ * Slot jetzt, null, wenn es nicht mehr auf dem Brett steht.
+ */
 function revealCommand(board: Board, { commander, command, maneuver }: Turn, swapped: boolean, events: RoundEvent[]): PlayedCommand {
-  const { card, destination } = command!;
-  const side = targetsEnemySlot(card) ? opposite(commander.side) : commander.side;
-  const target = command!.target && (side === commander.side ? afterManeuver(maneuver, command!.target, swapped) : command!.target);
-  events.push({ kind: "command", side: commander.side, cardId: card.id, target: target && { side, ...target } });
+  const { card, target, destination } = command!;
+  const enemy = opposite(commander.side);
+  let slot: Slot | null = null;
+  if (target && targetsEnemyShip(card)) slot = locked(board, enemy, card);
+  else if (target && targetsEnemyColumn(card)) slot = board.lane(enemy, "strike").slots[target.slotIndex]!;
+  else if (target && targetsEnemySlot(card)) slot = ownSlot(board, enemy, target);
+  else if (target) slot = ownSlot(board, commander.side, afterManeuver(maneuver, target, swapped));
+  events.push({ kind: "command", side: commander.side, cardId: card.id, target: slot && slotRef(slot) });
   return {
     commander,
     card,
-    target: target && board.lane(side, target.lane).slots[target.slotIndex]!,
-    destination: target && destination !== null ? board.lane(side, otherLane(target.lane)).slots[destination]! : null,
+    target: slot,
+    destination: slot && destination !== null ? board.lane(slot.lane.side, destinationLane(card, slot.lane.type)).slots[destination]! : null,
   };
+}
+
+/** Das Schiff der Seite `side`, das der Befehl `card` der Gegenseite erfasst hat; null, wenn es nicht (mehr) auf dem Brett steht. */
+function locked(board: Board, side: Side, card: CommandCard): Slot | null {
+  return board.ships(side).find((slot) => slot.locks.includes(card.id)) ?? null;
 }
 
 /**
@@ -174,6 +216,7 @@ export function resolvePower(board: Board, side: Side, { id, target }: NonNullab
     return;
   }
   slot.place(shipById("decoy"));
+  slot.arrived = true;
   events.push({ kind: "decoy", ship: shipRef(slot) });
 }
 
@@ -194,9 +237,10 @@ export function resolveDeployAbilities(
   events: RoundEvent[],
 ): void {
   for (const carrier of deployed.filter((slot) => slot.card!.id === "titan_carrier")) {
-    const slot = nearest(carrier.lane.slots.filter((slot) => !slot.isOccupied && !reserved.includes(slot)), carrier.index);
+    const slot = nearest(carrier.lane.slots.filter((slot) => slot.isFree && !reserved.includes(slot)), carrier.index);
     if (slot === null) continue;
     slot.place(shipById("drone"));
+    slot.arrived = true;
     events.push({ kind: "spawn", source: shipRef(carrier), ship: shipRef(slot) });
   }
   if (random === null) return;
@@ -253,24 +297,83 @@ function resolveGuardianShields(board: Board, events: RoundEvent[]): void {
 
 // --- Effects ---
 
+/**
+ * Die Befehle nach `COMMAND_ORDER`. Gegenmaßnahmen (Spezial) lassen einen Schwächungs- oder Angriffsbefehl der
+ * Gegenseite verpuffen, sonst ziehen sie einen Befehl. Alle Rammstöße der Runde wirken gleichzeitig (`resolveRams`).
+ */
 export function resolveEffects(board: Board, commands: readonly PlayedCommand[], events: RoundEvent[]): void {
   const ordered = [...commands].sort(
     (a, b) => COMMAND_ORDER.indexOf(a.card.commandType) - COMMAND_ORDER.indexOf(b.card.commandType),
   );
+  const countered = new Set<PlayedCommand>();
   for (const command of ordered) {
-    if (!applyCommand(board, command, events)) {
-      events.push({ kind: "noEffect", side: command.commander.side, cardId: command.card.id });
+    const { commander, card } = command;
+    if (countered.has(command)) continue;
+    if (card.id === "countermeasures") {
+      const hostile = commands.find((other) => other.commander.side !== commander.side && (other.card.commandType === "debuff" || other.card.commandType === "attack"));
+      if (hostile) {
+        countered.add(hostile);
+        events.push({ kind: "countered", side: commander.side, cardId: card.id, countered: hostile.card.id });
+      } else events.push({ kind: "draw", side: commander.side, cardId: card.id, ...commander.drawExtra(0, 1) });
+    } else if (card.id === "collision_course") {
+      // Alle Rammstöße beim ersten auf einmal.
+      if (ordered.find((other) => other.card.id === "collision_course") === command) {
+        resolveRams(board, ordered.filter((other) => other.card.id === "collision_course"), events);
+      }
+    } else if (!applyCommand(board, command, events)) {
+      events.push({ kind: "noEffect", side: commander.side, cardId: card.id });
     }
   }
   removeDestroyed(board, events);
 }
 
+/**
+ * Rammkurs: Das Ziel jedes Rammers ist das ungedeckte gegnerische Schiff mit derselben Slot-Nummer, sonst das
+ * nächstgelegene (Deckung ohne `seeThrough`: Ein Trugbild deckt und kann gerammt werden). Das Ziel nimmt die HP des
+ * Rammers, der Rammer die des Ziels, beides vor dem Schild. Ziele und Beträge stehen mit dem Stand vor dem ersten
+ * Rammstoß fest; rammen sich zwei Schiffe gegenseitig, ist das eine Kollision, gemeldet beim ersten Befehl. Der
+ * Rammer feuert in dieser Runde nicht.
+ */
+function resolveRams(board: Board, commands: readonly PlayedCommand[], events: RoundEvent[]): void {
+  const rams = commands.map((command) => {
+    const rammer = command.target!;
+    const valid = rammer.isOccupied && !rammer.isDestroyed;
+    const targets = valid ? board.exposedShips(opposite(command.commander.side)).filter((slot) => !slot.isDestroyed) : [];
+    const target = nearest(targets, rammer.index);
+    return { command, rammer, target, dealt: rammer.hp, taken: target?.hp ?? 0 };
+  });
+  for (const { rammer, target } of rams) {
+    if (target) rammer.disabled = true;
+  }
+  for (const [index, { command, rammer, target, dealt, taken }] of rams.entries()) {
+    const { side } = command.commander;
+    if (target === null) {
+      events.push({ kind: "noEffect", side, cardId: command.card.id });
+      continue;
+    }
+    if (rams.slice(0, index).some((other) => other.rammer === target && other.target === rammer)) continue;
+    const ship = shipRef(rammer);
+    const struck = shipRef(target);
+    target.damage(dealt);
+    rammer.damage(taken);
+    events.push({
+      kind: "effect",
+      side,
+      cardId: command.card.id,
+      ship,
+      effect: { type: "ram", target: struck, dealt, taken, targetAfter: stats(target) },
+      after: stats(rammer),
+    });
+  }
+}
+
 /** Wendet den Befehl an; false, wenn er nichts bewirkt hat. */
 function applyCommand(board: Board, { commander, card, target, destination }: PlayedCommand, events: RoundEvent[]): boolean {
   // Das eigene Ziel kann schon vor den Befehlen gefallen sein, durch den Schuss einer Plasma Frigate.
-  if (target && !target.isOccupied && !targetsEnemySlot(card)) return false;
+  if (target && !target.isOccupied && !targetsEnemySide(card)) return false;
   const side = commander.side;
-  const enemyShips = board.ships(opposite(side));
+  const enemy = opposite(side);
+  const enemyShips = board.ships(enemy);
   /** `ship` ist die Stelle vor dem Effekt, `after` gibt die Werte danach an. */
   const affect = (ship: ShipRef, effect: CommandEffect, after: Slot) => {
     events.push({ kind: "effect", side, cardId: card.id, ship, effect, after: stats(after) });
@@ -283,6 +386,14 @@ function applyCommand(board: Board, { commander, card, target, destination }: Pl
     return ships.length > 0;
   };
   const affectOne = (ship: Slot | null, apply: (slot: Slot) => CommandEffect) => affectAll(ship ? [ship] : [], apply);
+  const damage = (amount: number) => (slot: Slot): CommandEffect => {
+    slot.damage(amount);
+    return { type: "damage", amount };
+  };
+  const shield = (amount: number) => (slot: Slot): CommandEffect => {
+    slot.addShield(amount);
+    return { type: "shield", amount };
+  };
   /**
    * Verlegt das Ziel in den gewählten Slot. Positionen ändern sich nur durch eigene Manöver und Befehle,
    * und die Zugprüfung hält ihre Ziel-Slots auseinander; er ist also noch frei.
@@ -363,9 +474,144 @@ function applyCommand(board: Board, { commander, card, target, destination }: Pl
       return true;
     }
     case "scavenge":
-      events.push({ kind: "draw", side, cardId: card.id, ...commander.drawExtra() });
+      events.push({ kind: "draw", side, cardId: card.id, ...commander.drawExtra(1, 1) });
+      return true;
+    case "evasive_action": {
+      const ship = moveTarget();
+      affectOne(ship, shield(2));
+      return true;
+    }
+    case "micro_jump": {
+      // Das Schiff verlässt samt Zustand das Brett; sein Slot bleibt bis zur Rückkehr im Cleanup gesperrt.
+      const ship = new Slot(target!.lane, target!.index);
+      ship.copy(target!);
+      ship.moved = true;
+      target!.clear();
+      board.jumping.push(ship);
+      affect(shipRef(ship), { type: "jump" }, ship);
+      return true;
+    }
+    case "rapid_deployment":
+    case "carte_blanche":
+      events.push({ kind: "rule", side, cardId: card.id });
+      return true;
+    case "draw_fire":
+      return affectOne(target, (slot) => {
+        slot.taunting = true;
+        return { type: "taunt" };
+      });
+    case "shield_grid":
+      return affectAll(board.ships(side), shield(1));
+    case "ablative_armor":
+      return affectOne(target, (slot) => {
+        slot.shield += 2;
+        return { type: "shield", amount: 2, permanent: true };
+      });
+    case "covering_fire": {
+      const partner = board.lane(side, otherLane(target!.lane.type)).slots[target!.index]!;
+      for (const slot of partner.isOccupied ? [target!, partner] : [target!]) {
+        const ship = shipRef(slot);
+        slot.attackBonus += 1;
+        affect(ship, { type: "attack", delta: 1 }, slot);
+        affect(ship, shield(1)(slot), slot);
+      }
+      return true;
+    }
+    case "drone_squadron": {
+      // `ship` ist die gerade gestartete Drohne.
+      const slots = launchSlots(board, side).slice(0, 2);
+      for (const slot of slots) {
+        slot.place(shipById("drone"));
+        slot.arrived = true;
+        affect(shipRef(slot), { type: "spawn" }, slot);
+      }
+      return slots.length > 0;
+    }
+    case "radio_silence":
+      return jamPowers(board, side, (ship, power, slot) => affect(ship, { type: "jam", power }, slot));
+    case "minefield":
+      return affectAll(enemyShips.filter((slot) => slot.arrived), damage(3));
+    case "tractor_beam": {
+      const ship = locked(board, enemy, card);
+      const to = ship && board.lane(enemy, otherLane(ship.lane.type)).freeSlotNear(ship.index, isToken(ship.card!));
+      if (!ship || !to) return false;
+      const from = shipRef(ship);
+      to.takeFrom(ship);
+      affect(from, { type: "move", to: slotTarget(to) }, to);
+      return true;
+    }
+    case "heat_seeker":
+      // Ignoriert Deckung; ein Schiff, das sich in dieser Runde bewegt hat, trifft er härter.
+      return affectOne(locked(board, enemy, card), (slot) => damage(slot.moved ? 5 : 3)(slot));
+    case "coup_de_grace":
+      return affectOne(highest(enemyShips.filter((slot) => !isToken(slot.card!) && !slot.isDestroyed), (slot) => -slot.hp), damage(4));
+    case "piercing_shot": {
+      // Das vorderste Schiff der Slot-Nummer nimmt 3; stand vorne ein Strike-Schiff, nimmt das Command-Schiff dahinter 2.
+      const column = [target!, board.lane(enemy, "command").slots[target!.index]!].filter((slot) => slot.isOccupied && !slot.isDestroyed);
+      if (column.length === 0) {
+        events.push({ kind: "miss", side, cardId: card.id, target: slotRef(target!) });
+        return true;
+      }
+      affectOne(column[0]!, damage(3));
+      if (column.length === 2) affectOne(column[1]!, damage(2));
+      return true;
+    }
+    case "bombardment":
+      return affectAll(board.lane(enemy, "command").occupiedSlots.filter((slot) => !slot.isDestroyed), damage(2));
+    case "crossfire": {
+      // Ohne Partner: kein (nicht zerstörtes) Schiff im Slot gleicher Nummer der anderen Lane; Tokens zählen mit.
+      const standing = enemyShips.filter((slot) => !slot.isDestroyed);
+      const paired = (slot: Slot) => standing.some((other) => other.index === slot.index && other !== slot);
+      return affectAll(standing.filter((slot) => !paired(slot)), damage(3));
+    }
+    case "countermeasures":
+    case "collision_course":
+      // Wirken in `resolveEffects`, weil sie die Befehle beider Seiten brauchen.
       return true;
   }
+}
+
+/**
+ * Drohnenstaffel: freie eigene Strike-Slots in Startreihenfolge: zuerst vor dem ungedeckten eigenen Flaggschiff, dann
+ * vor anderen ungedeckten eigenen Command-Schiffen (niedrigere Nummer zuerst), dann nach Nähe zur Lane-Mitte
+ * (Gleichstand: niedrigerer Index).
+ */
+function launchSlots(board: Board, side: Side): Slot[] {
+  const command = board.lane(side, "command").slots;
+  const rank = (slot: Slot): number => {
+    const behind = command[slot.index]!;
+    if (behind.isOccupied && isFlagship(behind.card!)) return 0;
+    if (behind.isOccupied) return 1 + slot.index / SLOT_COUNT;
+    return 2 + Math.abs(slot.index - (SLOT_COUNT - 1) / 2) + slot.index / (SLOT_COUNT * SLOT_COUNT);
+  };
+  return board
+    .lane(side, "strike")
+    .slots.filter((slot) => slot.isFree)
+    .sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * Funkstille von `side`: Alle Marken der gegnerischen Admiralsfähigkeit fallen weg, auf gegnerischen Schiffen die mit
+ * eigenem Ziel, auf eigenen die mit gegnerischem Ziel; ein gegnerisches Trugbild verschwindet sofort (ohne Schrott,
+ * ohne `vanish`). Meldet jede entfernte Marke an `report` (Schiff vorher, Fähigkeit, Slot danach); false, wenn keine da war.
+ */
+function jamPowers(board: Board, side: Side, report: (ship: ShipRef, power: PowerId, slot: Slot) => void): boolean {
+  let jammed = false;
+  for (const slot of [...board.ships(opposite(side)), ...board.ships(side)]) {
+    const ship = shipRef(slot);
+    if (slot.lane.side !== side && slot.card!.id === "decoy") {
+      slot.clear();
+      report(ship, "decoy", slot);
+      jammed = true;
+      continue;
+    }
+    const hostile = slot.powers.filter((power) => targetsEnemy(power) === (slot.lane.side === side));
+    if (hostile.length === 0) continue;
+    slot.powers = slot.powers.filter((power) => !hostile.includes(power));
+    for (const power of hostile) report(ship, power, slot);
+    jammed = true;
+  }
+  return jammed;
 }
 
 // --- Combat ---
@@ -407,7 +653,8 @@ interface Counterfire {
  * steht) auf ihr markiertes Schiff. Dann die Schiffe mit Taktvorsprung, beider Seiten gleichzeitig; wer dabei
  * fällt und noch stand, feuert nicht mehr (`silenced`), ein Ziel der Railgun dagegen schon. Dann alle übrigen:
  * Drohnen auf das Ziel des Schwarmangriffs, auch durch Deckung, solange es steht; sonst auf das Ziel des
- * Fokusfeuers, solange es steht und für den Schützen ungedeckt ist; sonst nach der Klassenregel. Zuletzt das
+ * Fokusfeuers, solange es steht und für den Schützen ungedeckt ist; sonst auf das Schiff mit Ablenkung, solange es
+ * steht und für den Schützen ungedeckt ist; sonst nach der Klassenregel. Zuletzt das
  * Gegenfeuer: Wer ein Schiff damit getroffen hat, nimmt je Treffer Schaden, Flaggschiffe ausgenommen.
  */
 export function resolveCombat(board: Board, events: RoundEvent[], railguns: readonly Side[] = SIDES.filter((side) => railgunFires(board, side))): void {
@@ -450,12 +697,14 @@ function volley(board: Board, side: Side, shooters: readonly Slot[], counterfire
   const marked = (power: PowerId) => board.ships(enemy).find((slot) => slot.powers.includes(power)) ?? null;
   const swarm = marked("swarm_strike");
   const focus = marked("focus_fire");
+  const taunt = board.ships(enemy).find((slot) => slot.taunting) ?? null;
   const shots: RoundEvent[] = [];
   for (const attacker of shooters) {
     const view = (isFlagship(attacker.card!) ? flagshipTargets : targets).filter((slot) => !slot.isDestroyed);
     const swarmed = attacker.card!.id === "drone" && swarm !== null && !swarm.isDestroyed ? swarm : null;
     const focused = swarmed === null && focus !== null && view.includes(focus) ? focus : null;
-    const target = swarmed ?? focused ?? chooseTarget(attacker, view);
+    const taunted = taunt !== null && view.includes(taunt) ? taunt : null;
+    const target = swarmed ?? focused ?? taunted ?? chooseTarget(attacker, view);
     if (target === null) continue;
     const amount = attacker.attack + (swarmed ? ABILITY_VALUES.swarmStrike : 0) + (focused ? ABILITY_VALUES.focusFire : 0);
     target.damage(amount);
@@ -488,8 +737,17 @@ function interleave<T>(lists: readonly (readonly T[])[]): T[] {
 
 // --- Cleanup ---
 
-/** Eigenschaden, Zerstörte entfernen, Reparaturen, das Trugbild verschwindet, Rundenmodifikatoren zurücksetzen. */
+/**
+ * Rückkehr aus dem Kurzsprung, Eigenschaden, Zerstörte entfernen, Reparaturen, das Trugbild verschwindet,
+ * Rundenmodifikatoren zurücksetzen.
+ */
 export function resolveCleanup(board: Board, events: RoundEvent[]): void {
+  for (const ship of board.jumping) {
+    const slot = ship.lane.slots[ship.index]!;
+    slot.copy(ship);
+    events.push({ kind: "return", ship: shipRef(slot), after: stats(slot) });
+  }
+  board.jumping = [];
   for (const side of SIDES) {
     for (const slot of board.ships(side)) {
       if (slot.selfDamageAfterCombat === 0) continue;

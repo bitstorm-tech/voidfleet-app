@@ -1,8 +1,8 @@
 // Generalprobe hinter dem Ladebildschirm: Babylon übersetzt einen Shader erst, wenn etwas zum ersten
 // Mal gezeichnet wird, und das Bild stockt dabei. Deshalb wird beim Laden alles einmal gezeigt, was im
 // Spiel vorkommt — Schiffe samt Flaggschiffen (Ring, Krone) und Trugbild mit Treffer-Blitz und Zielvorschau,
-// Geister, glühende Wracks, alle Marken am Boden, die Bögen der Zielvorschau und alle Effekte samt Railgun-Strahl
-// und Schildblase — und danach wieder entsorgt. Die Shader bleiben übersetzt, weil `Effect.PersistentMode` sie nie freigibt (`matchScene.ts`).
+// Geister, glühende Wracks, alle Marken am Boden (auch der Leuchtring der Ablenkung), die Bögen der Zielvorschau und
+// alle Effekte samt Railgun-Strahl, Schildblase, Rakete des Wärmesuchers mit Leuchtspur und Traktorstrahl — und danach wieder entsorgt. Die Shader bleiben übersetzt, weil `Effect.PersistentMode` sie nie freigibt (`matchScene.ts`).
 // Die Effekte bleiben dabei stumm, auch wenn ein Klick auf den Ladebildschirm den Ton schon freigegeben hat.
 
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -13,9 +13,10 @@ import { HIT_NAMES } from "./effects.ts";
 import type { MarkerKind } from "./markers.ts";
 import type { MatchScene } from "./matchScene.ts";
 import { ShipView } from "./ship.ts";
+import { wait } from "./tween.ts";
 
 /** Die Marken, die zu einem Schiff dazukommen; den Ring tragen die Flaggschiffe von selbst. */
-const MARKERS: readonly Exclude<MarkerKind, "halo">[] = ["lock", "counterfire", "focus_fire", "swarm_strike", "head_start"];
+const MARKERS: readonly Exclude<MarkerKind, "halo">[] = ["lock", "counterfire", "focus_fire", "swarm_strike", "head_start", "taunt"];
 
 /** Mitten auf dem Brett, damit alles im Bild liegt: Manches übersetzt Babylon erst beim Zeichnen. */
 const STAGE = new Vector3(0, 0.5, 2.5);
@@ -52,6 +53,12 @@ export async function rehearse(view: MatchScene): Promise<void> {
     effects.detonate(STAGE, color, 1, "energy"),
     effects.beam(STAGE.add(new Vector3(-3, 0, 0)), STAGE, color),
     effects.bubble(STAGE, color, 2),
+    effects.missile(STAGE.add(new Vector3(-3, 0, 0)), STAGE, color),
+    (async () => {
+      const release = effects.tether(STAGE.add(new Vector3(-3, 3, 0)), () => STAGE, color);
+      await wait(scene, 300);
+      await release();
+    })(),
   ];
   // Auch alles, was noch ausgeblendet ist (leuchtende Slots, Bogenpfeil), wird dabei übersetzt.
   await scene.whenReadyAsync();

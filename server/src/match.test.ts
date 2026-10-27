@@ -538,7 +538,7 @@ test("Der Gegner sieht Admiral, Handgrößen, Decks und die aufgedeckten Befehle
     shipHandSize: 5,
     commandHandSize: 2,
     shipDeckSize: 11,
-    commandDeckSize: 11,
+    commandDeckSize: 30,
     playedCommands: ["torpedo"],
   });
 });
@@ -598,4 +598,107 @@ test("Fällt ein Schiff schon beim Deploy durch die Plasma Frigate, entfallen se
   });
   const events = playRound(match, [shieldAndManeuver, plan({ ships: [{ handIndex: 0, target: strike(2) }] })]);
   expect(events.map((event) => event.kind)).toEqual(["pass", "deploy", "ability", "destroyed", "command", "noEffect"]);
+});
+
+test("Mit Schnellverlegung darf ein Schiff mehr gelegt werden, in Runde 1 also drei", () => {
+  const match = midGame();
+  const player = match.players[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("rapid_deployment"), commandById("scavenge"));
+  const deploys = (count: number, handIndex: number): TurnPlan =>
+    plan({ ships: Array.from({ length: count }, (_, i) => ({ handIndex: i, target: strike(i) })), command: { handIndex, target: null, destination: null } });
+  expect(match.submit(0, deploys(2, 1))).toBe("too_many_ships");
+  expect(match.submit(0, deploys(3, 0))).toBe("too_many_ships");
+  expect(match.submit(0, deploys(2, 0))).toBeNull();
+
+  const opening = newMatch();
+  opening.players[0]!.commandHand.splice(0, opening.players[0]!.commandHand.length, commandById("rapid_deployment"));
+  const events = playRound(opening, [{ ...deploys(3, 0), flagship: command(2) }, plan({ flagship: command(2) })]);
+  expect(events.filter((event) => event.kind === "deploy" && event.side === "player")).toHaveLength(4);
+  expect(events).toContainEqual({ kind: "rule", side: "player", cardId: "rapid_deployment" });
+});
+
+test("Mit Freier Hand gibt es Grundmanöver und Admiralsfähigkeit; das Trugbild erscheint nicht im Ziel-Slot des Manövers", () => {
+  const match = midGame(["moreau", "osei"]);
+  const player = match.players[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("carte_blanche"), commandById("scavenge"));
+  match.board.place(match.board.lane("player", "command"), 1, shipById("horizon_cruiser"));
+  const both = (handIndex: number, decoy: SlotTarget): TurnPlan =>
+    plan({ command: { handIndex, target: null, destination: null }, maneuver: { ship: command(1), destination: strike(1) }, power: { target: decoy } });
+  expect(match.submit(0, both(1, strike(3)))).toBe("power_and_maneuver");
+  expect(match.submit(0, both(0, strike(1)))).toBe("power_target_invalid");
+  expect(match.submit(0, both(0, strike(3)))).toBeNull();
+  expect(match.submit(1, pass)).toBeNull();
+  const kinds = match.resolveRound().map((event) => event.kind);
+  expect(kinds).toContain("maneuver");
+  expect(kinds).toContain("decoy");
+  expect(kinds).toContain("rule");
+});
+
+test("Wärmesucher und Traktorstrahl zielen auf ein gegnerisches Schiff, der Traktorstrahl nie auf ein Flaggschiff", () => {
+  const match = midGame();
+  const player = match.players[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("heat_seeker"), commandById("tractor_beam"));
+  match.board.place(match.board.lane("enemy", "strike"), 1, shipById("horizon_cruiser"));
+  match.board.place(match.board.lane("enemy", "command"), 2, shipById("bastion"));
+  const aim = (handIndex: number, target: SlotTarget | null, destination: number | null = null): TurnPlan => plan({ command: { handIndex, target, destination } });
+  expect(match.submit(0, aim(0, null))).toBe("target_required");
+  expect(match.submit(0, aim(0, strike(2)))).toBe("target_not_enemy_ship");
+  // Ein eigenes Schiff, das im gleichen Slot der eigenen Seite landet, macht den leeren gegnerischen Slot nicht zum Ziel.
+  expect(match.submit(0, plan({ ships: [{ handIndex: 0, target: strike(2) }], command: { handIndex: 0, target: strike(2), destination: null } }))).toBe(
+    "target_not_enemy_ship",
+  );
+  expect(match.submit(0, aim(0, strike(6)))).toBe("target_not_enemy_slot");
+  expect(match.submit(0, aim(0, strike(1), 2))).toBe("destination_not_allowed");
+  expect(match.submit(0, aim(1, command(2)))).toBe("target_flagship");
+  expect(match.submit(0, aim(0, command(2)))).toBeNull();
+});
+
+test("Rammkurs nur mit einem eigenen Strike-Schiff, nie mit dem Flaggschiff, auch nicht dem gerade gelegten", () => {
+  const opening = newMatch(["vance", "osei"]);
+  opening.players[0]!.commandHand.splice(0, opening.players[0]!.commandHand.length, commandById("collision_course"));
+  const ram = (target: SlotTarget, parts: Partial<TurnPlan> = {}): TurnPlan => plan({ command: { handIndex: 0, target, destination: null }, ...parts });
+  expect(opening.submit(0, ram(strike(2), { flagship: strike(2) }))).toBe("target_flagship");
+  expect(opening.submit(0, ram(command(2), { flagship: command(2) }))).toBe("target_wrong_lane");
+  expect(opening.submit(0, ram(strike(0), { flagship: command(2), ships: [{ handIndex: 0, target: strike(0) }] }))).toBeNull();
+});
+
+test("Der Durchschlag zielt auf eine Slot-Nummer der Gegnerseite, gemeldet als ihr Strike-Slot", () => {
+  const match = midGame();
+  match.players[1]!.commandHand.splice(0, match.players[1]!.commandHand.length, commandById("piercing_shot"));
+  match.board.place(match.board.lane("player", "command"), 4, { ...interceptor, hp: 10 });
+  const shot = (target: SlotTarget): TurnPlan => plan({ command: { handIndex: 0, target, destination: null } });
+  expect(match.submit(1, shot(command(6)))).toBe("target_not_enemy_slot");
+  expect(match.submit(0, pass)).toBeNull();
+  expect(match.submit(1, shot(command(4)))).toBeNull();
+  const events = match.resolveRound();
+  expect(events).toContainEqual({ kind: "command", side: "enemy", cardId: "piercing_shot", target: { side: "player", ...strike(4) } });
+  expect(match.board.lane("player", "command").slots[4]!.hp).toBe(7);
+});
+
+test("Das Ausweichmanöver verlegt in einen freien Slot derselben Lane, nicht das manövrierte Schiff und nicht ins Manöverziel", () => {
+  const match = midGame();
+  const player = match.players[0]!;
+  player.commandHand.splice(0, player.commandHand.length, commandById("evasive_action"));
+  for (const index of [0, 1, 2, 3]) match.board.place(match.board.lane("player", "strike"), index, { ...interceptor });
+  const evade = (destination: number, parts: Partial<TurnPlan> = {}): TurnPlan => plan({ command: { handIndex: 0, target: strike(0), destination }, ...parts });
+  expect(match.submit(0, evade(1))).toBe("destination_unavailable");
+  expect(match.submit(0, evade(4, { maneuver: { ship: strike(0), destination: command(0) } }))).toBe("maneuver_conflict");
+  expect(match.submit(0, evade(4, { maneuver: { ship: strike(1), destination: strike(4) } }))).toBe("destination_unavailable");
+  // Die Lane ist voll, das Ausweichen innerhalb der Lane geht trotzdem.
+  expect(match.submit(0, evade(5, { maneuver: { ship: strike(1), destination: strike(4) } }))).toBeNull();
+});
+
+test("Ziehende Befehle ziehen über den Spieler: Plündern 1 + 1, Gegenmaßnahmen ohne gegnerischen Angriff 1 Befehl", () => {
+  const match = midGame();
+  const [first, second] = match.players as [(typeof match.players)[0], (typeof match.players)[0]];
+  first.commandHand.splice(0, first.commandHand.length, commandById("countermeasures"));
+  second.commandHand.splice(0, second.commandHand.length, commandById("emergency_shields"));
+  match.board.place(match.board.lane("enemy", "strike"), 0, { ...interceptor });
+  const events = playRound(match, [
+    plan({ command: { handIndex: 0, target: null, destination: null } }),
+    plan({ command: { handIndex: 0, target: strike(0), destination: null } }),
+  ]);
+  expect(events).toContainEqual({ kind: "draw", side: "player", cardId: "countermeasures", ships: 0, commands: 1 });
+  // Gezogen beim Gegenmaßnahmen-Befehl, dann das Nachziehen der Runde.
+  expect(first.commandHand).toHaveLength(2);
 });

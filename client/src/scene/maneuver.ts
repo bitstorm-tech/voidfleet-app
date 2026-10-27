@@ -6,7 +6,8 @@
 // Flugrichtung.
 // Gerechnet wird im Raum des Ziel-Ankers: x seitlich, z nach vorn, Ziel im Ursprung.
 // Wie wendig ein Schiff ist, legt seine Klasse fest: Jäger fliegen schnell, eng und
-// mit starker Schräglage, Schlachtschiffe beschleunigen träge und ziehen weite Bögen.
+// mit starker Schräglage, Schlachtschiffe beschleunigen träge und ziehen weite Bögen. Ein vom Traktorstrahl
+// gezogenes Schiff (`towed`) gleitet langsamer, flacher und fast ohne Schräglage.
 
 import { Tools } from "@babylonjs/core/Misc/tools";
 import type { ShipClass } from "../../../shared/cards.ts";
@@ -28,6 +29,9 @@ const HANDLING: Record<ShipClass, Handling> = {
   cruiser: { speed: 5.5, turnRadius: 1.5, acceleration: 0.32, bank: Tools.ToRadians(22) },
   battleship: { speed: 4, turnRadius: 1.7, acceleration: 0.42, bank: Tools.ToRadians(10) },
 };
+
+/** Gezogen: Anteile von Tempo, Schräglage und Flughöhe der Klasse, dazu ein gleichmäßigeres Anfahren und Abbremsen. */
+const TOWED = { speed: 0.5, bank: 0.2, height: 0.5, acceleration: 0.45 };
 
 /** Die Schleife führt über andere Schiffe hinweg, die S-Kurve steigt je nach Seitenversatz leicht. */
 const LOOP_HEIGHT = 1.6;
@@ -69,14 +73,17 @@ export class Maneuver {
   private readonly yaws: number[] = [];
   private readonly curvatures: number[] = [];
 
-  constructor(from: { x: number; z: number }, shipClass: ShipClass) {
-    this.handling = HANDLING[shipClass];
+  constructor(from: { x: number; z: number }, shipClass: ShipClass, towed = false) {
+    const handling = HANDLING[shipClass];
+    this.handling = towed
+      ? { ...handling, speed: handling.speed * TOWED.speed, bank: handling.bank * TOWED.bank, acceleration: TOWED.acceleration }
+      : handling;
     const start: Point = [from.x, from.z];
     const isSameLane = Math.abs(from.z) < SAME_LANE_TOLERANCE;
     const isLoop = !isSameLane && from.z > 0;
     this.strafe = isSameLane ? -Math.sign(from.x) : 0;
     const segments = isSameLane ? sidestep(start) : isLoop ? loop(start, this.handling.turnRadius) : swerve(start);
-    this.height = isLoop ? LOOP_HEIGHT : Math.min(SWERVE_HEIGHT_PER_UNIT * Math.abs(from.x), SWERVE_MAX_HEIGHT);
+    this.height = (isLoop ? LOOP_HEIGHT : Math.min(SWERVE_HEIGHT_PER_UNIT * Math.abs(from.x), SWERVE_MAX_HEIGHT)) * (towed ? TOWED.height : 1);
     this.sample(segments);
     this.duration = (this.length / this.handling.speed / (1 - this.handling.acceleration)) * 1000;
   }

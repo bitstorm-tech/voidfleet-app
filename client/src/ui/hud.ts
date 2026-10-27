@@ -75,7 +75,9 @@ export class Hud {
       [t.hud.checklist.flagship, progress.flagship],
       [t.hud.checklist.ships(deploys.planned, deploys.max), progress.ships],
       [t.hud.checklist.command, progress.command],
-      [t.hud.checklist.maneuver, progress.maneuver],
+      // Mit Freier Hand stehen Grundmanöver und Fähigkeit getrennt da.
+      [progress.power === null ? t.hud.checklist.maneuver : t.hud.checklist.maneuverOnly, progress.maneuver],
+      [t.hud.checklist.power, progress.power],
       [t.hud.checklist.mark, progress.mark],
     ];
     this.checklist.replaceChildren(

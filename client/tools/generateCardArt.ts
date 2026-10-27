@@ -111,6 +111,44 @@ const SUBJECTS: Record<Card["id"], string> = {
     "A single heavy torpedo with a glowing warhead diving steeply from above toward a holographic targeting reticle locked onto an empty patch of space, a long bright exhaust trail behind it",
   barrage:
     "A wall of flak bursts and tracer fire filling a corridor of space, a warship caught mid-turn as it swerves through the curtain of explosions, its engine trail bending",
+  evasive_action:
+    "A warship sliding sideways with its lateral thrusters firing bright jets, a faint shimmer of shield around it, an enemy projectile streaking harmlessly through the empty space where the ship just was",
+  micro_jump:
+    "A warship vanishing in the blinding flash of a short-range jump, leaving behind a ghostly afterimage of its silhouette outlined in glowing light contours and a collapsing ring of light",
+  rapid_deployment:
+    "Several warships dropping out of hyperspace at the same moment in tight formation, each one arriving in a bright flash of entry light with streaks of warp trails behind them",
+  draw_fire:
+    "Many bright enemy laser beams coming in from all sides and converging on one heavily armored warship at the center of the frame, its thick front armor lit by impact sparks everywhere, bright flashing signal beacons on its hull, two small ships hiding safely behind it",
+  shield_grid:
+    "A fleet of four warships flying together, all linked by one continuous glowing hexagonal shield lattice stretched between and around them like a net",
+  ablative_armor:
+    "Extreme close-up of the curved armored flank of a warship hull in space, robotic welding arms attaching a thick new armor plate on top of existing layered heavy armor plates, bright welding sparks and glowing weld seams between the plates",
+  covering_fire:
+    "Two warships flying close together one behind the other as a wingman pair, both firing forward together, enclosed in one shared glowing shield bubble",
+  drone_squadron:
+    "A squadron of small wedge-shaped attack drones launching in tight formation out of a glowing hangar bay, bright engine trails streaming behind them",
+  collision_course:
+    "Two spaceships colliding in deep space: the pointed armored ram bow of a warship on the left driven deep into the crumpled flank of a second, larger warship on the right, the impact point bursting with buckling metal plates, fire and flying debris",
+  countermeasures:
+    "A warship ejecting a spray of bright flare decoys, its point-defense turrets shooting incoming missiles out of the sky, small explosions all around it",
+  carte_blanche:
+    "A gloved hand in a uniform sleeve hovering over a round glowing hologram projector, above it a three-dimensional hologram of a small fleet of starships, a big curved glowing arrow sweeping around them and a radiant star emblem flaring up at the same moment",
+  radio_silence:
+    "A warship drifting in darkness with its communication dishes and antennas dead and dark, shattered rings of signal waves breaking apart around it like broken glass, a faint haze of fading static, its hull lights going out",
+  minefield:
+    "A field of floating spiked space mines with blinking lights, one mine detonating in a bright explosion against a warship that has just arrived among them",
+  tractor_beam:
+    "A thick, bright, solid beam of light crossing the frame diagonally from the top left corner, its end wrapped around a warship and pulling it sideways out of a row of three warships, the captured ship tilted and dragged off course",
+  heat_seeker:
+    "Rear view of a fleeing warship with bright hot glowing engines, a small missile right behind it closing in on its engine exhaust, the missile's long smoke trail curving sharply in a tight arc behind it",
+  coup_de_grace:
+    "A single precise thin beam striking a heavily damaged, burning warship, its hull cracked and trailing smoke and debris",
+  piercing_shot:
+    "Two warships one behind the other on a single diagonal line from bottom left to top right, one straight beam traveling along that line, entering the nearer ship, bursting out of its bow and striking the second ship, glowing breach holes and explosions in both hulls",
+  bombardment:
+    "A rain of glowing shells and projectiles falling from above onto a rear row of warships lined up side by side, explosions blooming on their hulls",
+  crossfire:
+    "A single warship caught between two laser beams converging on it from the left and from the right, sparks where both beams hit",
 };
 
 /** Porträts der Admirale für die Auswahlkarten, im Stil der Kartenbilder; Uniform in der Farbe des Admirals. */
@@ -176,9 +214,10 @@ if (!apiKey) throw new Error("FAL_KEY fehlt in der Umgebung.");
 const args = process.argv.slice(2);
 const force = args.includes("--force");
 const requested = new Set(args.filter((arg) => !arg.startsWith("--")));
-// Fester Seed je Bild, damit ein erneuter Lauf dasselbe Bild liefert. Er folgt dem Index; neue Karten kommen
-// deshalb hinten an (Tokens, dann Flaggschiffe), die übrigen behalten ihr Bild. Porträts zählen ab 2000.
-const all: readonly Card[] = [...SHIPS, ...COMMANDS, ...TOKENS, ...FLAGSHIPS];
+// Fester Seed je Bild, damit ein erneuter Lauf dasselbe Bild liefert. Er folgt dem Index in dieser Liste, die in
+// der Reihenfolge wächst, in der die Karten dazukamen: erst die 13 ersten Befehle, dann Tokens und Flaggschiffe,
+// dann die übrigen Befehle. Neue Karten gehören ans Ende, sonst wandern fremde Seeds. Porträts zählen ab 2000.
+const all: readonly Card[] = [...SHIPS, ...COMMANDS.slice(0, 13), ...TOKENS, ...FLAGSHIPS, ...COMMANDS.slice(13)];
 const jobs: Job[] = [
   ...all.map((card, index) => ({ id: card.id, prompt: prompt(card), seed: 1000 + index, path: `${OUT_DIR}/${card.id}.jpg` })),
   ...ADMIRAL_IDS.map((id, index) => ({ id, prompt: `${PORTRAITS[id]}. ${PORTRAIT_STYLE}`, seed: 2000 + index, path: `${PORTRAIT_DIR}/${id}.jpg` })),

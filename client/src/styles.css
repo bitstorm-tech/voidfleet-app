@@ -319,7 +319,7 @@ body {
   color: rgb(199 219 250 / 0.6);
 }
 
-/* Je Befehl seine Farbe, der Name und die noch nicht gespielten Kopien; aufgebrauchte verblassen. */
+/* Je Befehlstyp eine Gruppe in seiner Farbe mit den Namen als umbrechende Reihe; eine Zahl nur bei mehr als einer offenen Kopie, aufgebrauchte verblassen. */
 .opponent-commands {
   margin: 0;
   padding: 0;
@@ -327,17 +327,35 @@ body {
 }
 
 .opponent-commands li {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 1px 0 1px 7px;
-  line-height: 1.35;
-  white-space: nowrap;
+  padding: 0 0 0 7px;
   border-left: 2px solid rgb(var(--card-rgb));
 }
 
 .opponent-commands li + li {
-  margin-top: 2px;
+  margin-top: 5px;
+}
+
+.opponent-commands h4 {
+  margin: 0;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgb(var(--card-rgb));
+}
+
+.opponent-commands div {
+  font-size: 10.5px;
+  line-height: 1.3;
+}
+
+.opponent-commands span {
+  white-space: nowrap;
+}
+
+.opponent-commands span:not(:last-child)::after {
+  content: " · ";
+  opacity: 0.4;
 }
 
 .opponent-commands b {
@@ -345,7 +363,7 @@ body {
   color: var(--text);
 }
 
-.opponent-commands li.spent {
+.opponent-commands span.spent {
   opacity: 0.35;
   text-decoration: line-through;
 }

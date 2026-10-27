@@ -20,7 +20,8 @@ function slotRef(slot: Slot): SlotRef {
 /**
  * Gültige Ziele der Admiralsfähigkeit `power` für `side` beim Planen. `arrivals`: eigene Schiffe, die in dieser
  * Runde landen (Deploys samt Flaggschiff); sie zählen als eigene Schiffe bzw. belegen ihren Slot. `blocked`:
- * eigene Slots, in die sich in dieser Runde etwas bewegt (Ziel eines Bewegungsbefehls); dort kann kein Trugbild erscheinen.
+ * eigene Slots, in die sich in dieser Runde etwas bewegt (Ziel eines Bewegungsbefehls, mit Freier Hand auch des
+ * Grundmanövers); dort kann kein Trugbild erscheinen.
  */
 export function powerTargets(board: Board, side: Side, power: PowerId, arrivals: readonly PlannedArrival[], blocked: readonly SlotTarget[]): SlotRef[] {
   const own = board.ships(side);

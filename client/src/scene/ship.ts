@@ -3,7 +3,8 @@
 // Zielvorschau: auf den Balken den drohenden Verlust, neben ihnen einen Totenkopf, wenn es fällt.
 // Flaggschiffe sind etwas größer, tragen einen Ring in der Farbe ihres Admirals am Boden und eine Krone
 // rechts neben dem Hüllenbalken; am Boden liegen auch die Marken von Fähigkeiten und Zielerfassung
-// (`markers.ts`). Das Trugbild flackert als Hologramm, baut sich auf und löst sich wieder auf.
+// (`markers.ts`). Das Trugbild flackert als Hologramm, baut sich auf und löst sich wieder auf. Beim Rammkurs fliegt
+// das Schiff auf sein Ziel zu (`charge`) und, wenn es den Aufprall übersteht, zurück (`withdraw`).
 // Die Modelle kommen als glTF aus `tools/ships/` (Blender); alle Dateien werden
 // beim Start geladen (`loadShipModels`) und pro Schiff instanziiert. Zu jedem Modell gehört ein Wrack
 // aus Bruchstücken, das bei der Zerstörung an seine Stelle tritt (`destruction.ts`).
@@ -111,6 +112,11 @@ const MATERIALIZE_DURATION = 750;
 const DEMATERIALIZE_DURATION = 650;
 /** Phasentausch: so lange schrumpft das Schiff zu einem Lichtpunkt und wächst am neuen Ort wieder (ms). */
 const PHASE_DURATION = 320;
+/** Rammkurs: Anflug mit Beschleunigung und leichtem Bogen, Rückflug in den Slot (ms, Welteinheiten). */
+const RAM_DURATION = 620;
+const RAM_ARC = 0.5;
+const RAM_PITCH = Tools.ToRadians(8);
+const RAM_RETURN_DURATION = 900;
 
 const containers = new Map<string, AssetContainer>();
 
@@ -318,9 +324,10 @@ export class ShipView {
   /**
    * Slot-Wechsel: Das Schiff hängt schon am neuen Anker und steht noch an seiner alten Stelle;
    * es fliegt von dort auf der Bahn aus `maneuver.ts` in den Slot, mit Kurs, Steigung und Schräglage.
+   * Vom Traktorstrahl gezogen (`towed`) gleitet es ruhiger und ohne eigenes Triebwerk.
    */
-  async maneuver(): Promise<void> {
-    const flight = new Maneuver(this.root.position, this.card.shipClass);
+  async maneuver(towed = false): Promise<void> {
+    const flight = new Maneuver(this.root.position, this.card.shipClass, towed);
     // Die Marken am Boden landen mit dem Schiff, statt mitzufliegen.
     this.floor.setEnabled(false);
     await this.fly(flight.duration, (progress) => {
@@ -328,7 +335,7 @@ export class ShipView {
       this.root.position.set(pose.x, pose.y, pose.z);
       this.root.rotation.y = pose.yaw;
       this.modelRoot.rotation.set(pose.pitch, 0, pose.roll);
-    });
+    }, !towed);
     this.root.position.setAll(0);
     this.root.rotation.setAll(0);
     this.modelRoot.rotation.setAll(0);
@@ -343,6 +350,37 @@ export class ShipView {
   /** Phasentausch, zweite Hälfte: Am neuen Anker wächst es wieder auf seine Größe. */
   async phaseIn(): Promise<void> {
     await tween(this.scene, PHASE_DURATION, (progress) => this.root.scaling.setAll(BOARD_SCALE * Math.max(easeOutCubic(progress), 0.01)));
+  }
+
+  /**
+   * Rammkurs, Anflug: Das Schiff dreht die Nase auf `point` (Welt, auf Höhe des Ankers) und beschleunigt bis dorthin,
+   * in einem flachen Bogen und mit gesenkter Nase. Es bleibt dort stehen, bis `withdraw` es zurückholt oder es fällt.
+   */
+  async charge(point: Vector3): Promise<void> {
+    const target = Vector3.TransformCoordinates(point, (this.root.parent as TransformNode).getWorldMatrix().clone().invert());
+    const yaw = Math.atan2(target.x, target.z);
+    this.floor.setEnabled(false);
+    await this.fly(RAM_DURATION, (progress) => {
+      const travelled = easeInCubic(progress);
+      this.root.position.set(target.x * travelled, RAM_ARC * Math.sin(Math.PI * travelled), target.z * travelled);
+      this.root.rotation.y = yaw * easeOutCubic(Math.min(progress * 2.5, 1));
+      this.modelRoot.rotation.x = RAM_PITCH * Math.sin(Math.PI * travelled);
+    });
+  }
+
+  /** Rammkurs, Rückkehr: Abgeprallt treibt das Schiff rückwärts in seinen Slot und richtet sich wieder aus. */
+  async withdraw(): Promise<void> {
+    const start = this.root.position.clone();
+    const yaw = this.root.rotation.y;
+    await this.fly(RAM_RETURN_DURATION, (progress) => {
+      const back = easeInOutSine(progress);
+      Vector3.LerpToRef(start, Vector3.ZeroReadOnly, back, this.root.position);
+      this.root.rotation.y = yaw * (1 - back);
+    });
+    this.root.position.setAll(0);
+    this.root.rotation.setAll(0);
+    this.modelRoot.rotation.setAll(0);
+    this.floor.setEnabled(true);
   }
 
   /** Das Trugbild baut sich auf: Es wächst von der Platte nach oben und flackert dabei ins Bild. */
@@ -365,13 +403,13 @@ export class ShipView {
   }
 
   /** Ein Flug im Takt der Bewegungen: Das Triebwerk folgt dem Schiff im Stereobild und verklingt nach der Landung. */
-  private async fly(duration: number, update: (progress: number) => void): Promise<void> {
-    const engine = loopSound(ENGINE_SOUNDS[this.card.shipClass], { x: this.root.getAbsolutePosition().x });
+  private async fly(duration: number, update: (progress: number) => void, withEngine = true): Promise<void> {
+    const engine = withEngine ? loopSound(ENGINE_SOUNDS[this.card.shipClass], { x: this.root.getAbsolutePosition().x }) : null;
     await tween(this.scene, duration, (progress) => {
       update(progress);
-      engine.follow(this.root.getAbsolutePosition().x);
+      engine?.follow(this.root.getAbsolutePosition().x);
     }, "movement");
-    engine.stop(ENGINE_FADE);
+    engine?.stop(ENGINE_FADE);
   }
 
   /** Treffer: die Hülle blitzt hell auf; der Einschlag selbst kommt aus `BoardEffects.hit`. */

@@ -22,6 +22,11 @@ const ANNOUNCEMENTS: Partial<Record<CommandId, { player?: RadioCue; enemy?: Radi
   intercept: { player: "intercept" },
   recall: { player: "recall" },
   flanking_maneuver: { player: "flanking" },
+  shield_grid: { player: "shields_up" },
+  ablative_armor: { player: "shields_up" },
+  drone_squadron: { player: "drone_launch" },
+  bombardment: { player: "orbital_strike", enemy: "orbital_incoming" },
+  crossfire: { player: "volley" },
 };
 
 /** Eigene Fähigkeiten: Die Plasma Frigate feuert, die Repair Drone repariert, der Scrap Raider plündert, die Bastion hebt den Wächterschild. */

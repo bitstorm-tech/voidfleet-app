@@ -1,6 +1,7 @@
-// Leuchtendes Fadenkreuz auf einem Slot der Gegnerseite: zeigt, wohin der geplante
-// Torpedo zielt, und beim Wählen den Slot unter dem Zeiger. Es markiert den Slot,
-// nicht das Schiff, weil der Torpedo trifft, wer nach allen Bewegungen dort steht.
+// Leuchtende Fadenkreuze auf Slots der Gegnerseite: zeigen, wohin der geplante Befehl
+// zielt (Torpedo, Wärmesucher, Traktorstrahl; Durchschlag auf beide Slots seiner
+// Slot-Nummer), und beim Wählen das Ziel unter dem Zeiger. Sie markieren den Slot beim
+// Planen; was dort nach allen Bewegungen steht bzw. wohin das Schiff zieht, regelt die Auflösung.
 
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
@@ -20,10 +21,14 @@ const HEIGHT = 0.08;
 const SPIN = 0.0006;
 
 export class TargetReticle {
-  private readonly mesh: Mesh;
-  private shown: SlotPad | null = null;
+  /** Je gezeigtem Slot ein Fadenkreuz; weitere entstehen bei Bedarf als Klon des ersten. */
+  private readonly meshes: Mesh[];
+  private shown: readonly SlotPad[] = [];
 
-  constructor(scene: Scene, glow: GlowLayer) {
+  constructor(
+    scene: Scene,
+    private readonly glow: GlowLayer,
+  ) {
     const material = new StandardMaterial("target-reticle", scene);
     material.disableLighting = true;
     material.emissiveColor = color3("damage");
@@ -38,23 +43,33 @@ export class TargetReticle {
       tick.rotation.y = -angle;
       return tick;
     });
-    this.mesh = Mesh.MergeMeshes([ring, ...ticks], true, true)!;
-    this.mesh.name = "target-reticle";
-    this.mesh.material = material;
-    this.mesh.isPickable = false;
-    this.mesh.isVisible = false;
-    this.mesh.position.y = HEIGHT;
-    glow.addIncludedOnlyMesh(this.mesh);
+    const mesh = Mesh.MergeMeshes([ring, ...ticks], true, true)!;
+    mesh.name = "target-reticle";
+    mesh.material = material;
+    mesh.isPickable = false;
+    mesh.isVisible = false;
+    mesh.position.y = HEIGHT;
+    glow.addIncludedOnlyMesh(mesh);
+    this.meshes = [mesh];
     scene.onBeforeRenderObservable.add(() => {
-      if (this.shown) this.mesh.rotation.y += SPIN * scene.getEngine().getDeltaTime();
+      const spin = SPIN * scene.getEngine().getDeltaTime();
+      for (const reticle of this.meshes) if (reticle.isVisible) reticle.rotation.y += spin;
     });
   }
 
-  /** Zeigt das Fadenkreuz auf `pad`, mit null nirgends. */
-  show(pad: SlotPad | null): void {
-    if (pad === this.shown) return;
-    this.shown = pad;
-    this.mesh.isVisible = pad !== null;
-    if (pad) this.mesh.parent = pad.root;
+  /** Zeigt je ein Fadenkreuz auf den `pads`, mit einer leeren Liste keines. */
+  show(pads: readonly SlotPad[]): void {
+    if (pads.length === this.shown.length && pads.every((pad, index) => pad === this.shown[index])) return;
+    this.shown = pads;
+    while (this.meshes.length < pads.length) {
+      const reticle = this.meshes[0]!.clone(`target-reticle-${this.meshes.length}`);
+      this.glow.addIncludedOnlyMesh(reticle);
+      this.meshes.push(reticle);
+    }
+    this.meshes.forEach((reticle, index) => {
+      const pad = pads[index];
+      reticle.isVisible = pad !== undefined;
+      if (pad) reticle.parent = pad.root;
+    });
   }
 }

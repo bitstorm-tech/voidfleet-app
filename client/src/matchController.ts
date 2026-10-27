@@ -14,7 +14,10 @@
 // Statt des Manövers geht die Admiralsfähigkeit (`ui/powerCard.ts`): Ihre Karte startet die Zielwahl, das Ziel
 // trägt danach ihre Marke (`scene/markers.ts`), das Trugbild steht als Geist im Slot; wer das eine plant, verliert
 // das andere, und die Statuszeile sagt es. Admiral Kerr erfasst mit dem Knopf darüber zusätzlich ein Ziel der Railgun.
-// Der Torpedo zielt auf einen Slot der Gegnerseite, auch einen leeren; ein Fadenkreuz markiert ihn.
+// Mit Freier Hand gehen Manöver und Fähigkeit zusammen, mit Schnellverlegung ein Schiff mehr; fällt der Befehl weg,
+// fällt auch, was er erlaubt hat, und die Statuszeile sagt es.
+// Der Torpedo zielt auf einen Slot der Gegnerseite, auch einen leeren, der Durchschlag auf eine Slot-Nummer dort,
+// Wärmesucher und Traktorstrahl auf ein gegnerisches Schiff; Fadenkreuze markieren das Ziel.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner. Solange geplant wird, zeigt die
 // Zielvorschau (`game/preview.ts`), wie die Runde mit diesem Plan liefe, wenn der Gegner nichts tut.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
@@ -24,8 +27,18 @@
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
-import { canTargetLane, needsTarget, shipById, targetsEnemySlot, type CommandCard, type ShipCard } from "../../shared/cards.ts";
-import { isSameSlot, maxDeploys, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, overdriveBonus, slotTarget, type PlannedMove, type Slot } from "../../shared/board.ts";
+import {
+  canTargetShip,
+  needsTarget,
+  shipById,
+  targetsEnemyColumn,
+  targetsEnemyShip,
+  targetsEnemySide,
+  targetsEnemySlot,
+  type CommandCard,
+  type ShipCard,
+} from "../../shared/cards.ts";
+import { isSameSlot, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, overdriveBonus, slotTarget, type PlannedMove, type Slot } from "../../shared/board.ts";
 import type { MatchResult, OpponentView, ServerMessage, SlotRef } from "../../shared/protocol.ts";
 import { setMusicMood } from "./audio/music.ts";
 import { say } from "./audio/radio.ts";
@@ -249,7 +262,7 @@ export class MatchController {
     if (!this.canPlan) return playUiSound("denied");
     const card = this.match.commandHand[index]!;
     if (this.match.plan.command?.handIndex === index) {
-      this.match.plan.command = null;
+      this.setCommand(null);
       this.select(null);
       playUiSound("cancel");
     } else if (this.selection?.kind === "command" && this.selection.index === index) {
@@ -259,7 +272,7 @@ export class MatchController {
       this.select({ kind: "command", index, moveSource: null });
       playUiSound("select");
     } else {
-      this.match.plan.command = { handIndex: index, target: null, destination: null };
+      this.setCommand({ handIndex: index, target: null, destination: null });
       this.select(null);
       playUiSound("place");
     }
@@ -319,6 +332,14 @@ export class MatchController {
     this.match.unplanShip(pick);
     this.select(moving || selection?.kind === "ship" ? null : selection);
     playUiSound("cancel");
+  }
+
+  /** Plant einen Befehl (null: keinen); fällt mit dem alten Befehl ein Schiff oder die Fähigkeit weg, sagt es der Hinweis. */
+  private setCommand(command: Match["plan"]["command"]): void {
+    const before = this.match.plannedCommand;
+    const { ship, power } = this.match.setCommand(command);
+    const lost = [ship && cardText(ship).name, power && t.powers[this.match.power!].name].filter((name) => typeof name === "string");
+    if (lost.length > 0) this.notice = t.status.commandDropped(cardText(before!).name, lost.join(" + "));
   }
 
   private cancelManeuver(): void {
@@ -419,10 +440,11 @@ export class MatchController {
    * Einzige Gültigkeitsregel für Highlight und Klick: gewähltes Schiff -> freie eigene Slots, die den eingeplanten
    * Bewegungen nicht im Weg stehen; Manöver-Schiff -> seine Ziel-Slots in beiden Lanes (bei der Mirage auch eigene
    * Schiffe); gewählter Befehl -> eigene Schiffe in einer erlaubten Lane, auch das eingeplante, bei verlegenden
-   * Befehlen nur mit freiem Ziel-Slot, danach die freien Slots der anderen Lane; der Torpedo -> jeder Slot der
-   * Gegnerseite; Fähigkeit und Zielerfassung -> ihre Ziele aus `shared/powers.ts`. Ohne Auswahl leuchten nur das
-   * bereits gewählte eigene Befehlsziel, die Ziel-Slots und das manövrierende Schiff weiter, bis die Runde aufgelöst
-   * wird; den Zielslot des Torpedos zeigt das Fadenkreuz, die Ziele von Fähigkeit und Zielerfassung ihre Marke.
+   * Befehlen nur mit freiem Ziel-Slot, danach die freien Slots der Ziel-Lane; Torpedo und Durchschlag -> jeder Slot
+   * der Gegnerseite; Wärmesucher und Traktorstrahl -> gegnerische Schiffe (`canTargetShip`); Fähigkeit und
+   * Zielerfassung -> ihre Ziele aus `shared/powers.ts`. Ohne Auswahl leuchten nur das bereits gewählte eigene
+   * Befehlsziel, die Ziel-Slots und das manövrierende Schiff weiter, bis die Runde aufgelöst wird; Ziele auf der
+   * Gegnerseite zeigt das Fadenkreuz, die Ziele von Fähigkeit und Zielerfassung ihre Marke.
    */
   private isValidTarget(pad: SlotPad): boolean {
     if (this.isResolving) return false;
@@ -441,14 +463,15 @@ export class MatchController {
       case "command": {
         const command = this.selectedCommand!;
         if (targetsEnemySlot(command)) return !own;
+        if (targetsEnemyShip(command)) return !own && slot.isOccupied && canTargetShip(command, slot.card!);
         if (!own) return false;
-        if (selection.moveSource !== null) return this.match.commandMoveDestinations(selection.moveSource).includes(slot);
-        if (this.match.shipAt(slot) === null || !canTargetLane(command, slot.lane.type)) return false;
-        return !command.moves || this.match.commandMoveDestinations(slot).length > 0;
+        if (selection.moveSource !== null) return this.match.commandMoveDestinations(command, selection.moveSource).includes(slot);
+        if (!this.match.canTargetOwn(command, slot)) return false;
+        return !command.moves || this.match.commandMoveDestinations(command, slot).length > 0;
       }
       default: {
         if (!own) return false;
-        const target = this.match.plannedEnemyTarget ? null : this.match.plan.command?.target;
+        const target = this.match.plannedOwnTarget;
         const maneuver = this.match.plannedManeuver;
         return (target != null && isSameSlot(target, slotTarget(slot))) || this.match.plannedCommandMove?.to === slot || maneuver?.from === slot || maneuver?.to === slot;
       }
@@ -462,17 +485,22 @@ export class MatchController {
     playUiSound("place");
   }
 
-  /** Plant das Grundmanöver; es ersetzt die Fähigkeit. Das Schiff steht bis zur Auflösung als Geist im Ziel-Slot. */
+  /** Plant das Grundmanöver; es ersetzt die Fähigkeit, außer mit Freier Hand. Das Schiff steht bis zur Auflösung als Geist im Ziel-Slot. */
   private stageManeuverOn(source: Slot, pad: SlotPad): void {
     const { plan } = this.match;
-    if (plan.power !== null) this.notice = t.status.maneuverReplacesPower(t.powers[this.match.power!].name);
     plan.maneuver = { ship: slotTarget(source), destination: slotTarget(pad.slot) };
-    plan.power = null;
+    if (!this.match.keepsManeuverAndPower) {
+      if (plan.power !== null) this.notice = t.status.maneuverReplacesPower(t.powers[this.match.power!].name);
+      plan.power = null;
+    }
     this.select(null);
     playUiSound("place");
   }
 
-  /** Verlegende Befehle merken sich erst das Schiff und werden mit dem Ziel-Slot eingeplant. */
+  /**
+   * Verlegende Befehle merken sich erst das Schiff und werden mit dem Ziel-Slot eingeplant. Der Durchschlag schickt
+   * den Strike-Slot der gewählten Slot-Nummer.
+   */
   private stageCommandTargetOn(selection: Extract<Selection, { kind: "command" }>, pad: SlotPad): void {
     const card = this.match.commandHand[selection.index]!;
     if (card.moves && selection.moveSource === null) {
@@ -480,22 +508,24 @@ export class MatchController {
       return playUiSound("select");
     }
     const target = selection.moveSource ?? pad.slot;
-    this.match.plan.command = {
+    this.setCommand({
       handIndex: selection.index,
-      target: slotTarget(target),
+      target: targetsEnemyColumn(card) ? { lane: "strike", slotIndex: target.index } : slotTarget(target),
       destination: selection.moveSource && pad.slot.index,
-    };
+    });
     this.select(null);
     playUiSound("place");
   }
 
-  /** Plant die Admiralsfähigkeit auf das Ziel; sie ersetzt das Grundmanöver. */
+  /** Plant die Admiralsfähigkeit auf das Ziel; sie ersetzt das Grundmanöver, außer mit Freier Hand. */
   private stagePowerOn(pad: SlotPad): void {
     const { plan } = this.match;
-    const replaced = this.match.plannedManeuver;
-    if (replaced !== null) this.notice = t.status.powerReplacesManeuver(t.powers[this.match.power!].name, cardText(replaced.from.card!).name);
     plan.power = { target: slotTarget(pad.slot) };
-    plan.maneuver = null;
+    const replaced = this.match.plannedManeuver;
+    if (replaced !== null && !this.match.keepsManeuverAndPower) {
+      this.notice = t.status.powerReplacesManeuver(t.powers[this.match.power!].name, cardText(replaced.from.card!).name);
+      plan.maneuver = null;
+    }
     this.select(null);
     playUiSound("place");
   }
@@ -518,7 +548,7 @@ export class MatchController {
     showArrow(this.view.moveArrow, this.shownCommandMove());
     showArrow(this.view.maneuverArrow, maneuver);
     showArrow(this.view.swapArrow, swap && { from: swap.to, to: swap.from });
-    this.view.reticle.show(this.shownEnemyTarget());
+    this.view.reticle.show(this.shownEnemyTargets());
 
     const targets = this.ghostTargets();
     const unchanged =
@@ -564,13 +594,19 @@ export class MatchController {
     return this.hoveredPad !== null && this.isValidTarget(this.hoveredPad) ? this.hoveredPad : null;
   }
 
-  /** Das Fadenkreuz steht beim Wählen auf dem Slot unter dem Zeiger, sonst auf dem eingeplanten Zielslot des Torpedos. */
-  private shownEnemyTarget(): SlotPad | null {
-    if (this.isResolving) return null;
-    const command = this.selectedCommand;
-    if (command && targetsEnemySlot(command)) return this.validHoveredPad();
-    const target = this.match.plannedEnemyTarget;
-    return target && this.view.pad("enemy", target.lane, target.slotIndex);
+  /**
+   * Die Fadenkreuze stehen beim Wählen auf dem Ziel unter dem Zeiger, sonst auf dem eingeplanten Ziel auf der
+   * Gegnerseite; beim Durchschlag auf beiden Slots der Slot-Nummer.
+   */
+  private shownEnemyTargets(): SlotPad[] {
+    if (this.isResolving) return [];
+    const selected = this.selectedCommand;
+    const card = selected && targetsEnemySide(selected) ? selected : this.match.plannedCommand;
+    const hovered = this.validHoveredPad();
+    const target = selected && targetsEnemySide(selected) ? hovered && slotTarget(hovered.slot) : this.match.plannedEnemyTarget;
+    if (!card || !target) return [];
+    if (!targetsEnemyColumn(card)) return [this.view.pad("enemy", target.lane, target.slotIndex)];
+    return [this.view.pad("enemy", "strike", target.slotIndex), this.view.pad("enemy", "command", target.slotIndex)];
   }
 
   private shownCommandMove(): { from: SlotPad; to: SlotPad } | null {
@@ -769,7 +805,7 @@ export class MatchController {
     this.hud.submitButton.disabled = !this.canPlan || match.opponent === null || match.flagshipMissing;
     this.hud.submitButton.textContent = match.submitted ? t.hud.waiting : t.hud.endTurn;
     const planning = !this.isResolving && this.canPlan && match.opponent !== null;
-    this.hud.setChecklist(planning ? match.turnProgress : null, { planned: match.plan.ships.length, max: maxDeploys(match.round) });
+    this.hud.setChecklist(planning ? match.turnProgress : null, { planned: match.plan.ships.length, max: match.deployLimit });
     this.admiralSelect.show(this.isConnected && match.round > 0 && match.admiral === null && match.result === null, this.pendingAdmiral);
     this.surrenderDialog.setAvailable(this.isConnected && match.opponent !== null && match.result === null);
     this.opponentPanel.show(match.opponent, match.admiral !== null);
@@ -812,7 +848,7 @@ export class MatchController {
     if (match.submitted) return t.status.submitted;
     const fleet = t.status.fleet(match.board.shipCount("player"), MAX_SHIPS_PER_SIDE);
     // Aufstellung: Solange mehr als ein Schiff erlaubt ist, steht dabei, wie viele noch gelegt werden dürfen.
-    const deploys = maxDeploys(match.round) > 1 ? ` · ${t.status.deploysLeft(match.deploysLeft)}` : "";
+    const deploys = match.deployLimit > 1 ? ` · ${t.status.deploysLeft(match.deploysLeft)}` : "";
     return `${fleet}${deploys} — ${this.notice ? `${this.notice} ` : ""}${this.buildPlanningText()}`;
   }
 
@@ -838,7 +874,9 @@ export class MatchController {
       case "command": {
         const command = this.selectedCommand!;
         const name = cardText(command).name;
+        if (targetsEnemyColumn(command)) return t.status.chooseEnemyColumn(name);
         if (targetsEnemySlot(command)) return t.status.chooseEnemySlot(name);
+        if (targetsEnemyShip(command)) return this.validTargetCount === 0 ? t.status.noEnemyTarget(name) : t.status.chooseEnemyShip(name);
         if (selection.moveSource !== null) return t.status.chooseDestination(name, cardText(match.shipAt(selection.moveSource)!).name);
         if (this.validTargetCount === 0) return t.status.noCommandTarget(name);
         return t.status.chooseCommandTarget(name);

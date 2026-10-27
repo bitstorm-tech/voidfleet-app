@@ -3,17 +3,20 @@
 // gleichzeitig. Die Schüsse im Kampf laufen als Salve kurz versetzt und
 // überlappend ab, Einschläge auf dasselbe Ziel mit etwas Abstand, damit man bei
 // vollem Brett nachvollziehen kann, wer wen trifft; vor ihnen feuert die Railgun, dann der Taktvorsprung,
-// nach ihnen schlägt das Gegenfeuer zurück. Der Bordfunk kündigt Schritte an und reagiert auf ihren
+// nach ihnen schlägt das Gegenfeuer zurück. Angriffsbefehle unterscheiden sich im Bild: Orbitalschlag, Torpedo und
+// Sperrfeuer kommen von oben, der Wärmesucher als Rakete, das Minenfeld explodiert am Schiff, der Durchschlag geht als
+// Strahl durch beide Schiffe einer Slot-Nummer, das Bombardement schlägt mehrfach ein, das Kreuzfeuer kommt von beiden
+// Seiten, der Gnadenstoß als heller Präzisionsschuss. Der Bordfunk kündigt Schritte an und reagiert auf ihren
 // Ausgang (`radioCues.ts`). Die Szene läuft dabei dem Spielzustand voraus; den Endzustand
 // übernimmt danach der Server-Snapshot (`MatchController.syncBoard`) — auch
 // dann, wenn der Spieler die Animation per `skip` abbricht.
 
-import type { Color3 } from "@babylonjs/core/Maths/math.color";
+import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import type { AdmiralId } from "../../shared/admirals.ts";
+import type { AdmiralId, PowerId } from "../../shared/admirals.ts";
 import type { Side } from "../../shared/board.ts";
 import { shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
-import type { RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget } from "../../shared/protocol.ts";
+import type { CommandEffect, RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget } from "../../shared/protocol.ts";
 import { say, silenceRadio } from "./audio/radio.ts";
 import { playSound, stopSounds } from "./audio/sounds.ts";
 import { playUiSound } from "./audio/uiSounds.ts";
@@ -23,14 +26,14 @@ import type { SoundId } from "./data/sounds.ts";
 import { admiralTitle, t } from "./i18n/index.ts";
 import { announcement, reactions } from "./radioCues.ts";
 import { destroyShip } from "./scene/destruction.ts";
-import { boltDuration } from "./scene/effects.ts";
+import { boltDuration, type HitName } from "./scene/effects.ts";
 import type { MatchScene } from "./scene/matchScene.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
 import { setAnimationScope, skipAnimations, wait } from "./scene/tween.ts";
 import type { FloatingTexts, FloatTone } from "./ui/floatingText.ts";
 import type { Hud } from "./ui/hud.ts";
-import { describeEvent, slotLabel } from "./ui/roundLog.ts";
+import { describeEvent, ruleSubtitle, slotLabel } from "./ui/roundLog.ts";
 
 const SIDE_COLORS: Record<Side, Color3> = {
   player: color3("player"),
@@ -79,6 +82,25 @@ const COMMAND_SOUNDS: Record<CommandId, SoundId | null> = {
   volley_fire: "missile_volley",
   torpedo: "orbital_strike",
   barrage: "missile_volley",
+  evasive_action: null,
+  micro_jump: "power_up",
+  rapid_deployment: null,
+  draw_fire: "jammer",
+  shield_grid: "shield_up",
+  ablative_armor: "shield_up",
+  covering_fire: "power_up",
+  drone_squadron: null,
+  collision_course: null,
+  countermeasures: "emp",
+  carte_blanche: null,
+  radio_silence: "jammer",
+  minefield: null,
+  tractor_beam: "power_up",
+  heat_seeker: "missile_volley",
+  coup_de_grace: "orbital_strike",
+  piercing_shot: "cannon_heavy",
+  bombardment: "orbital_strike",
+  crossfire: "laser_medium",
 };
 /** Mitte einer Brettseite (Welt-x), für Sounds ohne Schiff. */
 const SIDE_X: Record<Side, number> = { player: -4.5, enemy: 4.5 };
@@ -101,9 +123,35 @@ const HULL_RADIUS = 0.45;
 const GUARDIAN_BUBBLE = 2.1;
 /** Der Zielstrahl der Zielerfassung ist dünner als der Schuss der Railgun. */
 const LOCK_BEAM_WIDTH = 0.35;
+/** Der Wärmesucher startet so weit vor der eigenen Strike-Lane (Welt-x zur Mitte), knapp über dem Brett. */
+const MISSILE_LAUNCH = new Vector3(0, 0.8, 0);
+/** Minenfeld: erst glimmt die Mine unter dem Schiff auf (ms), dann explodiert sie. */
+const MINE_FUSE = 260;
+/** Bombardement: so viele Einschläge je Schiff, im Abstand (ms) und um so viel versetzt. */
+const BOMBARD_SHELLS = 3;
+const BOMBARD_STAGGER = 140;
+const BOMBARD_SPREAD = 0.45;
+/** Kreuzfeuer: Die beiden Schüsse kommen so weit seitlich entlang der Lane und so hoch. */
+const CROSSFIRE_REACH = 4;
+const CROSSFIRE_HEIGHT = 1.4;
+/** Gnadenstoß: ein dünner, fast weißer Strahl. */
+const COUP_BEAM_WIDTH = 0.55;
+/** Durchschlag: Der Strahl beginnt über der Mitte der eigenen Seite und tritt so weit hinter dem hinteren Slot aus. */
+const PIERCE_OVERSHOOT = 2.5;
+/** Rammkurs: Der Rammer hält so weit vor der Mitte des Ziels (Welteinheiten), dort kracht es. */
+const RAM_STANDOFF = 1.1;
+const RAM_BLAST = 0.6;
+const RAM_SHAKE = 0.3;
+/** Kurzsprung: Lichtpunkt am Ort des Absprungs und der Rückkehr. */
+const JUMP_PULSE = 1.5;
+/** Traktorstrahl: Er greift von hoch über der eigenen Seite und hält kurz, bevor er zieht (ms). */
+const TRACTOR_ORIGIN = new Vector3(0, 3.5, 0);
+const TRACTOR_GRIP = 350;
 
 /** Was ein Befehl bewirkt hat; danach richten sich Banner und Klang. */
-type CommandOutcome = Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" | "miss" }>;
+type CommandOutcome = Extract<RoundEvent, { kind: "effect" | "draw" | "noEffect" | "miss" | "countered" | "rule" }>;
+const COMMAND_OUTCOMES: ReadonlySet<RoundEvent["kind"]> = new Set(["effect", "draw", "noEffect", "miss", "countered", "rule"]);
+const isCommandOutcome = (event: RoundEvent): event is CommandOutcome => COMMAND_OUTCOMES.has(event.kind);
 /** Ein Schuss einer Salve: im Kampf vom Angreifer aufs Ziel, beim Gegenfeuer vom getroffenen Schiff auf den Schützen. */
 type Shot = Extract<RoundEvent, { kind: "attack" | "counterfire" }>;
 
@@ -118,6 +166,10 @@ function bannerSubtitle(event: CommandOutcome): string | null {
       return t.banner.draw(event.ships, event.commands);
     case "miss":
       return t.banner.miss(slotLabel(event.target));
+    case "countered":
+      return t.banner.countered(t.commands[event.countered].name);
+    case "rule":
+      return ruleSubtitle(event.cardId);
     case "effect":
       return null;
   }
@@ -148,6 +200,8 @@ function stepKey(event: RoundEvent): string {
     case "draw":
     case "noEffect":
     case "miss":
+    case "countered":
+    case "rule":
       return `command-${event.side}-${event.cardId}`;
     case "ability":
       return `ability-${event.source.side}-${event.source.lane}-${event.source.slotIndex}`;
@@ -174,8 +228,13 @@ function groupSteps(events: readonly RoundEvent[]): RoundEvent[][] {
 /** Schritte des Kampfs laufen mit dem Regler für Angriffe. */
 const COMBAT_KINDS: ReadonlySet<RoundEvent["kind"]> = new Set(["attack", "railgun", "silenced", "counterfire"]);
 
+/** Schlüssel eines Slots, um Ereignisse am selben Schiff nacheinander abzuspielen. */
+const slotKey = (slot: SlotRef): string => `${slot.side}-${slot.lane}-${slot.slotIndex}`;
+
 export class RoundPlayback {
   private isSkipped = false;
+  /** Schiffe im Kurzsprung, nach ihrem Slot: Sie verlassen das Brett und kehren im Cleanup zurück (`return`). */
+  private readonly jumped = new Map<string, ShipView>();
 
   constructor(
     private readonly view: MatchScene,
@@ -195,6 +254,9 @@ export class RoundPlayback {
       await this.playStep(step);
       await wait(this.view.scene, STEP_PAUSE);
     }
+    // Übersprungen, bevor sie zurück waren: Der Server-Snapshot stellt sie neu auf.
+    for (const ship of this.jumped.values()) ship.dispose();
+    this.jumped.clear();
     setAnimationScope("general");
     skipAnimations(false);
   }
@@ -226,11 +288,14 @@ export class RoundPlayback {
       return this.salvo(step as Shot[]);
     }
     this.hud.appendLog(step.map(describeEvent));
-    if (first.kind === "effect" || first.kind === "draw" || first.kind === "noEffect" || first.kind === "miss") {
+    if (isCommandOutcome(first)) {
       this.announceCommand(first);
       await wait(this.view.scene, BANNER_LEAD);
       this.commandSound(first);
-    } else if (first.kind === "ability" || first.kind === "spawn" || first.kind === "railgun") {
+      if (first.cardId === "piercing_shot") this.pierceBeam(first.side, step);
+      return this.inSequence(step);
+    }
+    if (first.kind === "ability" || first.kind === "spawn" || first.kind === "railgun") {
       const admiral = flagshipAdmiral(first.source.cardId);
       const subtitle = first.kind === "railgun" && first.blocked ? t.banner.blocked : admiral && t.admirals[admiral].ability;
       this.announce(first.source.side, t.ships[first.source.cardId].name, subtitle, admiral);
@@ -244,6 +309,22 @@ export class RoundPlayback {
       await wait(this.view.scene, BANNER_LEAD);
     }
     await Promise.all(step.map((event) => this.playEvent(event)));
+  }
+
+  /**
+   * Die Wirkungen eines Befehls: an verschiedenen Schiffen gleichzeitig, am selben Schiff nacheinander, damit Impulse
+   * und Schwebetexte nicht übereinanderliegen (Feuerschutz: ATK, dann Schild). Ein verlegtes Schiff nimmt seine Kette
+   * in den neuen Slot mit (Ausweichmanöver: erst der Flug, dann der Schild).
+   */
+  private async inSequence(step: readonly RoundEvent[]): Promise<void> {
+    const chains = new Map<string, Promise<void>>();
+    for (const event of step) {
+      const key = event.kind === "effect" ? slotKey(event.ship) : event.kind;
+      const chain = (chains.get(key) ?? Promise.resolve()).then(() => this.playEvent(event));
+      chains.set(key, chain);
+      if (event.kind === "effect" && event.effect.type === "move") chains.set(slotKey({ side: event.ship.side, ...event.effect.to }), chain);
+    }
+    await Promise.all(chains.values());
   }
 
   private announce(side: Side, name: string, subtitle: string | null, admiral: AdmiralId | null): void {
@@ -283,8 +364,7 @@ export class RoundPlayback {
     const sound = COMMAND_SOUNDS[event.cardId];
     if (event.kind === "noEffect") return playUiSound("denied");
     if (!sound) return;
-    const onSlot = event.kind === "effect" || event.kind === "miss";
-    playSound(sound, { x: onSlot ? this.centerOf(this.padOf(eventSlot(event))).x : SIDE_X[event.side] });
+    playSound(sound, { x: event.kind === "effect" || event.kind === "miss" ? this.centerOf(this.padOf(eventSlot(event))).x : SIDE_X[event.side] });
   }
 
   private async playEvent(event: RoundEvent): Promise<void> {
@@ -330,11 +410,15 @@ export class RoundPlayback {
       case "destroyed":
         return this.destroy(event.ship);
       case "vanish":
-        return this.vanish(event.ship);
+        return this.vanish(this.padOf(event.ship));
+      case "return":
+        return this.rejoin(event);
       case "pass":
       case "command":
       case "draw":
       case "noEffect":
+      case "countered":
+      case "rule":
         return;
     }
   }
@@ -404,36 +488,213 @@ export class RoundPlayback {
     const pad = this.padOf(event.ship);
     const { effect, after } = event;
     switch (effect.type) {
-      case "damage": {
-        const color = SIDE_COLORS[event.side];
-        const origin = this.centerOf(pad).add(ORBIT_OFFSET);
-        await this.view.effects.bolt(origin, this.impactFrom(pad, origin), color);
-        return this.damage(event.ship, effect.amount, after, origin, color);
-      }
+      case "damage":
+        return this.strike(event, effect.amount);
       case "attack":
         return this.mark(pad, t.float.attack(effect.delta), effect.delta > 0 ? "buff" : "debuff");
       case "shield":
         pad.ship!.setStats(after.hp, after.shield);
-        return this.mark(pad, t.float.shield(effect.amount), "shield", 2.2);
+        return this.mark(pad, effect.permanent ? t.float.shieldPermanent(effect.amount) : t.float.shield(effect.amount), "shield", 2.2);
       case "disable":
         return this.mark(pad, t.float.disabled, "debuff");
       case "heal":
         pad.ship!.setStats(after.hp, after.shield);
         return this.mark(pad, t.float.heal(effect.amount), "heal");
-      case "move":
-        return this.move(pad, this.view.pad(event.ship.side, effect.to.lane, effect.to.slotIndex));
+      case "move": {
+        const to = this.view.pad(event.ship.side, effect.to.lane, effect.to.slotIndex);
+        return event.ship.side === event.side ? this.move(pad, to) : this.tow(event.side, pad, to);
+      }
+      case "jump":
+        return this.jump(event.ship);
+      case "taunt":
+        this.float(pad, t.float.taunt, "debuff");
+        void this.view.effects.pulse(this.centerOf(pad), SIDE_COLORS[event.side], 1.8, 650);
+        return pad.ship!.addMarker({ kind: "taunt", color: SIDE_COLORS[event.side] });
+      case "spawn":
+        return this.view.deploy(new ShipView(this.view.scene, shipById(event.ship.cardId), false), event.ship.side, event.ship.lane, event.ship.slotIndex);
+      case "ram":
+        return this.ram(pad, event.ship, effect, after);
+      case "jam":
+        return this.jam(pad, effect.power);
     }
   }
 
-  /** Der Torpedo kommt von oben wie ein Orbitalschlag und schlägt im leeren Slot ein. */
+  /**
+   * Schaden durch einen Befehl, je Karte anders ins Bild gesetzt: Orbitalschlag, Torpedo und Sperrfeuer kommen als Bolzen
+   * von oben, die übrigen siehe `roundPlayback`-Kopf. Der Durchschlag zieht seinen Strahl einmal für beide Schiffe
+   * (`pierceBeam`); hier trifft er nur noch ein.
+   */
+  private async strike(event: Extract<RoundEvent, { kind: "effect" }>, amount: number): Promise<void> {
+    const pad = this.padOf(event.ship);
+    const center = this.centerOf(pad);
+    const color = SIDE_COLORS[event.side];
+    const hit = (origin: Vector3, name?: HitName) => this.damage(event.ship, amount, event.after, origin, color, name);
+    switch (event.cardId) {
+      case "heat_seeker": {
+        const origin = this.ownStrikeFront(event.side, center);
+        await this.view.effects.missile(origin, this.impactFrom(pad, origin.add(ORBIT_OFFSET)), color);
+        return hit(origin.add(ORBIT_OFFSET), "fireball");
+      }
+      case "minefield": {
+        const floor = pad.root.getAbsolutePosition();
+        await this.view.effects.pulse(floor, TONE_COLORS.damage, 0.9, MINE_FUSE);
+        this.view.shake(0.08);
+        return hit(center.add(new Vector3(0, 1, 0)), "fireball");
+      }
+      case "piercing_shot":
+        return hit(this.pierceOrigin(event.side, center), "pierce");
+      case "bombardment": {
+        const origin = center.add(ORBIT_OFFSET);
+        const shells = Array.from({ length: BOMBARD_SHELLS }, (_, index) => {
+          const offset = new Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2).scale(BOMBARD_SPREAD);
+          return wait(this.view.scene, index * BOMBARD_STAGGER).then(async () => {
+            const impact = this.impactFrom(pad, origin).add(offset);
+            await this.view.effects.bolt(origin.add(offset), impact, color);
+            if (index < BOMBARD_SHELLS - 1) await Promise.all([pad.ship!.flash(0.4), this.view.effects.hit(impact, origin, color, "fire")]);
+          });
+        });
+        await Promise.all(shells);
+        return hit(origin, "fireball");
+      }
+      case "crossfire": {
+        const sides = [1, -1].map((direction) => center.add(new Vector3(0, CROSSFIRE_HEIGHT, direction * CROSSFIRE_REACH)));
+        await Promise.all(sides.map((origin) => this.shoot(origin, pad, color, "laser_medium")));
+        void this.view.effects.hit(this.impactFrom(pad, sides[1]!), sides[1]!, color, "sparks");
+        return hit(sides[0]!, "sparks");
+      }
+      case "coup_de_grace": {
+        const origin = center.add(ORBIT_OFFSET);
+        const bright = Color3.Lerp(color, Color3.White(), 0.75);
+        void this.view.effects.pulse(this.impactFrom(pad, origin), bright, 1.4, 300);
+        void this.view.effects.beam(origin, this.impactFrom(pad, origin), bright, COUP_BEAM_WIDTH);
+        this.view.shake(0.1);
+        return hit(origin, "discharge");
+      }
+      default: {
+        const origin = center.add(ORBIT_OFFSET);
+        await this.view.effects.bolt(origin, this.impactFrom(pad, origin), color);
+        return hit(origin);
+      }
+    }
+  }
+
+  /** Durchschlag: ein gerader Strahl über die ganze Slot-Nummer, durch beide Schiffe hindurch, einmal je Befehl. */
+  private pierceBeam(side: Side, step: readonly RoundEvent[]): void {
+    const first = step.find((event) => event.kind === "effect" || event.kind === "miss");
+    if (!first) return;
+    const slot = first.kind === "effect" ? first.ship : first.target;
+    const back = this.centerOf(this.view.pad(slot.side, "command", slot.slotIndex));
+    const origin = this.pierceOrigin(side, back);
+    const exit = back.add(new Vector3(Math.sign(back.x - origin.x) * PIERCE_OVERSHOOT, 0, 0));
+    playSound("cannon_heavy", { x: origin.x, rate: 0.9 });
+    void this.view.effects.pulse(origin, SIDE_COLORS[side], 1, 260);
+    void this.view.effects.beam(origin, exit, SIDE_COLORS[side], 0.8);
+    this.view.shake(0.1);
+  }
+
+  /** Woher der Durchschlag kommt: aus der Mitte der Seite, die ihn spielt, auf Höhe von `target`. */
+  private pierceOrigin(side: Side, target: Vector3): Vector3 {
+    return new Vector3(SIDE_X[side], target.y, target.z);
+  }
+
+  /** Startpunkt des Wärmesuchers: vor der eigenen Strike-Lane, auf Höhe des Ziels. */
+  private ownStrikeFront(side: Side, target: Vector3): Vector3 {
+    const strike = this.centerOf(this.view.pad(side, "strike", 0));
+    return new Vector3(strike.x, 0, target.z).add(MISSILE_LAUNCH);
+  }
+
+  /**
+   * Der Torpedo kommt von oben wie ein Orbitalschlag und schlägt im leeren Slot ein. Der Durchschlag hat seinen Strahl
+   * schon gezogen (`pierceBeam`); am leeren Strike-Slot bleibt nur das „Daneben“.
+   */
   private async miss(event: Extract<RoundEvent, { kind: "miss" }>): Promise<void> {
     const pad = this.padOf(event.target);
+    this.float(pad, t.float.miss, "debuff");
+    if (event.cardId === "piercing_shot") return;
     const color = SIDE_COLORS[event.side];
     const point = this.centerOf(pad);
     const origin = point.add(ORBIT_OFFSET);
     await this.view.effects.bolt(origin, point, color);
-    this.float(pad, t.float.miss, "debuff");
     await this.view.effects.hit(point, origin, color);
+  }
+
+  /** Kurzsprung: Das Schiff schrumpft zu einem Lichtpunkt und verlässt das Brett; die ShipView wartet auf `return`. */
+  private async jump(ref: ShipRef): Promise<void> {
+    const pad = this.padOf(ref);
+    const ship = pad.ship!;
+    const center = this.centerOf(pad);
+    void this.view.effects.pulse(center, TONE_COLORS.shield, JUMP_PULSE, 450);
+    this.float(pad, t.float.jump, "shield");
+    await ship.phaseOut();
+    pad.detachShip();
+    ship.root.setEnabled(false);
+    this.jumped.set(slotKey(ref), ship);
+  }
+
+  /** Rückkehr aus dem Kurzsprung: Das Schiff erscheint als Lichtpunkt im Slot und wächst auf seine Größe. */
+  private async rejoin(event: Extract<RoundEvent, { kind: "return" }>): Promise<void> {
+    const key = slotKey(event.ship);
+    const ship = this.jumped.get(key)!;
+    this.jumped.delete(key);
+    const pad = this.padOf(event.ship);
+    pad.attachShip(ship);
+    ship.root.setEnabled(true);
+    ship.setStats(event.after.hp, event.after.shield);
+    playSound("power_up", { x: this.centerOf(pad).x });
+    void this.view.effects.pulse(this.centerOf(pad), TONE_COLORS.shield, JUMP_PULSE, 450);
+    await ship.phaseIn();
+  }
+
+  /**
+   * Rammkurs: Der Rammer fliegt auf sein Ziel zu, beim Aufprall kracht es mit Explosion und Kamerawackeln, beide zeigen
+   * ihren Schaden. Übersteht er es, kehrt er in seinen Slot zurück und feuert diese Runde nicht; sonst bleibt er bis
+   * zu seiner Zerstörung am Ziel liegen.
+   */
+  private async ram(pad: SlotPad, ref: ShipRef, effect: Extract<CommandEffect, { type: "ram" }>, after: ShipStats): Promise<void> {
+    const ship = pad.ship!;
+    const targetPad = this.padOf(effect.target);
+    const target = targetPad.ship!;
+    const from = pad.shipAnchor.getAbsolutePosition();
+    const goal = targetPad.shipAnchor.getAbsolutePosition();
+    const stop = goal.subtract(goal.subtract(from).normalize().scale(RAM_STANDOFF));
+    await ship.charge(stop);
+    const impact = Vector3.Center(stop, goal).add(SHIP_CENTER);
+    this.view.shake(RAM_SHAKE);
+    void this.view.effects.detonate(impact, TONE_COLORS.damage, RAM_BLAST, "fire");
+    ship.setStats(after.hp, after.shield);
+    target.setStats(effect.targetAfter.hp, effect.targetAfter.shield);
+    this.float(targetPad, t.float.damage(effect.dealt), "damage");
+    this.floatAt(stop.add(SHIP_CENTER), t.float.damage(effect.taken), "damage");
+    await Promise.all([ship.flash(), target.flash(), this.view.effects.hit(impact, this.centerOf(pad), TONE_COLORS.damage, "fireball")]);
+    if (after.hp <= 0) return;
+    await ship.withdraw();
+    ship.setHoldingFire(true);
+    return this.mark(this.padOf(ref), t.float.holdFire, "debuff");
+  }
+
+  /**
+   * Funkstille: Die gegnerische Admiralsfähigkeit auf dem Schiff fällt weg, ihre Marke erlischt. Das Trugbild löst
+   * sich sofort auf wie am Rundenende.
+   */
+  private async jam(pad: SlotPad, power: PowerId): Promise<void> {
+    this.float(pad, t.float.jammed, "debuff");
+    if (power === "decoy") return this.vanish(pad);
+    pad.ship!.removeMarker(power);
+    await this.view.effects.pulse(this.centerOf(pad), TONE_COLORS.debuff, 1.6, 650);
+  }
+
+  /**
+   * Traktorstrahl: Ein Strahl greift von hoch über der Seite, die ihn spielt, nach dem gegnerischen Schiff, hält es kurz
+   * und zieht es dann ruhig in den neuen Slot.
+   */
+  private async tow(side: Side, from: SlotPad, to: SlotPad): Promise<void> {
+    const ship = from.ship!;
+    const origin = new Vector3(SIDE_X[side], 0, this.centerOf(from).z).add(TRACTOR_ORIGIN);
+    const release = this.view.effects.tether(origin, () => ship.root.getAbsolutePosition().add(SHIP_CENTER), SIDE_COLORS[side]);
+    void this.view.effects.pulse(this.centerOf(from), SIDE_COLORS[side], 1.3, 400);
+    await wait(this.view.scene, TRACTOR_GRIP);
+    await this.move(from, to, true);
+    await release();
   }
 
   /**
@@ -514,13 +775,13 @@ export class RoundPlayback {
     await this.view.effects.bolt(origin, this.impactFrom(to, origin), color);
   }
 
-  /** Treffer eines Schusses aus Richtung `origin`: Einschlag auf der Hülle, Hüllenblitz und Schadenszahl. */
-  private async damage(ref: ShipRef, amount: number, after: ShipStats, origin: Vector3, color: Color3): Promise<void> {
+  /** Treffer eines Schusses aus Richtung `origin`: Einschlag auf der Hülle (`hit`, sonst zufällig), Hüllenblitz und Schadenszahl. */
+  private async damage(ref: ShipRef, amount: number, after: ShipStats, origin: Vector3, color: Color3, hit?: HitName): Promise<void> {
     const pad = this.padOf(ref);
     const ship = pad.ship!;
     ship.setStats(after.hp, after.shield);
     this.float(pad, t.float.damage(amount), "damage");
-    await Promise.all([ship.flash(), this.view.effects.hit(this.impactFrom(pad, origin), origin, color)]);
+    await Promise.all([ship.flash(), this.view.effects.hit(this.impactFrom(pad, origin), origin, color, hit)]);
   }
 
   /** Das Schiff geht in seiner eigenen Zerstörungssequenz unter; das Wrack brennt danach für sich weiter. */
@@ -528,21 +789,21 @@ export class RoundPlayback {
     await destroyShip(this.padOf(ref).detachShip(), this.view);
   }
 
-  /** Das Trugbild löst sich am Rundenende auf. */
-  private async vanish(ref: ShipRef): Promise<void> {
-    const ship = this.padOf(ref).detachShip();
+  /** Das Trugbild löst sich auf: am Rundenende oder durch Funkstille. */
+  private async vanish(pad: SlotPad): Promise<void> {
+    const ship = pad.detachShip();
     playSound("jammer", { x: ship.root.getAbsolutePosition().x, volume: 0.6 });
     await ship.dematerialize();
     ship.dispose();
   }
 
-  /** Der Anker übernimmt das Schiff sofort, es fliegt von seiner alten Stelle aus in den neuen Slot. */
-  private async move(from: SlotPad, to: SlotPad): Promise<void> {
+  /** Der Anker übernimmt das Schiff sofort, es fliegt von seiner alten Stelle aus in den neuen Slot (gezogen: `towed`). */
+  private async move(from: SlotPad, to: SlotPad, towed = false): Promise<void> {
     const ship = from.detachShip();
     const start = ship.root.getAbsolutePosition().clone();
     to.attachShip(ship);
     ship.root.setAbsolutePosition(start);
-    await ship.maneuver();
+    await ship.maneuver(towed);
   }
 
   /** Buffs und Debuffs: farbiger Impuls plus Text über dem Schiff. */
@@ -568,6 +829,11 @@ export class RoundPlayback {
   }
 
   private float(pad: SlotPad, text: string, tone: FloatTone): void {
-    this.floats.show(this.view.screenPosition(this.centerOf(pad).add(ABOVE_SHIP)), text, tone);
+    this.floatAt(this.centerOf(pad), text, tone);
+  }
+
+  /** Schwebetext über einem Punkt, an dem gerade ein Schiff steht, auch wenn es nicht auf seinem Pad ist (Rammkurs). */
+  private floatAt(point: Vector3, text: string, tone: FloatTone): void {
+    this.floats.show(this.view.screenPosition(point.add(ABOVE_SHIP)), text, tone);
   }
 }

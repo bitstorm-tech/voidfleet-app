@@ -24,9 +24,13 @@ export interface Deploy {
 }
 
 /**
- * Der Zug einer Runde: bis zu `maxDeploys` Schiffe (in Runde 1 zwei, sonst eines, in verschiedene
- * Slots) und 1 Befehl, jeweils per Hand-Index, dazu entweder ein Grundmanöver oder die Admiralsfähigkeit. Ziele liegen auf der eigenen Seite, nur das Ziel eines Befehls mit `choose_enemy_slot`
- * (Torpedo) ist ein Slot der Gegnerseite, auch ein leerer. Verlegt der Befehl sein Ziel, ist `destination` der Slot-Index in der anderen Lane,
+ * Der Zug einer Runde: bis zu `maxDeploys` Schiffe (in Runde 1 zwei, sonst eines, mit Schnellverlegung eines mehr, in
+ * verschiedene Slots) und 1 Befehl, jeweils per Hand-Index, dazu entweder ein Grundmanöver oder die Admiralsfähigkeit
+ * (mit Freier Hand beides). Ziele liegen auf der eigenen Seite, außer bei Befehlen mit Ziel auf der Gegnerseite
+ * (`targetsEnemySide`): `choose_enemy` (Wärmesucher, Traktorstrahl) ist ein gegnerisches Schiff, das beim Planen dort
+ * steht, und der Befehl folgt ihm; `choose_enemy_slot` (Torpedo) ist ein Slot der Gegnerseite, auch ein leerer, und
+ * `choose_enemy_column` (Durchschlag) ebenso, nur zählt dort allein die Slot-Nummer. Verlegt der Befehl sein Ziel, ist
+ * `destination` der Slot-Index in der Ziel-Lane (`destinationLane`: die andere Lane, beim Ausweichmanöver dieselbe),
  * sonst null. Das Manöver verlegt ein eigenes Schiff, das schon auf dem Brett steht, in den freien Slot
  * `destination` der anderen oder derselben Lane; dafür feuert es in dieser Runde nicht. Die Mirage darf dabei auch in einen
  * belegten eigenen Slot: Sie tauscht mit dem Schiff dort die Plätze (Phasentausch), und beide feuern. Eigene Ziele beziehen sich auf
@@ -97,14 +101,27 @@ export interface ShipStats {
   shield: number;
 }
 
-/** Was ein Befehl an einem Schiff bewirkt. */
+/**
+ * Was ein Befehl an einem Schiff bewirkt (`ship` im Ereignis `effect`, Stellung vor der Wirkung). `move` verlegt auch ein
+ * gegnerisches Schiff (Traktorstrahl). Neu dazu: `shield` mit `permanent` (Ablativpanzerung, verfällt nicht am
+ * Rundenende); `jump` (Kurzsprung: das Schiff verlässt das Brett bis zum Cleanup, siehe `return`); `taunt` (Ablenkung:
+ * zieht diese Runde das Feuer auf sich); `spawn` (Drohnenstaffel: `ship` ist die gerade gestartete Drohne); `ram`
+ * (Rammkurs: `ship` rammt `target`, `dealt` ist der Schaden am Ziel, `taken` der am Rammer, beide Nennwerte vor dem
+ * Schild; `after` im Ereignis gilt dem Rammer, `targetAfter` dem Ziel); `jam` (Funkstille: die gegnerische
+ * Admiralsfähigkeit `power` auf diesem Schiff fällt weg; beim Trugbild (`power: "decoy"`) verschwindet es sofort).
+ */
 export type CommandEffect =
   | { type: "damage"; amount: number }
   | { type: "attack"; delta: number }
-  | { type: "shield"; amount: number }
+  | { type: "shield"; amount: number; permanent?: true }
   | { type: "disable" }
   | { type: "heal"; amount: number }
-  | { type: "move"; to: SlotTarget };
+  | { type: "move"; to: SlotTarget }
+  | { type: "jump" }
+  | { type: "taunt" }
+  | { type: "spawn" }
+  | { type: "ram"; target: ShipRef; dealt: number; taken: number; targetAfter: ShipStats }
+  | { type: "jam"; power: PowerId };
 
 /** Was eine Schiffs-Fähigkeit an einem Schiff bewirkt. */
 export type AbilityEffect = Extract<CommandEffect, { type: "heal" | "damage" | "attack" | "shield" }>;
@@ -127,11 +144,20 @@ export type RoundEvent =
   | { kind: "maneuver"; side: Side; ship: ShipRef; to: SlotTarget }
   /** Phasentausch statt `maneuver`: Die Mirage (`a`) und das Schiff `b` tauschen die Plätze (Stellung davor) und feuern beide. */
   | { kind: "swap"; side: Side; a: ShipRef; b: ShipRef }
-  /** `target` ist der Slot nach dem Manöver, beim Torpedo der gewählte Slot der Gegnerseite. */
+  /**
+   * `target` ist der Slot nach dem Manöver, beim Torpedo der gewählte Slot der Gegnerseite, beim Durchschlag der
+   * Strike-Slot der gewählten Slot-Nummer, bei Wärmesucher und Traktorstrahl der Slot, in dem das gewählte
+   * gegnerische Schiff beim Aufdecken steht (null, wenn es nicht mehr auf dem Brett steht).
+   */
   | { kind: "command"; side: Side; cardId: CommandId; target: SlotRef | null }
   | { kind: "effect"; side: Side; cardId: CommandId; ship: ShipRef; effect: CommandEffect; after: ShipStats }
+  /** Plündern (1 Schiff, 1 Befehl) und Gegenmaßnahmen ohne gegnerischen Angriff (1 Befehl): was auf der Hand gelandet ist. */
   | { kind: "draw"; side: Side; cardId: CommandId; ships: number; commands: number }
   | { kind: "noEffect"; side: Side; cardId: CommandId }
+  /** Gegenmaßnahmen (`cardId`) von `side`: Der Angriffs- oder Schwächungsbefehl `countered` der Gegenseite verpufft. */
+  | { kind: "countered"; side: Side; cardId: CommandId; countered: CommandId }
+  /** Befehl, der den Zug selbst verändert hat (Schnellverlegung, Freie Hand); er hat schon beim Planen gewirkt. */
+  | { kind: "rule"; side: Side; cardId: CommandId }
   /** Torpedo in einen Slot, in dem nach allen Bewegungen kein Schiff steht. */
   | { kind: "miss"; side: Side; cardId: CommandId; target: SlotRef }
   /**
@@ -153,6 +179,8 @@ export type RoundEvent =
   | { kind: "counterfire"; source: ShipRef; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "destroyed"; ship: ShipRef }
+  /** Kurzsprung: Das Schiff kehrt zu Beginn des Cleanups in seinen Slot zurück (`ship`), mit HP und Schild `after`. */
+  | { kind: "return"; ship: ShipRef; after: ShipStats }
   /** Das Trugbild verschwindet am Rundenende (sofern es nicht zerstört wurde). */
   | { kind: "vanish"; ship: ShipRef };
 
@@ -193,6 +221,8 @@ export type ErrorCode =
   | "target_not_own_ship"
   | "target_wrong_lane"
   | "target_not_enemy_slot"
+  | "target_not_enemy_ship"
+  | "target_flagship"
   | "destination_required"
   | "destination_not_allowed"
   | "destination_unavailable"

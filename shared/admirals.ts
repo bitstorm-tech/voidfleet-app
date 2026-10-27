@@ -62,8 +62,8 @@ export const ABILITY_VALUES = {
   spearhead: 1,
   /** Hive (Brutkammer): höchstens so viele Drohnen gleichzeitig auf ihrer Seite … */
   maxDrones: 2,
-  /** … und so viele startet sie im ganzen Match. */
-  hiveBudget: 10,
+  /** … und so viele startet sie im ganzen Match (seit den neuen Befehlen 7 statt 10, sonst gewann Halvorsen 60 %). */
+  hiveBudget: 7,
   /** Pendulum (Railgun): Schaden auf das markierte Schiff, wenn es zu Kampfbeginn ungedeckt ist. */
   railgun: 6,
   /** Gegenfeuer: Schaden je Treffer am Schützen (Flaggschiffe ausgenommen). */

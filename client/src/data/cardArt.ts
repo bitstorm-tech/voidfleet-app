@@ -29,6 +29,25 @@ import targeting_jammer from "../../assets/images/cards/targeting_jammer.jpg";
 import volley_fire from "../../assets/images/cards/volley_fire.jpg";
 import torpedo from "../../assets/images/cards/torpedo.jpg";
 import barrage from "../../assets/images/cards/barrage.jpg";
+import evasive_action from "../../assets/images/cards/evasive_action.jpg";
+import micro_jump from "../../assets/images/cards/micro_jump.jpg";
+import rapid_deployment from "../../assets/images/cards/rapid_deployment.jpg";
+import draw_fire from "../../assets/images/cards/draw_fire.jpg";
+import shield_grid from "../../assets/images/cards/shield_grid.jpg";
+import ablative_armor from "../../assets/images/cards/ablative_armor.jpg";
+import covering_fire from "../../assets/images/cards/covering_fire.jpg";
+import drone_squadron from "../../assets/images/cards/drone_squadron.jpg";
+import collision_course from "../../assets/images/cards/collision_course.jpg";
+import countermeasures from "../../assets/images/cards/countermeasures.jpg";
+import carte_blanche from "../../assets/images/cards/carte_blanche.jpg";
+import radio_silence from "../../assets/images/cards/radio_silence.jpg";
+import minefield from "../../assets/images/cards/minefield.jpg";
+import tractor_beam from "../../assets/images/cards/tractor_beam.jpg";
+import heat_seeker from "../../assets/images/cards/heat_seeker.jpg";
+import coup_de_grace from "../../assets/images/cards/coup_de_grace.jpg";
+import piercing_shot from "../../assets/images/cards/piercing_shot.jpg";
+import bombardment from "../../assets/images/cards/bombardment.jpg";
+import crossfire from "../../assets/images/cards/crossfire.jpg";
 
 const ART: Record<Card["id"], string> = {
   horizon_cruiser,
@@ -59,6 +78,25 @@ const ART: Record<Card["id"], string> = {
   volley_fire,
   torpedo,
   barrage,
+  evasive_action,
+  micro_jump,
+  rapid_deployment,
+  draw_fire,
+  shield_grid,
+  ablative_armor,
+  covering_fire,
+  drone_squadron,
+  collision_course,
+  countermeasures,
+  carte_blanche,
+  radio_silence,
+  minefield,
+  tractor_beam,
+  heat_seeker,
+  coup_de_grace,
+  piercing_shot,
+  bombardment,
+  crossfire,
 };
 
 /** URL der Illustration einer Karte. */

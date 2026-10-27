@@ -8,8 +8,20 @@
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
 import { ADMIRAL_IDS, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
-import { canTargetLane, needsTarget, shipById, targetsEnemySlot, type CommandCard, type CommandId, type ShipCard } from "../../shared/cards.ts";
-import { Board, isSameSlot, maxDeploys, opposite, otherLane, overdriveBonus, type PlannedMove, type Side } from "../../shared/board.ts";
+import {
+  allowsManeuverAndPower,
+  canTargetLane,
+  canTargetShip,
+  destinationLane,
+  needsTarget,
+  shipById,
+  targetsEnemyShip,
+  targetsEnemySide,
+  type CommandCard,
+  type CommandId,
+  type ShipCard,
+} from "../../shared/cards.ts";
+import { Board, isSameSlot, maxDeploys, opposite, overdriveBonus, type PlannedMove, type Side } from "../../shared/board.ts";
 import { canMark, markTargets, powerTargets, type PlannedArrival } from "../../shared/powers.ts";
 import type { ErrorCode, MatchResult, OpponentView, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { resolveTurns, type Commander, type Turn } from "../../shared/resolution.ts";
@@ -81,10 +93,11 @@ class Player implements Commander {
     drawInto(this.commandHand, this.commandDeck);
   }
 
-  drawExtra(): { ships: number; commands: number } {
+  drawExtra(ships: number, commands: number): { ships: number; commands: number } {
+    const drawn = (count: number, draw: () => boolean) => Array.from({ length: count }, draw).filter(Boolean).length;
     return {
-      ships: drawInto(this.shipHand, this.shipDeck) ? 1 : 0,
-      commands: drawInto(this.commandHand, this.commandDeck) ? 1 : 0,
+      ships: drawn(ships, () => drawInto(this.shipHand, this.shipDeck)),
+      commands: drawn(commands, () => drawInto(this.commandHand, this.commandDeck)),
     };
   }
 
@@ -223,7 +236,9 @@ export class Match {
   private validate(player: Player, plan: TurnPlan): ErrorCode | null {
     const { board } = this;
     const side = player.side;
-    if (plan.ships.length > maxDeploys(this.round)) return "too_many_ships";
+    // Der Befehl kann den Zug selbst ändern (Schnellverlegung, Freie Hand); geprüft wird er unten.
+    const card = plan.command ? (player.commandHand[plan.command.handIndex] ?? null) : null;
+    if (plan.ships.length > maxDeploys(this.round, card)) return "too_many_ships";
     if (this.round === 1 && plan.flagship === null) return "flagship_required";
     if (this.round > 1 && plan.flagship !== null) return "flagship_not_allowed";
     // Die Schiffe, die in dieser Runde gelegt werden (in Runde 1 zuerst das Flaggschiff), landen vor Manöver
@@ -256,17 +271,21 @@ export class Match {
     // Lane-Grenze nicht überschreiten; `canMove` prüft das beim Befehl mit den Deploys und dem Manöver.
     let moved: SlotTarget | null = null;
     if (plan.command) {
-      const { handIndex, target } = plan.command;
-      const card = player.commandHand[handIndex];
-      if (card === undefined) return "command_not_in_hand";
+      const { target } = plan.command;
+      if (card === null) return "command_not_in_hand";
       if (needsTarget(card) && target === null) return "target_required";
       if (!needsTarget(card) && target !== null) return "target_not_allowed";
-      // Der Torpedo zielt auf einen Slot der Gegnerseite, auch einen leeren; alle übrigen auf ein eigenes Schiff.
-      const enemySlot = targetsEnemySlot(card);
-      const slot = target && board.lane(enemySlot ? opposite(side) : side, target.lane).slots[target.slotIndex];
-      if (target && enemySlot && !slot) return "target_not_enemy_slot";
-      if (target && !enemySlot && !slot?.isOccupied && !deploys.some((deploy) => isSameSlot(target, deploy))) return "target_not_own_ship";
+      // Torpedo und Durchschlag zielen auf einen Slot der Gegnerseite, auch einen leeren; Wärmesucher und Traktorstrahl
+      // auf ein gegnerisches Schiff; alle übrigen auf ein eigenes Schiff, auch eines, das in dieser Runde landet.
+      const enemy = targetsEnemySide(card);
+      const slot = target && board.lane(enemy ? opposite(side) : side, target.lane).slots[target.slotIndex];
+      // Eingeplante Schiffe zählen nur auf der eigenen Seite.
+      const ship = target && (slot?.card ?? (enemy ? null : arrivals.find((arrival) => isSameSlot(arrival.target, target))?.card));
+      if (target && enemy && !slot) return "target_not_enemy_slot";
+      if (target && targetsEnemyShip(card) && !ship) return "target_not_enemy_ship";
+      if (target && !enemy && !ship) return "target_not_own_ship";
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
+      if (ship && !canTargetShip(card, ship)) return "target_flagship";
       const { destination } = plan.command;
       if (card.moves && destination === null) return "destination_required";
       if (!card.moves && destination !== null) return "destination_not_allowed";
@@ -274,13 +293,15 @@ export class Match {
       const maneuvered = plan.maneuver ? [plan.maneuver.ship, ...(swap ? [plan.maneuver.destination] : [])] : [];
       if (card.moves && target && maneuvered.some((ship) => isSameSlot(ship, target))) return "maneuver_conflict";
       // Bewegt sich ein gelegtes Schiff, ist `from` sein noch leerer Slot; `canMove` zählt Deploys nur in der Ziel-Lane.
-      moved = target && destination !== null ? { lane: otherLane(target.lane), slotIndex: destination } : null;
+      moved = target && destination !== null ? { lane: destinationLane(card, target.lane), slotIndex: destination } : null;
       if (slot && moved && !board.canMove(slot, moved, deploys, maneuver)) return "destination_unavailable";
     }
-    // Die Admiralsfähigkeit statt des Grundmanövers; das Trugbild erscheint nicht, wo der Befehl ein Schiff hinbringt.
+    // Die Admiralsfähigkeit statt des Grundmanövers, mit Freier Hand dazu; das Trugbild erscheint nicht, wo der Befehl
+    // oder das Manöver ein Schiff hinbringt.
     if (plan.power) {
-      if (plan.maneuver) return "power_and_maneuver";
-      const targets = powerTargets(board, side, ADMIRALS[player.admiral!].power, arrivals, moved ? [moved] : []);
+      if (plan.maneuver && !allowsManeuverAndPower(card)) return "power_and_maneuver";
+      const blocked = [moved, plan.maneuver?.destination].filter((target) => target != null);
+      const targets = powerTargets(board, side, ADMIRALS[player.admiral!].power, arrivals, blocked);
       if (!targets.some((target) => isSameSlot(target, plan.power!.target))) return "power_target_invalid";
     }
     if (plan.mark) {

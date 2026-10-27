@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { ADMIRAL_IDS, type AdmiralId } from "../../shared/admirals.ts";
 import { Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
-import { commandById, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
+import { commandById, COMMANDS, deckCopies, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
 import { planBotTurn, type BotView } from "./bot.ts";
 import { Match } from "./match.ts";
 
@@ -11,7 +11,7 @@ function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: 
 
 /** Halvorsen braucht für seine Fähigkeit eigene Drohnen; ohne sie plant der Bot wie ohne Admiralsfähigkeit. */
 function hands(ships: ShipId[], commands: CommandId[], admiral: AdmiralId = "halvorsen"): BotView {
-  return { side: "player", admiral, shipHand: ships.map(shipById), commandHand: commands.map(commandById), opponent: { playedCommands: [], commandHandSize: 0 } };
+  return { side: "player", admiral, shipHand: ships.map(shipById), commandHand: commands.map(commandById), opponent: { admiral: null, playedCommands: [], commandHandSize: 0, shipHandSize: 0 } };
 }
 
 /** Ein Zug ab Runde 2, mit einem Schiff; `random` steuert die seltenen Überraschungen (1: nie, 0: immer). */
@@ -20,11 +20,12 @@ function planTurn(board: Board, bot: BotView, random = () => 1) {
 }
 
 /** Ein Match (ab Runde 2), in dem Seat 0 nur die angegebenen Karten auf der Hand hat. */
-function matchWith(ships: ShipId[], commands: CommandId[], round = 2): Match {
+function matchWith(ships: ShipId[], commands: CommandId[], round = 2, admiral: AdmiralId = "halvorsen"): Match {
   const match = new Match("bot");
   match.join("a");
   match.join("b");
-  for (const seat of [0, 1] as const) match.chooseAdmiral(seat, "halvorsen");
+  match.chooseAdmiral(0, admiral);
+  match.chooseAdmiral(1, "halvorsen");
   match.round = round;
   const player = match.players[0]!;
   player.shipHand.splice(0, player.shipHand.length, ...ships.map(shipById));
@@ -331,4 +332,84 @@ test("Ein markiertes Schiff, das die gegnerische Railgun zerstören würde, geht
   place(board, "player", "strike", 3, "iron_dreadnought");
   place(board, "enemy", "command", 2, "pendulum");
   expect(planTurn(board, hands([], [], "osei")).maneuver).toEqual({ ship: { lane: "command", slotIndex: 0 }, destination: { lane: "command", slotIndex: 3 } });
+});
+
+test("Der Kurzsprung rettet das Flaggschiff, wenn kein Notschild reicht; reicht einer, bekommt es den Schild", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "hive").hp = 3;
+  place(board, "enemy", "strike", 2, "plasma_frigate");
+  expect(planTurn(board, hands([], ["micro_jump", "emergency_shields"])).command).toEqual({ handIndex: 1, target: { lane: "strike", slotIndex: 2 }, destination: null });
+  // Hält der Gegner noch Befehle, droht zusätzlich sein Torpedo: Gegen 3 + 5 Schaden hilft nur der Sprung.
+  const bot = hands([], ["micro_jump", "emergency_shields"]);
+  const armed = { ...bot, opponent: { ...bot.opponent, commandHandSize: 3 } };
+  expect(planTurn(board, armed).command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 2 }, destination: null });
+});
+
+test("Mit Schnellverlegung legt der Bot zwei Schiffe, und der Zug gilt", () => {
+  const match = matchWith(["horizon_cruiser", "iron_dreadnought"], ["rapid_deployment"]);
+  place(match.board, "enemy", "strike", 2, "horizon_cruiser");
+  const plan = planBotTurn(match.board, match.botView(0), match.round, () => 1);
+  expect(plan.command).toEqual({ handIndex: 0, target: null, destination: null });
+  expect(plan.ships.map((ship) => ship.handIndex).sort()).toEqual([0, 1]);
+  expect(match.submit(0, plan)).toBeNull();
+});
+
+test("Mit Freier Hand plant der Bot Grundmanöver und Admiralsfähigkeit, und der Zug gilt", () => {
+  const match = matchWith([], ["carte_blanche"], 2, "vance");
+  const { board } = match;
+  place(board, "player", "strike", 0, "horizon_cruiser");
+  place(board, "player", "strike", 4, "horizon_cruiser");
+  place(board, "player", "command", 1, "repair_drone");
+  place(board, "enemy", "strike", 0, "titan_carrier");
+  place(board, "enemy", "strike", 2, "scrap_raider");
+  const plan = planBotTurn(board, match.botView(0), match.round, () => 1);
+  expect(plan.command).toEqual({ handIndex: 0, target: null, destination: null });
+  // Die Drohne geht hinter einen Kreuzer in Deckung, das Fokusfeuer liegt auf dem Scrap Raider.
+  expect(plan.maneuver?.ship).toEqual({ lane: "command", slotIndex: 1 });
+  expect(plan.power).toEqual({ target: { lane: "strike", slotIndex: 2 } });
+  expect(match.submit(0, plan)).toBeNull();
+});
+
+test("Rammkurs mit einem großen Schiff gegen ein kleineres, nie mit einem kleinen gegen ein großes", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  place(board, "enemy", "strike", 2, "void_interceptor");
+  expect(planTurn(board, hands([], ["collision_course"])).command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 2 }, destination: null });
+
+  const small = new Board();
+  place(small, "player", "strike", 2, "scrap_raider");
+  place(small, "enemy", "strike", 2, "iron_dreadnought");
+  expect(planTurn(small, hands([], ["collision_course"])).command).toBeNull();
+});
+
+test("Der Traktorstrahl zieht den Wächter vor dem gegnerischen Flaggschiff weg, und der Zug gilt", () => {
+  const match = matchWith([], ["tractor_beam"]);
+  const { board } = match;
+  for (const index of [1, 2, 3]) place(board, "player", "strike", index, "horizon_cruiser");
+  place(board, "player", "command", 2, "hive");
+  place(board, "enemy", "command", 2, "hive");
+  place(board, "enemy", "strike", 2, "horizon_cruiser");
+  place(board, "enemy", "strike", 4, "scrap_raider");
+  const plan = planBotTurn(board, match.botView(0), match.round, () => 1);
+  expect(plan.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 2 }, destination: null });
+  expect(match.submit(0, plan)).toBeNull();
+});
+
+test("Gegenmaßnahmen, solange der Gegner viele Angriffe übrig hat; hat er keine mehr, zieht der Bot lieber", () => {
+  const bot = hands([], ["scavenge", "countermeasures"]);
+  const armed = { ...bot, opponent: { ...bot.opponent, commandHandSize: 6 } };
+  expect(planTurn(new Board(), armed).command?.handIndex).toBe(1);
+  const hostile = COMMANDS.filter((card) => card.commandType === "attack" || card.commandType === "debuff").flatMap((card) => Array<CommandId>(deckCopies(card)).fill(card.id));
+  const spent = { ...bot, opponent: { ...armed.opponent, playedCommands: hostile } };
+  expect(planTurn(new Board(), spent).command?.handIndex).toBe(0);
+});
+
+test("Gegen den letzten Gegner ohne Partner trifft Kreuzfeuer, gegen die Command-Lane das Bombardement", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  place(board, "enemy", "strike", 1, "horizon_cruiser");
+  place(board, "enemy", "command", 1, "repair_drone").hp = 2;
+  place(board, "enemy", "command", 3, "repair_drone").hp = 2;
+  // Bombardement zerstört beide Drohnen hinten; Kreuzfeuer trifft nur die ungepaarte in Slot 3.
+  expect(planTurn(board, hands([], ["crossfire", "bombardment"])).command?.handIndex).toBe(1);
 });

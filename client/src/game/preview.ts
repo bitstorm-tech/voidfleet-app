@@ -13,14 +13,20 @@ export interface RoundPreview {
   shots: { attacker: SlotRef; target: SlotRef }[];
   /** Wo Schiffe fallen, mit dem Slot zu diesem Zeitpunkt; eingeplante Schiffe eingeschlossen. */
   losses: SlotRef[];
-  /** Wohin Titan Carrier ihre Drohnen beim Deploy schicken; die Drohne der Hive startet erst nach dem Kampf. */
+  /**
+   * Wohin Titan Carrier ihre Drohnen beim Deploy schicken und die Drohnenstaffel ihre startet; die Drohne der Hive
+   * startet erst nach dem Kampf.
+   */
   drones: SlotRef[];
-  /** Je Schiff, das schon auf dem Brett steht (nach seinem jetzigen Slot): HP und Schild nach der Runde, null, wenn es fällt. */
+  /**
+   * Je Schiff, das schon auf dem Brett steht (nach seinem jetzigen Slot): HP und Schild nach der Runde, null, wenn es
+   * fällt. Ein Schiff im Kurzsprung ist am Rundenende wieder da.
+   */
   outcomes: Map<Slot, ShipStats | null>;
 }
 
-/** Nachgezogen wird in der Vorschau nicht. */
-const commander = (side: Side): Commander => ({ side, drawExtra: () => ({ ships: 0, commands: 0 }) });
+/** Nachgezogen wird in der Vorschau nicht (Plündern, Gegenmaßnahmen). */
+const commander = (side: Side): Commander => ({ side, drawExtra: (_ships: number, _commands: number) => ({ ships: 0, commands: 0 }) });
 
 const slotRef = (slot: Slot): SlotRef => ({ side: slot.lane.side, lane: slot.lane.type, slotIndex: slot.index });
 const key = ({ side, lane, slotIndex }: SlotRef) => `${side}-${lane}-${slotIndex}`;
@@ -58,6 +64,7 @@ export function previewRound(match: Match): RoundPreview {
     if (event.kind === "railgun" && !event.blocked) preview.shots.push({ attacker: event.source, target: event.target });
     if (event.kind === "destroyed") preview.losses.push(event.ship);
     if (event.kind === "spawn" && event.source.cardId !== "hive") preview.drones.push(event.ship);
+    if (event.kind === "effect" && event.effect.type === "spawn") preview.drones.push(event.ship);
   }
   // Wer fällt, steht mit seinem Slot nach allen Bewegungen in `losses`; dort kann die Hive am Rundenende schon die
   // nächste Drohne starten.

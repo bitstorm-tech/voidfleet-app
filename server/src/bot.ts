@@ -6,15 +6,31 @@
 // Schätzung am meisten Schaden anrichtet oder verhindert, und das Grundmanöver nutzen, um das
 // Flaggschiff oder ein anderes Schiff zu retten, in Deckung zu bringen oder ein anderes zu decken.
 // Die Admiralsfähigkeit nimmt er statt des Manövers, wenn sie im Kampf dieser Runde mehr bringt.
+// Befehle, die im Kampf dieser Runde wirken, spielt er auf einer Kopie durch; was vom unbekannten
+// Gegnerzug abhängt (Gegenmaßnahmen, Funkstille, Minenfeld), schätzt er.
 // Ab und zu weicht er einem vermuteten Torpedo aus oder zielt auf ein Ausweichmanöver, damit ihn
 // ein Mensch nicht einfach berechnen kann.
 
 import { ABILITY_VALUES, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
-import { Board, isSameSlot, maxDeploys, nearest, opposite, SLOT_COUNT, slotTarget, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
-import { commandById, deckCopies, isFlagship, isToken, shipById, type CommandCard, type CommandId, type ShipCard } from "../../shared/cards.ts";
+import { Board, isSameSlot, MAX_SHIPS_PER_SIDE, maxDeploys, nearest, opposite, otherLane, SLOT_COUNT, slotTarget, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
+import {
+  allowsManeuverAndPower,
+  canTargetLane,
+  canTargetShip,
+  commandById,
+  COMMANDS,
+  deckCopies,
+  isFlagship,
+  isToken,
+  shipById,
+  targetsEnemyShip,
+  type CommandCard,
+  type CommandId,
+  type ShipCard,
+} from "../../shared/cards.ts";
 import { canMark, powerTargets } from "../../shared/powers.ts";
 import type { Deploy, OpponentView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
-import { highest, resolveCleanup, resolveCombat, resolveManeuver, resolvePower, resolveSwap } from "../../shared/resolution.ts";
+import { highest, resolveCleanup, resolveCombat, resolveEffects, resolveManeuver, resolvePower, resolveSwap, type Commander } from "../../shared/resolution.ts";
 
 /** Was der Computergegner beim Planen weiß: Seite, Admiral, eigene Hände und, was jeder vom Gegner sieht. */
 export interface BotView {
@@ -22,8 +38,8 @@ export interface BotView {
   readonly admiral: AdmiralId;
   readonly shipHand: readonly ShipCard[];
   readonly commandHand: readonly CommandCard[];
-  /** Aus `OpponentView`: die Befehle, die der Gegner schon gespielt hat, und wie viele er noch hält. */
-  readonly opponent: Pick<OpponentView, "playedCommands" | "commandHandSize">;
+  /** Aus `OpponentView`: sein Admiral, die Befehle, die er schon gespielt hat, und wie viele Karten er noch hält. */
+  readonly opponent: Pick<OpponentView, "admiral" | "playedCommands" | "commandHandSize" | "shipHandSize">;
 }
 
 /** Schiffe landen möglichst mittig in der Lane. */
@@ -52,19 +68,38 @@ const KERR = { weakCover: 0.3, covered: 0.15 };
  * `future`: so viele Runden Feuer zählt jedes Schiff zusätzlich (ein Abschuss nimmt dem Gegner auch die nächsten Schüsse).
  */
 const POWER = { maneuverHeadStart: 1, future: 2 };
+/**
+ * Schätzungen zum unbekannten Gegnerzug: wie oft er seine Admiralsfähigkeit einsetzt (Funkstille), wie oft er einen
+ * Angriff oder eine Schwächung spielt, wenn er einen hält (Gegenmaßnahmen), wie sicher er ein Schiff legt und wie oft
+ * Moreau ein Trugbild stellt (Minenfeld).
+ */
+const GUESS = { power: 0.45, hostile: 0.8, deploy: 0.9, decoy: 0.3 };
+/** Gegenmaßnahmen: was ein typischer Angriff oder eine Schwächung anrichtet, und was ein gezogener Befehl wert ist. */
+const COUNTER = { typical: 3, draw: 1 };
+/** Schnellverlegung: Ein Schiff mehr auf dem Brett feuert auch in den Folgerunden; so viel zählt das über diese Runde hinaus. */
+const RAPID_TEMPO = 1;
 
 /** `random` liefert Zahlen in [0, 1), in Tests fest vorgegeben. */
 export function planBotTurn(board: Board, bot: BotView, round: number, random: () => number = Math.random): TurnPlan {
   // Geplant wird auf einer Kopie, auf der die gelegten Schiffe schon stehen, in Runde 1 zuerst das Flaggschiff.
-  const after = copyOf(board);
+  const start = copyOf(board);
   const flagship: SlotTarget | null = round === 1 ? { lane: "command", slotIndex: FLAGSHIP_SLOT } : null;
-  if (flagship) after.place(after.lane(bot.side, flagship.lane), flagship.slotIndex, shipById(ADMIRALS[bot.admiral].flagship));
-  const ships = planShips(after, bot, maxDeploys(round));
-  // Auch das Flaggschiff landet erst in dieser Runde und manövriert noch nicht.
-  const arrivals = [...ships.map((ship) => ship.target), ...(flagship ? [flagship] : [])];
-  const situation = new Situation(after, bot, arrivals, random);
+  if (flagship) start.place(start.lane(bot.side, flagship.lane), flagship.slotIndex, shipById(ADMIRALS[bot.admiral].flagship));
+  const deploy = (count: number) => {
+    const after = copyOf(start);
+    const ships = planShips(after, bot, count);
+    // Auch das Flaggschiff landet erst in dieser Runde und manövriert noch nicht.
+    const arrivals = [...ships.map((ship) => ship.target), ...(flagship ? [flagship] : [])];
+    return { ships, situation: new Situation(after, bot, round, arrivals, random) };
+  };
+  let { ships, situation } = deploy(maxDeploys(round));
+  // Schnellverlegung: Passt ein weiteres Schiff, zählt, was es schon in dieser Runde bringt; gewählt, legt er es.
+  const rapid = bot.commandHand.some((card) => card.id === "rapid_deployment") ? deploy(maxDeploys(round) + 1) : null;
+  if (rapid && rapid.ships.length > ships.length) situation.extraShip = rapid.situation.arrivalGain(situation, rapid.ships.at(-1)!.target);
   const command = situation.planCommand();
-  const { maneuver, power } = situation.planPower(situation.planManeuver(command), command);
+  const card = command && bot.commandHand[command.handIndex]!;
+  if (card?.id === "rapid_deployment") ({ ships, situation } = rapid!);
+  const { maneuver, power } = situation.planPower(situation.planManeuver(command), command, allowsManeuverAndPower(card));
   return {
     ships,
     command: command && { handIndex: command.handIndex, target: command.target && slotTarget(command.target), destination: command.destination?.index ?? null },
@@ -201,13 +236,23 @@ class Situation {
   /** Der Kampf dieser Runde samt Railgun, falls sich niemand bewegt und keiner einen Befehl spielt. */
   private readonly preview: Board;
   private readonly shots: Extract<RoundEvent, { kind: "attack" }>[];
+  /** Schnellverlegung: was das zusätzliche Schiff bringt (`arrivalGain`); null, wenn keins mehr passt. */
+  extraShip: number | null = null;
+  /** Die Stellung nach dem Kampf dieser Runde ohne Befehl und Manöver (`standing`). */
+  private baseline: number | null = null;
+  /** Das Grundmanöver neben einem Befehl ohne eigenes Zielschiff (`planManeuver`), einmal geplant. */
+  private freeManeuver: TurnPlan["maneuver"] | undefined;
+  /** Für Befehle auf der Kopie: Was er dabei ziehen würde, zählt der Probelauf nicht. */
+  private readonly commander: Commander;
 
   constructor(
     private readonly board: Board,
     private readonly bot: BotView,
+    private readonly round: number,
     arrivals: readonly SlotTarget[],
     private readonly random: () => number,
   ) {
+    this.commander = { side: bot.side, drawExtra: () => ({ ships: 0, commands: 0 }) };
     this.side = bot.side;
     this.own = board.ships(bot.side);
     this.enemies = board.ships(opposite(bot.side));
@@ -265,14 +310,38 @@ class Situation {
   private flagshipThreat(): number {
     const flagship = this.flagship;
     if (flagship === null) return 0;
-    let command = 0;
-    if (this.bot.opponent.commandHandSize > 0) {
-      if (unplayed(this.bot, "torpedo") > 0) command = 5;
-      else if (unplayed(this.bot, "orbital_strike") > 0 && highest(this.own, hp) === flagship) command = 4;
-      else if (unplayed(this.bot, "volley_fire") > 0) command = 1;
-    }
     const guard = flagship.card!.id === "bastion" ? ABILITY_VALUES.guardianShield : 0;
-    return Math.max(0, this.hit(flagship) + command - guard);
+    return Math.max(0, this.hit(flagship) + this.commandThreat(flagship) - guard);
+  }
+
+  /** Der stärkste Angriffsbefehl auf das Flaggschiff, von dem der Gegner noch eine Kopie hat. */
+  private commandThreat(flagship: Slot): number {
+    if (this.bot.opponent.commandHandSize === 0) return 0;
+    const ships = this.own.filter((slot) => !isToken(slot.card!));
+    const front = this.board.isExposed(flagship);
+    const threats: [CommandId, number][] = [
+      ["torpedo", 5],
+      ["orbital_strike", highest(this.own, hp) === flagship ? 4 : 0],
+      ["coup_de_grace", lowest(ships, hp) === flagship ? 4 : 0],
+      ["heat_seeker", 3],
+      ["piercing_shot", front ? 3 : 2],
+      ["crossfire", this.partner(flagship).isOccupied ? 0 : 3],
+      ["bombardment", flagship.lane.type === "command" ? 2 : 0],
+      ["volley_fire", 1],
+    ];
+    return Math.max(0, ...threats.filter(([id]) => unplayed(this.bot, id) > 0).map(([, amount]) => amount));
+  }
+
+  /** Ob ein Schild dieser Stärke das Flaggschiff rettet, dem sonst in dieser Runde der Fall droht. */
+  private rescues(shield: number): boolean {
+    const flagship = this.flagship;
+    const threat = this.flagshipThreat();
+    return flagship !== null && threat >= durability(flagship) && threat - shield < durability(flagship);
+  }
+
+  /** Der Slot gleicher Nummer in der anderen Lane derselben Seite. */
+  private partner(slot: Slot): Slot {
+    return this.board.lane(slot.lane.side, otherLane(slot.lane.type)).slots[slot.index]!;
   }
 
   /**
@@ -320,17 +389,26 @@ class Situation {
   }
 
   /**
-   * Wie gern ein Torpedo auf dieses Schiff zielt, aus Sicht der Gegenseite: der Schaden, voll für ein
-   * Schiff, das wahrscheinlich stehen bleibt (unbeschädigt, gedeckt hinten oder einziger Angreifer
-   * vorne), halb für eines, das ausweichen könnte. So zielt der Bot selbst, so erwartet er es vom Gegner.
+   * Ob ein Schiff wahrscheinlich stehen bleibt: unbeschädigt, gedeckt hinten oder einziger Angreifer vorne. Für
+   * Befehle, die einen Slot treffen (Torpedo, Durchschlag); so zielt der Bot selbst, so erwartet er es vom Gegner.
    */
-  private torpedoValue(slot: Slot): number {
+  private stays(slot: Slot): boolean {
     const strike = this.board.lane(slot.lane.side, "strike");
-    const stays =
+    return (
       !damaged(slot) ||
       !this.board.isExposed(slot) ||
-      (slot.lane.type === "strike" && !strike.occupiedSlots.some((other) => other !== slot && attacks(other)));
-    return damageValue(slot, 5) * (stays ? 1 : UNSURE);
+      (slot.lane.type === "strike" && !strike.occupiedSlots.some((other) => other !== slot && attacks(other)))
+    );
+  }
+
+  /** Wie gern ein Torpedo auf dieses Schiff zielt: der Schaden, halb für eines, das ausweichen könnte (`stays`). */
+  private torpedoValue(slot: Slot): number {
+    return damageValue(slot, 5) * (this.stays(slot) ? 1 : UNSURE);
+  }
+
+  /** Ob ein angeschlagenes gegnerisches Schiff, das sonst fällt, wohl die Lane wechselt (Wärmesucher). */
+  private flees(slot: Slot): boolean {
+    return damaged(slot) && this.dies(slot) && this.pairsAfterMove(slot);
   }
 
   /** Wohin sich ein angeschlagenes gegnerisches Strike-Schiff, das sonst fällt, am ehesten zurückzieht. */
@@ -451,7 +529,154 @@ class Situation {
       case "scavenge":
         // Nachziehen lohnt sich, solange die Schiffshand dünn ist; eine volle Hand verschluckt die Karte.
         return untargeted(this.bot.shipHand.length <= 3 ? 1.5 : 0.5);
+      case "evasive_action": {
+        // Ausweichen innerhalb der Lane samt Schild 2: für ein Schiff unter Beschuss, in den Slot, der im Probekampf am meisten bringt.
+        let best: Option | null = null;
+        const ships = this.own.filter((slot) => slot.card!.id !== "pendulum" && (this.hit(slot) > 0 || (slot === this.flagship && this.rescues(2))));
+        for (const ship of ships) {
+          for (const destination of this.destinations(ship, null).filter((slot) => slot.lane === ship.lane)) {
+            const score = Math.max(this.simulated(card, ship, destination), ship === this.flagship && this.rescues(2) ? DECISIVE / 2 : 0);
+            if (score > (best?.score ?? 0)) best = on(ship, score, destination);
+          }
+        }
+        return best;
+      }
+      case "micro_jump": {
+        // Droht dem Flaggschiff der Fall, springt es (reicht ein Notschild, ist der lieber); sonst ein Schiff, das im Kampf
+        // mehr verliert, als sein Schuss bringt. Die Pendulum springt nur zur Rettung, sonst fiele ihre Railgun aus.
+        const flagship = this.flagship;
+        if (flagship && this.flagshipThreat() >= durability(flagship)) return on(flagship, DECISIVE / 2 - (this.rescues(3) ? 1 : 0));
+        return this.bestTarget(card, this.own.filter((slot) => slot.card!.id !== "pendulum" && this.hit(slot) > 0));
+      }
+      case "rapid_deployment":
+        return this.extraShip === null ? null : untargeted(this.extraShip);
+      case "draw_fire":
+        return this.bestTarget(card, this.own.filter((slot) => this.board.isExposed(slot)));
+      case "shield_grid":
+        return untargeted(Math.max(this.simulated(card, null), this.rescues(1) ? DECISIVE / 2 : 0));
+      case "ablative_armor":
+      case "covering_fire": {
+        // Rettet der Schild das Flaggschiff (Feuerschutz auch über seinen Partner), geht er dorthin; sonst wohin er im Probekampf am meisten bringt.
+        const flagship = this.flagship;
+        if (flagship && this.rescues(card.id === "ablative_armor" ? 2 : 1)) return on(flagship, DECISIVE / 2);
+        return this.bestTarget(card, this.own);
+      }
+      case "drone_squadron":
+        return untargeted(this.simulated(card, null));
+      case "collision_course":
+        return this.bestTarget(card, this.lane("strike").occupiedSlots.filter((slot) => canTargetShip(card, slot.card!)));
+      case "countermeasures": {
+        // Lässt einen Angriff oder eine Schwächung des Gegners verpuffen, sonst zieht er einen Befehl. Wackelt das eigene
+        // Flaggschiff erst durch einen Befehl, kann sie das Match retten.
+        const chance = this.hostileChance();
+        const flagship = this.flagship;
+        const decisive = flagship !== null && this.hit(flagship) < durability(flagship) && this.flagshipThreat() >= durability(flagship);
+        return untargeted(chance * (decisive ? DECISIVE / 2 : COUNTER.typical) + (1 - chance) * COUNTER.draw);
+      }
+      case "carte_blanche": {
+        // Grundmanöver und Fähigkeit zusammen: Sie bringt, was das schwächere der beiden zusätzlich bringt.
+        const maneuver = this.planManeuver(null);
+        const power = maneuver && this.bestPower(null, maneuver);
+        return power ? untargeted(Math.min(this.maneuverGain(maneuver!), power.gain)) : null;
+      }
+      case "radio_silence": {
+        // Die gegnerische Fähigkeit dieser Runde verpufft: so oft, wie er sie einsetzt, mal ihr Wert an seinem besten Ziel.
+        const admiral = this.bot.opponent.admiral;
+        if (admiral === null) return null;
+        const enemy = opposite(this.side);
+        const id = ADMIRALS[admiral].power;
+        const losses = powerTargets(this.board, enemy, id, [], []).map(
+          ({ lane, slotIndex }) => this.standing() - this.outcome((board) => resolvePower(board, enemy, { id, target: { lane, slotIndex } }, [])),
+        );
+        return untargeted(GUESS.power * Math.max(0, ...losses));
+      }
+      case "minefield": {
+        // Trifft, was beim Gegner in dieser Runde ankommt: meist ein Schiff, in Runde 1 zwei und das Flaggschiff, bei Moreau manchmal ein Trugbild.
+        const flagship = this.round === 1 ? 3 * FLAGSHIP_WEIGHT : 0;
+        return untargeted(this.enemyDeploys() * GUESS.deploy * 3 + flagship + (this.bot.opponent.admiral === "moreau" ? GUESS.decoy : 0));
+      }
+      case "tractor_beam":
+        // Zieht ein Schiff in die andere Lane, am liebsten den Wächter vor dem Flaggschiff.
+        return this.bestTarget(card, enemies.filter((slot) => canTargetShip(card, slot.card!)));
+      case "heat_seeker": {
+        // Folgt seinem Ziel: 3 Schaden, 5 an einem Schiff, das wohl ausweicht.
+        const value = (slot: Slot) => damageValue(slot, this.flees(slot) ? 5 : 3);
+        const target = highest(enemies, value);
+        return target && on(target, value(target));
+      }
+      case "coup_de_grace": {
+        const target = lowest(enemies.filter((slot) => !isToken(slot.card!)), hp);
+        return target && untargeted(damageValue(target, 4));
+      }
+      case "piercing_shot": {
+        // Wie der Torpedo nach allen Bewegungen: 3 am vordersten Schiff der Slot-Nummer, 2 am Command-Schiff dahinter.
+        const strike = this.board.lane(opposite(this.side), "strike");
+        const sure = (slot: Slot, amount: number) => damageValue(slot, amount) * (this.stays(slot) ? 1 : UNSURE);
+        const column = (front: Slot) => {
+          const back = this.partner(front);
+          if (!front.isOccupied) return back.isOccupied ? sure(back, 3) : 0;
+          return sure(front, 3) + (back.isOccupied ? sure(back, 2) : 0);
+        };
+        const target = highest(strike.slots, column)!;
+        return on(target, column(target));
+      }
+      case "bombardment":
+        return untargeted(this.board.lane(opposite(this.side), "command").occupiedSlots.reduce((total, slot) => total + damageValue(slot, 2), 0));
+      case "crossfire": {
+        // Ein Schiff, das der Gegner in dieser Runde legt, gibt einem ungepaarten oft einen Partner.
+        const unpaired = enemies.filter((slot) => !this.partner(slot).isOccupied).reduce((total, slot) => total + damageValue(slot, 3), 0);
+        return untargeted(unpaired * (this.enemyDeploys() ? UNSURE : 1));
+      }
     }
+  }
+
+  /** Wie viele Schiffe der Gegner in dieser Runde höchstens legt: so viele, wie Hand, Flottengrenze und Runde erlauben. */
+  private enemyDeploys(): number {
+    const room = MAX_SHIPS_PER_SIDE - this.board.shipCount(opposite(this.side));
+    return Math.min(this.bot.opponent.shipHandSize, room, maxDeploys(this.round));
+  }
+
+  /** Wie wahrscheinlich der Gegner einen Angriff oder eine Schwächung spielt: ob er einen hält (aus seinen ungespielten Kopien) und spielt. */
+  private hostileChance(): number {
+    let total = 0;
+    let hostile = 0;
+    for (const card of COMMANDS) {
+      const copies = unplayed(this.bot, card.id);
+      total += copies;
+      if (card.commandType === "attack" || card.commandType === "debuff") hostile += copies;
+    }
+    if (total === 0) return 0;
+    return GUESS.hostile * (1 - (1 - hostile / total) ** this.bot.opponent.commandHandSize);
+  }
+
+  /** Was der Befehl im Kampf dieser Runde bringt: auf einer Kopie angewendet, verglichen mit der Lage ohne ihn (`standing`). */
+  private simulated(card: CommandCard, target: Slot | null, destination: Slot | null = null): number {
+    return (
+      this.outcome((board) => {
+        const at = (slot: Slot | null) => slot && board.lane(slot.lane.side, slot.lane.type).slots[slot.index]!;
+        const ship = at(target);
+        // Wärmesucher und Traktorstrahl wirken auf das erfasste Schiff.
+        if (ship && targetsEnemyShip(card)) ship.locks = [card.id];
+        resolveEffects(board, [{ commander: this.commander, card, target: ship, destination: at(destination) }], []);
+      }) - this.standing()
+    );
+  }
+
+  /** Das gültige Ziel, auf dem der Befehl im Probekampf am meisten bringt; null, wenn er nirgends etwas bringt. */
+  private bestTarget(card: CommandCard, targets: readonly Slot[]): Option | null {
+    let best: Option | null = null;
+    for (const target of targets.filter((slot) => canTargetLane(card, slot.lane.type) && canTargetShip(card, slot.card!))) {
+      const score = this.simulated(card, target);
+      if (score > (best?.score ?? 0)) best = on(target, score);
+    }
+    return best;
+  }
+
+  /** Schnellverlegung, auf der Kopie mit dem zusätzlichen Schiff in `target`: was es im Kampf dieser Runde gegenüber `without` bringt. */
+  arrivalGain(without: Situation, target: SlotTarget): number {
+    const ship = this.lane(target.lane).slots[target.slotIndex]!;
+    const worth = durability(ship) + KILL_BONUS + ship.attack * POWER.future;
+    return RAPID_TEMPO + this.standing() - without.standing() - worth;
   }
 
   /** Feuert die eigene Railgun in dieser Runde auf ein Command-Schiff hinter einer Deckung, die ein Torpedo zerstört: Deckung und Ziel. */
@@ -469,6 +694,13 @@ class Situation {
    * Flaggschiffs, sonst selten ein Ausweichen.
    */
   planManeuver(command: Option | null): TurnPlan["maneuver"] {
+    // Ohne eigenes Zielschiff steht es schon fest, wenn Freie Hand es bewertet hat.
+    if (command?.target != null) return this.maneuverBeside(command);
+    if (this.freeManeuver === undefined) this.freeManeuver = this.maneuverBeside(null);
+    return this.freeManeuver;
+  }
+
+  private maneuverBeside(command: Option | null): TurnPlan["maneuver"] {
     const other = command?.destination ? { ship: command.target!, destination: command.destination } : null;
     const movable = this.settled(this.own).filter((slot) => slot !== command?.target);
     // Die Pendulum bleibt sonst stehen: Sie feuert oder markiert jede Runde, und bewegt sie sich, fällt der Schuss aus.
@@ -613,20 +845,34 @@ class Situation {
   /**
    * Admiralsfähigkeit statt Grundmanöver: Jedes mögliche Ziel der Fähigkeit und das geplante Manöver werden im
    * Kampf dieser Runde durchgespielt (ohne die Züge des Gegners); die Fähigkeit gewinnt, wenn sie mehr bringt als
-   * das Manöver samt Vorschuss.
+   * das Manöver samt Vorschuss. Mit Freier Hand (`both`) gibt es beide.
    */
-  planPower(maneuver: TurnPlan["maneuver"], command: Option | null): { maneuver: TurnPlan["maneuver"]; power: TurnPlan["power"] } {
-    const base = this.outcome(() => {});
+  planPower(maneuver: TurnPlan["maneuver"], command: Option | null, both = false): { maneuver: TurnPlan["maneuver"]; power: TurnPlan["power"] } {
+    const best = this.bestPower(command, both ? maneuver : null);
+    if (best === null) return { maneuver, power: null };
+    if (!both && maneuver && this.maneuverGain(maneuver) >= best.gain) return { maneuver, power: null };
+    return { maneuver: both ? maneuver : null, power: { target: best.target } };
+  }
+
+  /** Das beste Ziel der Fähigkeit und was sie bringt; null, wenn sie nichts bringt. Sie meidet die Ziel-Slots von Befehl und `maneuver`. */
+  private bestPower(command: Option | null, maneuver: TurnPlan["maneuver"]): { target: SlotTarget; gain: number } | null {
     let best: { target: SlotTarget; gain: number } | null = null;
-    for (const option of this.powerOptions(command)) {
-      const gain = this.outcome(option.apply) - base;
+    for (const option of this.powerOptions(command, maneuver)) {
+      const gain = this.outcome(option.apply) - this.standing();
       if (gain > (best?.gain ?? 0)) best = { target: option.target, gain };
     }
-    if (best === null) return { maneuver, power: null };
-    if (maneuver && this.outcome((board) => applyMove(board, this.side, maneuver)) - base + POWER.maneuverHeadStart >= best.gain) {
-      return { maneuver, power: null };
-    }
-    return { maneuver: null, power: { target: best.target } };
+    return best;
+  }
+
+  /** Was das Grundmanöver im Kampf dieser Runde bringt, samt Vorschuss. */
+  private maneuverGain(maneuver: NonNullable<TurnPlan["maneuver"]>): number {
+    return this.outcome((board) => applyMove(board, this.side, maneuver)) - this.standing() + POWER.maneuverHeadStart;
+  }
+
+  /** Die Stellung nach dem Kampf dieser Runde, wenn niemand etwas tut. */
+  private standing(): number {
+    this.baseline ??= this.outcome(() => {});
+    return this.baseline;
   }
 
   /** Der Kampf dieser Runde auf einer Kopie nach `setup`: die Stellung danach aus eigener Sicht, samt dem Feuer der Folgerunden. */
@@ -640,9 +886,9 @@ class Situation {
   }
 
   /** Die gültigen Ziele der eigenen Fähigkeit (`powerTargets` auf der Kopie mit den gelegten Schiffen), je mit ihrer Wirkung. */
-  private powerOptions(command: Option | null): { target: SlotTarget; apply: (board: Board) => void }[] {
+  private powerOptions(command: Option | null, maneuver: TurnPlan["maneuver"]): { target: SlotTarget; apply: (board: Board) => void }[] {
     const power = ADMIRALS[this.bot.admiral].power;
-    const blocked = command?.destination ? [slotTarget(command.destination)] : [];
+    const blocked = [...(command?.destination ? [slotTarget(command.destination)] : []), ...(maneuver ? [maneuver.destination] : [])];
     return powerTargets(this.board, this.side, power, [], blocked).map(({ lane, slotIndex }) => {
       const target = { lane, slotIndex };
       return { target, apply: (board: Board) => resolvePower(board, this.side, { id: power, target }, []) };
