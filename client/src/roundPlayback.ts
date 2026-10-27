@@ -17,7 +17,7 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AdmiralId, PowerId } from "../../shared/admirals.ts";
 import type { Side } from "../../shared/board.ts";
-import { shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
+import { type CommandId, type ShipId, shipById } from "../../shared/cards.ts";
 import type { CommandEffect, RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget } from "../../shared/protocol.ts";
 import { say, silenceRadio } from "./audio/radio.ts";
 import { playSound, stopSounds } from "./audio/sounds.ts";

@@ -3,8 +3,8 @@
 // Aufruf aus server/: `bun tools/simulate.ts [partien je Paarung]` (Standard 2000).
 
 import { ADMIRAL_IDS, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
-import { opposite, slotTarget, type Side } from "../../shared/board.ts";
-import { isFlagship, shipById, type CommandId } from "../../shared/cards.ts";
+import { opposite, type Side, slotTarget } from "../../shared/board.ts";
+import { type CommandId, isFlagship, shipById } from "../../shared/cards.ts";
 import type { ErrorCode, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
 import { planBotTurn } from "../src/bot.ts";
 import { Match, type Seat } from "../src/match.ts";
@@ -67,7 +67,11 @@ function abilityEffect(event: RoundEvent): { side: Side; key: string; amount: nu
 }
 
 /** Zählt, was ein Effekt der neuen Befehle bewirkt hat; `flagships` stehen vor der Runde, `events` sind die der Runde. */
-function newCardEffect(event: Extract<RoundEvent, { kind: "effect" }>, flagships: readonly { side: Side; lane: string; slotIndex: number }[], events: readonly RoundEvent[]): void {
+function newCardEffect(
+  event: Extract<RoundEvent, { kind: "effect" }>,
+  flagships: readonly { side: Side; lane: string; slotIndex: number }[],
+  events: readonly RoundEvent[],
+): void {
   const { cardId, effect, ship } = event;
   if (effect.type === "jump") {
     count("Kurzsprung");
@@ -118,7 +122,10 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
     }
     const round = match.round;
     // Wo die Flaggschiffe vor der Runde stehen: Zieht ein Traktorstrahl den Wächter davor weg, liegt eins frei.
-    const flagships = [side(0), side(1)].map((of) => match.board.flagship(of)).filter((slot) => slot !== null).map((slot) => ({ side: slot.lane.side, ...slotTarget(slot) }));
+    const flagships = [side(0), side(1)]
+      .map((of) => match.board.flagship(of))
+      .filter((slot) => slot !== null)
+      .map((slot) => ({ side: slot.lane.side, ...slotTarget(slot) }));
     const events = match.resolveRound();
     const destroyed = events.filter((event) => event.kind === "destroyed").length;
     kills += destroyed;
@@ -158,7 +165,13 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
     for (const of of [side(0), side(1)]) {
       const own = (event: RoundEvent) => "side" in event && event.side === of;
       if (events.some((event) => own(event) && event.kind === "rule" && event.cardId === "carte_blanche")) {
-        count("Freie Hand: mit Manöver und Fähigkeit", events.some((event) => own(event) && (event.kind === "maneuver" || event.kind === "swap")) && events.some((event) => own(event) && event.kind === "power") ? 1 : 0);
+        count(
+          "Freie Hand: mit Manöver und Fähigkeit",
+          events.some((event) => own(event) && (event.kind === "maneuver" || event.kind === "swap")) &&
+            events.some((event) => own(event) && event.kind === "power")
+            ? 1
+            : 0,
+        );
       }
     }
   }
@@ -207,7 +220,9 @@ for (const row of ADMIRAL_IDS) {
   console.log(`${name(row).padEnd(20)}${cells.join("")}   ${(100 * total).toFixed(1).padStart(6)} %`);
 }
 console.log(`Runden: Ø ${average(rounds)}, Median ${quantile(0.5)}, p10 ${quantile(0.1)}, p90 ${quantile(0.9)}, max ${sorted.at(-1)}`);
-console.log(`Unentschieden: ${games.filter((game) => game.winner === "draw").length}, Patts (Runde ${ROUND_LIMIT} erreicht): ${games.filter((game) => game.winner === null).length}`);
+console.log(
+  `Unentschieden: ${games.filter((game) => game.winner === "draw").length}, Patts (Runde ${ROUND_LIMIT} erreicht): ${games.filter((game) => game.winner === null).length}`,
+);
 console.log("Einsatz ab Runde 2 (Anteil der Runden) und Wirkung der Fähigkeiten je Partie:");
 for (const id of ADMIRAL_IDS) {
   const { games: count, rounds: own, powers, maneuvers, effects } = usage.get(id)!;
@@ -226,18 +241,30 @@ console.log(`Leere Befehlshand: Seat 0 ${percent(emptyCommandHand[0]!, totalRoun
 console.log("Befehle je Karte: gespielt (Anteil an allen), wie oft gespielt je Runde auf der Hand, davon ohne Wirkung bzw. von Gegenmaßnahmen verpufft:");
 for (const [id, { played, held, idle, countered }] of [...cards].sort((a, b) => b[1].played - a[1].played)) {
   const columns = [percent(played, commands), percent(played, held), percent(idle, played), percent(countered, played)].map((value) => value.padStart(7));
-  console.log(`  ${id.padEnd(18)} ${String(played).padStart(6)} ${columns[0]}   je Handrunde ${columns[1]}   ohne Wirkung ${columns[2]}   verpufft ${columns[3]}`);
+  console.log(
+    `  ${id.padEnd(18)} ${String(played).padStart(6)} ${columns[0]}   je Handrunde ${columns[1]}   ohne Wirkung ${columns[2]}   verpufft ${columns[3]}`,
+  );
 }
 console.log("Neue Karten (Anzahl über alle Partien):");
 const playedOf = (id: CommandId) => cards.get(id)?.played ?? 0;
 console.log(`  Kurzsprünge ${stats.get("Kurzsprung") ?? 0}, davon Flaggschiff ${stats.get("Kurzsprung: Flaggschiff") ?? 0}`);
-console.log(`  Rammstöße ${stats.get("Rammkurs") ?? 0}, Ziel zerstört ${stats.get("Rammkurs: Ziel zerstört") ?? 0}, Rammer zerstört ${stats.get("Rammkurs: Rammer zerstört") ?? 0}`);
-console.log(`  Gegenmaßnahmen ${playedOf("countermeasures")}: Befehl verpufft ${stats.get("Gegenmaßnahmen: verpufft") ?? 0}, gezogen ${stats.get("Gegenmaßnahmen: gezogen") ?? 0}`);
+console.log(
+  `  Rammstöße ${stats.get("Rammkurs") ?? 0}, Ziel zerstört ${stats.get("Rammkurs: Ziel zerstört") ?? 0}, Rammer zerstört ${stats.get("Rammkurs: Rammer zerstört") ?? 0}`,
+);
+console.log(
+  `  Gegenmaßnahmen ${playedOf("countermeasures")}: Befehl verpufft ${stats.get("Gegenmaßnahmen: verpufft") ?? 0}, gezogen ${stats.get("Gegenmaßnahmen: gezogen") ?? 0}`,
+);
 console.log(`  Funkstille ${playedOf("radio_silence")}: entfernte Marken bzw. Trugbilder ${stats.get("Funkstille: Marke bzw. Trugbild entfernt") ?? 0}`);
-console.log(`  Traktorstrahl ${playedOf("tractor_beam")}: Flaggschiff freigelegt ${stats.get("Traktorstrahl: Flaggschiff freigelegt") ?? 0}, danach beschossen ${stats.get("Traktorstrahl: freigelegtes Flaggschiff beschossen") ?? 0}`);
+console.log(
+  `  Traktorstrahl ${playedOf("tractor_beam")}: Flaggschiff freigelegt ${stats.get("Traktorstrahl: Flaggschiff freigelegt") ?? 0}, danach beschossen ${stats.get("Traktorstrahl: freigelegtes Flaggschiff beschossen") ?? 0}`,
+);
 console.log(`  Wärmesucher ${playedOf("heat_seeker")}: mit 5 Schaden ${stats.get("Wärmesucher: 5 Schaden (bewegtes Ziel)") ?? 0}`);
-console.log(`  Minenfeld ${playedOf("minefield")}: Treffer je Karte ${((stats.get("Minenfeld: Treffer") ?? 0) / Math.max(1, playedOf("minefield"))).toFixed(2)}`);
-console.log(`  Drohnenstaffel ${playedOf("drone_squadron")}: Drohnen je Karte ${((stats.get("Drohnenstaffel: Drohnen") ?? 0) / Math.max(1, playedOf("drone_squadron"))).toFixed(2)}`);
+console.log(
+  `  Minenfeld ${playedOf("minefield")}: Treffer je Karte ${((stats.get("Minenfeld: Treffer") ?? 0) / Math.max(1, playedOf("minefield"))).toFixed(2)}`,
+);
+console.log(
+  `  Drohnenstaffel ${playedOf("drone_squadron")}: Drohnen je Karte ${((stats.get("Drohnenstaffel: Drohnen") ?? 0) / Math.max(1, playedOf("drone_squadron"))).toFixed(2)}`,
+);
 console.log(`  Freie Hand ${playedOf("carte_blanche")}: mit Manöver und Fähigkeit ${stats.get("Freie Hand: mit Manöver und Fähigkeit") ?? 0}`);
 console.log(errors.size === 0 ? "Zugprüfung: keine Fehler" : `Zugprüfung: ${[...errors].map(([code, count]) => `${code} ${count}×`).join(", ")}`);
 console.log(`Dauer ${((performance.now() - started) / 1000).toFixed(1)} s`);

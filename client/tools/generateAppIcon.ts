@@ -53,7 +53,11 @@ async function writeIcons(size: number): Promise<void> {
   const inner = Math.round(size * (1 - 2 * MARGIN));
   const radius = Math.round(inner * RADIUS);
   const mask = Buffer.from(`<svg width="${inner}" height="${inner}"><rect width="${inner}" height="${inner}" rx="${radius}" fill="#fff"/></svg>`);
-  const rounded = await sharp(SOURCE).resize(inner, inner).composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
+  const rounded = await sharp(SOURCE)
+    .resize(inner, inner)
+    .composite([{ input: mask, blend: "dest-in" }])
+    .png()
+    .toBuffer();
   await sharp({ create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite([{ input: rounded, gravity: "center" }])
     .png()

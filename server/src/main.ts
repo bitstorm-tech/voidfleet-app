@@ -87,9 +87,7 @@ function onAddBot(socket: Socket, room: Room): void {
 // Die Icons im Manifest der installierbaren App brauchen feste Pfade; Bun schreibt nur die Links
 // in index.html auf seine gebündelten Dateien um, nicht die Pfade im Manifest.
 const APP_ICONS = ["icon-192.png", "icon-512.png", "icon-maskable-192.png", "icon-maskable-512.png"];
-const appIconRoutes = Object.fromEntries(
-  APP_ICONS.map((file) => [`/app/${file}`, Bun.file(`${import.meta.dir}/../../client/assets/app/${file}`)]),
-);
+const appIconRoutes = Object.fromEntries(APP_ICONS.map((file) => [`/app/${file}`, Bun.file(`${import.meta.dir}/../../client/assets/app/${file}`)]));
 
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),

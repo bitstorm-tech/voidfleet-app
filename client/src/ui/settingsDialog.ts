@@ -4,7 +4,7 @@
 // eigene App (`install.ts`). Jede Auswahl wird gespeichert (`settings.ts`); Lautstärken und Geschwindigkeiten gelten
 // sofort, ein Sprachwechsel lädt die Seite neu.
 
-import { locale, LOCALE_NAMES, switchLocale, t } from "../i18n/index.ts";
+import { LOCALE_NAMES, locale, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { iconDialog } from "./iconDialog.ts";
 import { installApp, onInstallable } from "./install.ts";
@@ -18,16 +18,18 @@ const ICON = `<circle cx="12" cy="12" r="3" />
 export class SettingsDialog {
   constructor(container: HTMLElement) {
     const dialog = iconDialog(container, "settings", t.settings.title, ICON);
-    dialog.querySelector(".dialog-close")!.before(
-      volumeSlider("musicVolume"),
-      volumeSlider("effectsVolume"),
-      volumeSlider("voiceVolume"),
-      speedChoice("attackSpeed"),
-      speedChoice("movementSpeed"),
-      speedChoice("animationSpeed"),
-      choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
-      installRow(),
-    );
+    dialog
+      .querySelector(".dialog-close")!
+      .before(
+        volumeSlider("musicVolume"),
+        volumeSlider("effectsVolume"),
+        volumeSlider("voiceVolume"),
+        speedChoice("attackSpeed"),
+        speedChoice("movementSpeed"),
+        speedChoice("animationSpeed"),
+        choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
+        installRow(),
+      );
   }
 }
 
@@ -54,13 +56,7 @@ function installRow(): HTMLDivElement {
 }
 
 /** Segmentierte Auswahl: ein Feld je Option, die gewählte hervorgehoben. */
-function choice<T extends string>(
-  name: string,
-  legend: string,
-  labels: Record<T, string>,
-  current: T,
-  onChange: (next: T) => void,
-): HTMLFieldSetElement {
+function choice<T extends string>(name: string, legend: string, labels: Record<T, string>, current: T, onChange: (next: T) => void): HTMLFieldSetElement {
   const fieldset = Object.assign(document.createElement("fieldset"), { className: "settings-choice" });
   fieldset.append(Object.assign(document.createElement("legend"), { textContent: legend }));
   for (const option of Object.keys(labels) as T[]) {

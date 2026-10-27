@@ -4,7 +4,7 @@
 // (auch Drohne, Trugbild und Flaggschiffe), `?flagships` die fünf Flaggschiffe und das Trugbild.
 
 import { Board } from "../../shared/board.ts";
-import { FLAGSHIPS, SHIPS, shipById, type ShipCard, TOKENS } from "../../shared/cards.ts";
+import { FLAGSHIPS, SHIPS, type ShipCard, shipById, TOKENS } from "../../shared/cards.ts";
 import { loadSounds } from "../src/audio/sounds.ts";
 import { destroyShip } from "../src/scene/destruction.ts";
 import { MatchScene } from "../src/scene/matchScene.ts";
@@ -36,8 +36,14 @@ const CARDS: ShipCard[] = only ? [only] : flagships ? [...FLAGSHIPS, shipById("d
 const PADS: SlotPad[] = only
   ? [view.pad("enemy", "strike", 3)]
   : [
-      view.pad("player", "strike", 1), view.pad("player", "strike", 3), view.pad("player", "command", 2), view.pad("player", "command", 4),
-      view.pad("enemy", "strike", 2), view.pad("enemy", "strike", 4), view.pad("enemy", "command", 1), view.pad("enemy", "command", 3),
+      view.pad("player", "strike", 1),
+      view.pad("player", "strike", 3),
+      view.pad("player", "command", 2),
+      view.pad("player", "command", 4),
+      view.pad("enemy", "strike", 2),
+      view.pad("enemy", "strike", 4),
+      view.pad("enemy", "command", 1),
+      view.pad("enemy", "command", 3),
     ].slice(0, CARDS.length);
 
 async function deployAll(): Promise<void> {

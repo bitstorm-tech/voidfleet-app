@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { ADMIRAL_IDS, type AdmiralId } from "../../shared/admirals.ts";
 import { Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
-import { commandById, COMMANDS, deckCopies, shipById, type CommandId, type ShipId } from "../../shared/cards.ts";
+import { COMMANDS, type CommandId, commandById, deckCopies, type ShipId, shipById } from "../../shared/cards.ts";
 import type { TurnPlan } from "../../shared/protocol.ts";
-import { planBotTurn, type BotView } from "./bot.ts";
+import { type BotView, planBotTurn } from "./bot.ts";
 import { Match } from "./match.ts";
 
 function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: ShipId): Slot {
@@ -12,7 +12,13 @@ function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: 
 
 /** Halvorsen braucht für seine Fähigkeit eigene Drohnen; ohne sie plant der Bot wie ohne Admiralsfähigkeit. */
 function hands(ships: ShipId[], commands: CommandId[], admiral: AdmiralId = "halvorsen"): BotView {
-  return { side: "player", admiral, shipHand: ships.map(shipById), commandHand: commands.map(commandById), opponent: { admiral: null, playedCommands: [], commandHandSize: 0, shipHandSize: 0 } };
+  return {
+    side: "player",
+    admiral,
+    shipHand: ships.map(shipById),
+    commandHand: commands.map(commandById),
+    opponent: { admiral: null, playedCommands: [], commandHandSize: 0, shipHandSize: 0 },
+  };
 }
 
 /** Ein Zug ab Runde 2, mit einem Schiff; `random` steuert die seltenen Überraschungen (1: nie, 0: immer). */
@@ -357,7 +363,11 @@ test("Der Kurzsprung rettet das Flaggschiff, wenn kein Notschild reicht; reicht 
   const board = new Board();
   place(board, "player", "strike", 2, "hive").hp = 3;
   place(board, "enemy", "strike", 2, "plasma_frigate");
-  expect(planTurn(board, hands([], ["micro_jump", "emergency_shields"])).command).toEqual({ handIndex: 1, target: { lane: "strike", slotIndex: 2 }, destination: null });
+  expect(planTurn(board, hands([], ["micro_jump", "emergency_shields"])).command).toEqual({
+    handIndex: 1,
+    target: { lane: "strike", slotIndex: 2 },
+    destination: null,
+  });
   // Hält der Gegner noch Befehle, droht zusätzlich sein Torpedo: Gegen 3 + 5 Schaden hilft nur der Sprung.
   const bot = hands([], ["micro_jump", "emergency_shields"]);
   const armed = { ...bot, opponent: { ...bot.opponent, commandHandSize: 3 } };
@@ -418,7 +428,9 @@ test("Gegenmaßnahmen, solange der Gegner viele Angriffe übrig hat; hat er kein
   const bot = hands([], ["scavenge", "countermeasures"]);
   const armed = { ...bot, opponent: { ...bot.opponent, commandHandSize: 6 } };
   expect(planTurn(new Board(), armed).command?.handIndex).toBe(1);
-  const hostile = COMMANDS.filter((card) => card.commandType === "attack" || card.commandType === "debuff").flatMap((card) => Array<CommandId>(deckCopies(card)).fill(card.id));
+  const hostile = COMMANDS.filter((card) => card.commandType === "attack" || card.commandType === "debuff").flatMap((card) =>
+    Array<CommandId>(deckCopies(card)).fill(card.id),
+  );
   const spent = { ...bot, opponent: { ...armed.opponent, playedCommands: hostile } };
   expect(planTurn(new Board(), spent).command?.handIndex).toBe(0);
 });
@@ -463,7 +475,11 @@ test("Er verteilt das Feuer, statt Schaden zu verschenken", () => {
   place(board, "enemy", "strike", 1, "void_interceptor").hp = 2;
   place(board, "enemy", "strike", 3, "void_interceptor").hp = 2;
   // Jeder Kreuzer reicht für einen Jäger; ein zweiter Schuss auf denselben verpuffte.
-  expect(planTurn(board, hands([], [])).fire.map((order) => order.target.slotIndex).sort()).toEqual([1, 3]);
+  expect(
+    planTurn(board, hands([], []))
+      .fire.map((order) => order.target.slotIndex)
+      .sort(),
+  ).toEqual([1, 3]);
 });
 
 test("Feuerbefehle gibt es für eigene Kampfschiffe, auch ein frisch gelegtes, auf gegnerische Schiffe; der Zug gilt", () => {

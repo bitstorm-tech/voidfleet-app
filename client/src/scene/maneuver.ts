@@ -75,9 +75,7 @@ export class Maneuver {
 
   constructor(from: { x: number; z: number }, shipClass: ShipClass, towed = false) {
     const handling = HANDLING[shipClass];
-    this.handling = towed
-      ? { ...handling, speed: handling.speed * TOWED.speed, bank: handling.bank * TOWED.bank, acceleration: TOWED.acceleration }
-      : handling;
+    this.handling = towed ? { ...handling, speed: handling.speed * TOWED.speed, bank: handling.bank * TOWED.bank, acceleration: TOWED.acceleration } : handling;
     const start: Point = [from.x, from.z];
     const isSameLane = Math.abs(from.z) < SAME_LANE_TOLERANCE;
     const isLoop = !isSameLane && from.z > 0;

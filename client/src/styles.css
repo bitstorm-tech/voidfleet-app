@@ -255,7 +255,9 @@ body {
   height: 42px;
   object-fit: cover;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgb(var(--admiral-rgb)), 0 0 10px rgb(var(--admiral-rgb) / 0.5);
+  box-shadow:
+    0 0 0 2px rgb(var(--admiral-rgb)),
+    0 0 10px rgb(var(--admiral-rgb) / 0.5);
 }
 
 .opponent-admiral .identity {
@@ -432,8 +434,12 @@ body {
 }
 
 @keyframes radio-level {
-  from { scale: 1 0.3; }
-  to { scale: 1 1; }
+  from {
+    scale: 1 0.3;
+  }
+  to {
+    scale: 1 1;
+  }
 }
 
 .radio-text {
@@ -1116,8 +1122,16 @@ body {
 }
 
 @keyframes power-selecting {
-  from { box-shadow: 0 0 0 2px rgb(var(--admiral-rgb) / 0.6), 0 0 10px rgb(var(--admiral-rgb) / 0.4); }
-  to { box-shadow: 0 0 0 3px rgb(var(--admiral-rgb)), 0 0 26px rgb(var(--admiral-rgb) / 0.9); }
+  from {
+    box-shadow:
+      0 0 0 2px rgb(var(--admiral-rgb) / 0.6),
+      0 0 10px rgb(var(--admiral-rgb) / 0.4);
+  }
+  to {
+    box-shadow:
+      0 0 0 3px rgb(var(--admiral-rgb)),
+      0 0 26px rgb(var(--admiral-rgb) / 0.9);
+  }
 }
 
 /* Zielerfassung der Pendulum über der Fähigkeitskarte; in der Feuerrunde steht dort das Ziel der Railgun. */
@@ -1368,7 +1382,9 @@ body {
   background:
     linear-gradient(to bottom, var(--card-bg) 0%, rgb(0 0 0 / 0) 34%, rgb(0 0 0 / 0) 56%, var(--card-bg) 92%),
     var(--card-art) center / cover;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 0.9), 0 0 6px rgb(0 0 0 / 0.6);
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.9),
+    0 0 6px rgb(0 0 0 / 0.6);
 }
 
 .ship-card .name {
@@ -1538,7 +1554,9 @@ body {
   height: 48px;
   object-fit: cover;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgb(var(--admiral-rgb)), 0 0 14px rgb(var(--admiral-rgb) / 0.6);
+  box-shadow:
+    0 0 0 2px rgb(var(--admiral-rgb)),
+    0 0 14px rgb(var(--admiral-rgb) / 0.6);
 }
 
 .reveal-banner span {
@@ -1551,10 +1569,20 @@ body {
 }
 
 @keyframes banner {
-  0% { opacity: 0; translate: -50% -10px; }
-  12% { opacity: 1; translate: -50% 0; }
-  80% { opacity: 1; }
-  100% { opacity: 0; }
+  0% {
+    opacity: 0;
+    translate: -50% -10px;
+  }
+  12% {
+    opacity: 1;
+    translate: -50% 0;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .round-banner {
@@ -1600,10 +1628,20 @@ body {
 }
 
 @keyframes round-banner {
-  0% { opacity: 0; scale: 1.15; }
-  15% { opacity: 1; scale: 1; }
-  75% { opacity: 1; }
-  100% { opacity: 0; }
+  0% {
+    opacity: 0;
+    scale: 1.15;
+  }
+  15% {
+    opacity: 1;
+    scale: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 .float-layer {
@@ -1618,21 +1656,44 @@ body {
   font-size: 22px;
   font-weight: 700;
   white-space: nowrap;
-  text-shadow: 0 0 6px rgb(0 0 0 / 0.9), 0 1px 2px rgb(0 0 0 / 0.9);
+  text-shadow:
+    0 0 6px rgb(0 0 0 / 0.9),
+    0 1px 2px rgb(0 0 0 / 0.9);
   animation: float-up calc(1.4s * var(--animation-time-scale)) ease-out forwards;
 }
 
-.float-text.damage { color: rgb(var(--damage)); }
-.float-text.heal { color: rgb(var(--heal)); }
-.float-text.shield { color: rgb(var(--shield)); }
-.float-text.buff { color: rgb(var(--buff)); }
-.float-text.debuff { color: rgb(var(--debuff)); }
+.float-text.damage {
+  color: rgb(var(--damage));
+}
+.float-text.heal {
+  color: rgb(var(--heal));
+}
+.float-text.shield {
+  color: rgb(var(--shield));
+}
+.float-text.buff {
+  color: rgb(var(--buff));
+}
+.float-text.debuff {
+  color: rgb(var(--debuff));
+}
 
 @keyframes float-up {
-  0% { opacity: 0; transform: translateY(10px) scale(0.8); }
-  15% { opacity: 1; transform: translateY(0) scale(1.1); }
-  30% { transform: translateY(-6px) scale(1); }
-  100% { opacity: 0; transform: translateY(-56px); }
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.8);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.1);
+  }
+  30% {
+    transform: translateY(-6px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-56px);
+  }
 }
 
 /* --- Matchende --- */
@@ -1741,11 +1802,16 @@ body {
 }
 
 @keyframes result-fade {
-  from { opacity: 0; }
+  from {
+    opacity: 0;
+  }
 }
 
 @keyframes result-pop {
-  from { opacity: 0; transform: scale(0.85); }
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
 }
 
 .loading-overlay {
@@ -1821,12 +1887,18 @@ body {
 }
 
 @keyframes loading-pulse {
-  50% { opacity: 0.65; }
+  50% {
+    opacity: 0.65;
+  }
 }
 
 @keyframes loading-sweep {
-  from { translate: -100% 0; }
-  to { translate: 340% 0; }
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 340% 0;
+  }
 }
 
 /* --- Admiralswahl: Overlay über dem Brett, die Hand darunter bleibt frei --- */

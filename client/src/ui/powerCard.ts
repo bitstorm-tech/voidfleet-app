@@ -3,7 +3,7 @@
 // eingeplante Fähigkeit zurück. Bei Admiral Kerr steht darüber der Knopf der Zielerfassung, in der Runde, in der die
 // Railgun feuert, stattdessen ihr Ziel — mit einer Warnung, wenn die Pendulum geplant bewegt wird.
 
-import { ABILITY_VALUES, ADMIRALS, POWER_TARGETS, type AdmiralId } from "../../../shared/admirals.ts";
+import { ABILITY_VALUES, ADMIRALS, type AdmiralId, POWER_TARGETS } from "../../../shared/admirals.ts";
 import { admiralPortrait } from "../data/admirals.ts";
 import { t, upper } from "../i18n/index.ts";
 

@@ -3,6 +3,8 @@
 // wählt. Alle Varianten werden beim Laden auf gleiche Lautheit gebracht (`audio/sounds.ts`); `volume` legt
 // nur noch fest, wie laut ein Effekt im Verhältnis zu den anderen ist.
 
+import battle from "../../assets/audio/music/battle.mp3";
+import calm from "../../assets/audio/music/calm.mp3";
 import cannon_heavy_1 from "../../assets/audio/sfx/cannon_heavy_1.mp3";
 import cannon_heavy_2 from "../../assets/audio/sfx/cannon_heavy_2.mp3";
 import defeat_1 from "../../assets/audio/sfx/defeat_1.mp3";
@@ -44,8 +46,6 @@ import scavenge_1 from "../../assets/audio/sfx/scavenge_1.mp3";
 import shield_up_1 from "../../assets/audio/sfx/shield_up_1.mp3";
 import victory_1 from "../../assets/audio/sfx/victory_1.mp3";
 import victory_2 from "../../assets/audio/sfx/victory_2.mp3";
-import battle from "../../assets/audio/music/battle.mp3";
-import calm from "../../assets/audio/music/calm.mp3";
 
 export const SOUNDS = {
   // Waffen, je nach Schiff

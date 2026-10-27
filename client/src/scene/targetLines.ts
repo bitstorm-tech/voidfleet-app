@@ -8,8 +8,8 @@
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Curve3 } from "@babylonjs/core/Maths/math.path";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import { CreateTube } from "@babylonjs/core/Meshes/Builders/tubeBuilder";
@@ -104,8 +104,16 @@ export class TargetLines {
     );
     const scale = selected ? SELECTED_SCALE : 1;
     const points = curve.getPoints();
-    const tube = fizzle ? this.dashes(points, TUBE_RADIUS * scale) : CreateTube("target-line", { path: points, radius: TUBE_RADIUS * scale, tessellation: 8 }, this.scene);
-    const head = fizzle ? this.cross(scale) : CreateCylinder("target-line-head", { height: HEAD_LENGTH, diameterTop: HEAD_WIDTH * Math.sqrt(scale), diameterBottom: 0, tessellation: 12 }, this.scene);
+    const tube = fizzle
+      ? this.dashes(points, TUBE_RADIUS * scale)
+      : CreateTube("target-line", { path: points, radius: TUBE_RADIUS * scale, tessellation: 8 }, this.scene);
+    const head = fizzle
+      ? this.cross(scale)
+      : CreateCylinder(
+          "target-line-head",
+          { height: HEAD_LENGTH, diameterTop: HEAD_WIDTH * Math.sqrt(scale), diameterBottom: 0, tessellation: 12 },
+          this.scene,
+        );
     head.position = tip.add(up.scale(HEAD_LENGTH / 2));
     for (const mesh of [tube, head]) {
       mesh.material = this.material(side, fizzle, selected);

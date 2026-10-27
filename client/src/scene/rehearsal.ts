@@ -46,7 +46,13 @@ export async function rehearse(view: MatchScene): Promise<void> {
   for (const ship of ships) ship.root.position.copyFrom(STAGE);
   // Je Seite jede Darstellung der Bögen: Schuss, gewählter Schuss, verpuffender, gewählter verpuffender.
   const lines = (["player", "enemy"] as const).flatMap((side) =>
-    [0, 1, 2, 3].map((index) => ({ from: view.pad(side, "strike", index), to: view.pad(side, "command", 5 - index), side, selected: index % 2 === 1, fizzle: index >= 2 })),
+    [0, 1, 2, 3].map((index) => ({
+      from: view.pad(side, "strike", index),
+      to: view.pad(side, "command", 5 - index),
+      side,
+      selected: index % 2 === 1,
+      fizzle: index >= 2,
+    })),
   );
   view.targetLines.show(lines);
 

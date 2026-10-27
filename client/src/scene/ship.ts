@@ -10,20 +10,20 @@
 // aus Bruchstücken, das bei der Zerstörung an seine Stelle tritt (`destruction.ts`).
 
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
+import { Ray } from "@babylonjs/core/Culling/ray";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
-import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Material } from "@babylonjs/core/Materials/material";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import { Ray } from "@babylonjs/core/Culling/ray";
-import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
+import { CreatePlane } from "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
-import { Tools } from "@babylonjs/core/Misc/tools";
 import type { Observer } from "@babylonjs/core/Misc/observable";
+import { Tools } from "@babylonjs/core/Misc/tools";
 import type { Scene } from "@babylonjs/core/scene";
 // Registriert `renderOverlay` auf Mesh: zeichnet das Modell in einer Farbe darüber (Treffer-Blitz).
 import "@babylonjs/core/Rendering/outlineRenderer";
@@ -340,12 +340,16 @@ export class ShipView {
     const flight = new Maneuver(this.root.position, this.card.shipClass, towed);
     // Die Marken am Boden landen mit dem Schiff, statt mitzufliegen.
     this.floor.setEnabled(false);
-    await this.fly(flight.duration, (progress) => {
-      const pose = flight.pose(progress);
-      this.root.position.set(pose.x, pose.y, pose.z);
-      this.root.rotation.y = pose.yaw;
-      this.modelRoot.rotation.set(pose.pitch, 0, pose.roll);
-    }, !towed);
+    await this.fly(
+      flight.duration,
+      (progress) => {
+        const pose = flight.pose(progress);
+        this.root.position.set(pose.x, pose.y, pose.z);
+        this.root.rotation.y = pose.yaw;
+        this.modelRoot.rotation.set(pose.pitch, 0, pose.roll);
+      },
+      !towed,
+    );
     this.root.position.setAll(0);
     this.root.rotation.setAll(0);
     this.modelRoot.rotation.setAll(0);
@@ -415,10 +419,15 @@ export class ShipView {
   /** Ein Flug im Takt der Bewegungen: Das Triebwerk folgt dem Schiff im Stereobild und verklingt nach der Landung. */
   private async fly(duration: number, update: (progress: number) => void, withEngine = true): Promise<void> {
     const engine = withEngine ? loopSound(ENGINE_SOUNDS[this.card.shipClass], { at: this.root.getAbsolutePosition() }) : null;
-    await tween(this.scene, duration, (progress) => {
-      update(progress);
-      engine?.follow(this.root.getAbsolutePosition());
-    }, "movement");
+    await tween(
+      this.scene,
+      duration,
+      (progress) => {
+        update(progress);
+        engine?.follow(this.root.getAbsolutePosition());
+      },
+      "movement",
+    );
     engine?.stop(ENGINE_FADE);
   }
 
@@ -466,11 +475,7 @@ export class ShipView {
   /** Todeskampf: das Schiff zittert immer stärker, sackt ab und krängt zur Seite (`amount` 0..1). */
   distress(amount: number): void {
     const jitter = DISTRESS_JITTER * (0.2 + 0.8 * amount ** 2);
-    this.modelRoot.position.set(
-      (Math.random() - 0.5) * jitter,
-      -DISTRESS_SINK * amount ** 2 + (Math.random() - 0.5) * jitter,
-      (Math.random() - 0.5) * jitter,
-    );
+    this.modelRoot.position.set((Math.random() - 0.5) * jitter, -DISTRESS_SINK * amount ** 2 + (Math.random() - 0.5) * jitter, (Math.random() - 0.5) * jitter);
     this.modelRoot.rotation.set(DISTRESS_PITCH * amount ** 2, 0, this.listSide * DISTRESS_ROLL * amount ** 3);
   }
 
@@ -644,7 +649,11 @@ function crownMaterial(scene: Scene): StandardMaterial {
   context.fill();
   context.fillRect(14, 100, 100, 14);
   context.strokeRect(14, 100, 100, 14);
-  for (const [x, y] of [[10, 36], [64, 22], [118, 36]] as const) {
+  for (const [x, y] of [
+    [10, 36],
+    [64, 22],
+    [118, 36],
+  ] as const) {
     context.beginPath();
     context.arc(x, y, 8, 0, 2 * Math.PI);
     context.fill();

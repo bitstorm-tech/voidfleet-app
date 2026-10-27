@@ -22,4 +22,3 @@ const COMMAND_COLORS: Record<CommandType, Rgb> = {
 export function cardColor(card: Card): Rgb {
   return card.kind === "ship" ? SHIP_COLORS[card.shipClass] : COMMAND_COLORS[card.commandType];
 }
-

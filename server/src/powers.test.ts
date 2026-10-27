@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
-import { shipById, type ShipId } from "../../shared/cards.ts";
+import { type ShipId, shipById } from "../../shared/cards.ts";
 import { canMark, markTargets, powerTargets, railgunFires } from "../../shared/powers.ts";
 import type { SlotRef, SlotTarget } from "../../shared/protocol.ts";
 

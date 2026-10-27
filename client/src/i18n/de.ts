@@ -1,5 +1,5 @@
 import { ABILITY_VALUES } from "../../../shared/admirals.ts";
-import { shipById, type ShipId } from "../../../shared/cards.ts";
+import { type ShipId, shipById } from "../../../shared/cards.ts";
 import type { Messages } from "./en.ts";
 
 const { guardianShield, guardianShieldFront, spearhead, maxDrones, hiveBudget, railgun, counterfire, focusFire, swarmStrike } = ABILITY_VALUES;
@@ -120,14 +120,16 @@ export const de: Messages = {
           "Das Ausweichmanöver bleibt in der Lane, die übrigen Bewegungsbefehle wechseln in die andere. Manöver und Bewegungsbefehl können nicht dasselbe Schiff verlegen und nicht im selben Slot landen. Der Slot, den ein Schiff verlässt, bleibt für den Rest der Runde blockiert — er wird erst in der nächsten Runde frei, auch für Schiffe, die du legst. Gelegte Schiffe und beide Ziele zählen zusammen zur Grenze von 4 Schiffen je Lane.",
           "Bewegung hat ein Risiko: Sperrfeuer macht 3 Schaden an jedem gegnerischen Schiff, das in dieser Runde seinen Slot gewechselt hat, egal wie, und der Wärmesucher folgt seinem Ziel und trifft ein Schiff, das den Slot gewechselt hat, mit 5 statt 3. Ein Torpedo zielt auf einen Slot, nicht auf ein Schiff — der Durchschlag auf eine Slot-Nummer: Er trifft, wer nach allen Bewegungen dort steht — ihm auszuweichen oder hineinzulaufen gehört zum Spiel.",
         ],
-        caption: "Ein geplantes Manöver: Der Schrott-Raider zieht sich aus der Strike-Lane in die Command-Lane zurück und feuert diese Runde nicht. Ein Manöver darf auch in der Lane bleiben.",
+        caption:
+          "Ein geplantes Manöver: Der Schrott-Raider zieht sich aus der Strike-Lane in die Command-Lane zurück und feuert diese Runde nicht. Ein Manöver darf auch in der Lane bleiben.",
       },
       resolution: {
         heading: "Die Rundenauflösung",
         paragraphs: [
           "Sobald beide Spieler ihren Zug beendet haben, werden beide Züge aufgedeckt und in festen Phasen aufgelöst. Innerhalb einer Phase handeln beide Seiten gleichzeitig; keine Seite ist je zuerst dran.",
         ],
-        caption: "Befehle wirken in der Effects-Phase nach Typ, nicht nach Spieler: erst Umgruppierung, dann Taktik, Verstärkung, Spezial, Schwächung und zuletzt Schaden.",
+        caption:
+          "Befehle wirken in der Effects-Phase nach Typ, nicht nach Spieler: erst Umgruppierung, dann Taktik, Verstärkung, Spezial, Schwächung und zuletzt Schaden.",
       },
       combat: {
         heading: "Kampf",
@@ -139,7 +141,8 @@ export const de: Messages = {
           "Der Angriffswert enthält schon alles: Rundenboni aus Befehlen, den Bonus des Schrott-Raiders, die Aura des Signalverstärkers, die Speerspitze der Vanguard und den Overdrive. Support-Schiffe greifen nie an, egal mit welchem Bonus.",
           `Die Admirale verbiegen diese Regeln: Die Railgun der Pendulum feuert vor allen anderen, der Taktvorsprung lässt ein Schiff vor dem Rest schießen, das Fokusfeuer gibt jedem Treffer auf sein Ziel +${focusFire} Schaden, der Schwarmangriff schickt alle deine Drohnen auf sein Ziel — durch Deckung und ohne Feuerbefehle —, und das Gegenfeuer schlägt zurück, wenn alle Schüsse gefallen sind. Der Befehl Ablenkung zieht die gegnerischen Schüsse auf dein gewähltes Schiff, solange es steht und für den Schützen ungedeckt ist; nur Schwarmangriff und Railgun behalten ihr Ziel.`,
         ],
-        caption: "Feuerbefehle: Jedes Kampfschiff feuert auf das gegnerische Schiff, das du wählst. Einen Schuss auf ein gedecktes Schiff fängt das Schiff davor ab, ein Schuss auf ein schon zerstörtes verpufft.",
+        caption:
+          "Feuerbefehle: Jedes Kampfschiff feuert auf das gegnerische Schiff, das du wählst. Einen Schuss auf ein gedecktes Schiff fängt das Schiff davor ab, ein Schuss auf ein schon zerstörtes verpufft.",
       },
       ships: {
         heading: "Schiffe",
@@ -178,7 +181,10 @@ export const de: Messages = {
         name: "Deploy",
         text: "Neue Schiffe landen, in Runde 1 auch die Flaggschiffe. Die Admiralsfähigkeiten werden aufgedeckt (ein Trugbild erscheint), Titan-Träger schicken Drohnen, Plasma-Fregatten feuern, die Pendulum erfasst ihr Ziel.",
       },
-      maneuver: { name: "Manöver", text: "Manövrierende Schiffe wechseln den Slot und halten das Feuer, die Mirage tauscht die Plätze. Dann hebt die Bastion ihren Wächterschild." },
+      maneuver: {
+        name: "Manöver",
+        text: "Manövrierende Schiffe wechseln den Slot und halten das Feuer, die Mirage tauscht die Plätze. Dann hebt die Bastion ihren Wächterschild.",
+      },
       effects: { name: "Effects", text: "Befehle wirken, nach Typ; Schaden zuletzt. Zerstörte Schiffe verschwinden." },
       combat: {
         name: "Combat",
@@ -247,17 +253,18 @@ export const de: Messages = {
     waitingForOpponent: (link) => `Warte auf den Gegner — Link teilen: ${link}`,
     chooseAdmiral: (link) => (link ? `Wähle deinen Admiral. Gegner einladen mit diesem Link: ${link}` : "Wähle deinen Admiral."),
     opponentChoosing: "Gegner wählt seinen Admiral …",
-    flagshipFirst: (flagship) => `Runde 1: Lege dein Flaggschiff ${flagship} — Karte vorn in der Hand antippen, dann einen leuchtenden Slot. „Zug beenden“ geht erst, wenn es eingeplant ist.`,
+    flagshipFirst: (flagship) =>
+      `Runde 1: Lege dein Flaggschiff ${flagship} — Karte vorn in der Hand antippen, dann einen leuchtenden Slot. „Zug beenden“ geht erst, wenn es eingeplant ist.`,
     fleet: (count, max) => `Flotte ${count}/${max}`,
-    noFreeSlot: (ship, perLane, perSide) =>
-      `kein freier Slot für ${ship} (max. ${perLane} pro Lane, ${perSide} pro Seite, eingeplante Schiffe mitgezählt).`,
+    noFreeSlot: (ship, perLane, perSide) => `kein freier Slot für ${ship} (max. ${perLane} pro Lane, ${perSide} pro Seite, eingeplante Schiffe mitgezählt).`,
     deploysLeft: (count) => (count === 0 ? "alle Schiffe eingeplant" : `noch ${count} ${count === 1 ? "Schiff" : "Schiffe"} zu legen`),
     placeShip: (ship) => `${ship}: leuchtenden Slot antippen. Nochmal auf die Karte klicken nimmt zurück.`,
     noCommandTarget: (command) => `kein eigenes Schiff als Ziel für ${command}.`,
     chooseCommandTarget: (command) => `${command}: eigenes Schiff antippen. Nochmal auf die Karte klicken nimmt zurück.`,
     chooseEnemySlot: (command) =>
       `${command}: Slot auf der Gegnerseite antippen, auch einen leeren — getroffen wird, wer nach allen Bewegungen dort steht. Nochmal auf die Karte klicken nimmt zurück.`,
-    chooseEnemyShip: (command) => `${command}: gegnerisches Schiff antippen — der Befehl folgt ihm, wenn es sich bewegt. Nochmal auf die Karte klicken nimmt zurück.`,
+    chooseEnemyShip: (command) =>
+      `${command}: gegnerisches Schiff antippen — der Befehl folgt ihm, wenn es sich bewegt. Nochmal auf die Karte klicken nimmt zurück.`,
     chooseEnemyColumn: (command) =>
       `${command}: Slot auf der Gegnerseite antippen — es zählt die Slot-Nummer, getroffen wird nach allen Bewegungen erst das vordere Schiff. Nochmal auf die Karte klicken nimmt zurück.`,
     noEnemyTarget: (command) => `kein gegnerisches Schiff als Ziel für ${command}.`,
@@ -283,7 +290,8 @@ export const de: Messages = {
     escCancels: "Esc bricht ab.",
     fireCleared: (ship) => `${ship} feuert in dieser Runde nicht — sein Feuerbefehl ist aufgehoben.`,
     fireOrders: (count) => (count === 1 ? "1 Ziel" : `${count} Ziele`),
-    fizzles: (count) => (count === 1 ? "1 Schuss verpufft — sein Ziel ist dann schon zerstört." : `${count} Schüsse verpuffen — ihre Ziele sind dann schon zerstört.`),
+    fizzles: (count) =>
+      count === 1 ? "1 Schuss verpufft — sein Ziel ist dann schon zerstört." : `${count} Schüsse verpuffen — ihre Ziele sind dann schon zerstört.`,
     maneuver: (ship) => `Manöver von ${ship}`,
     swap: (ship, partner) => `Phasentausch von ${ship} und ${partner}`,
     choosePowerTarget: (power) => `${power}: leuchtendes Ziel antippen. Nochmal auf die Fähigkeit oder Esc bricht ab.`,
@@ -292,9 +300,11 @@ export const de: Messages = {
     power: (power, target) => `${power} auf ${target}`,
     powerReplacesManeuver: (power, ship) => `${power} ersetzt das Manöver von ${ship}.`,
     maneuverReplacesPower: (power) => `Das Manöver ersetzt ${power}.`,
-    chooseMark: "Zielerfassung: gegnerisches Schiff antippen — in der nächsten Runde trifft es die Railgun der Pendulum, wenn es ungedeckt ist. Nochmal auf den Knopf oder Esc bricht ab.",
+    chooseMark:
+      "Zielerfassung: gegnerisches Schiff antippen — in der nächsten Runde trifft es die Railgun der Pendulum, wenn es ungedeckt ist. Nochmal auf den Knopf oder Esc bricht ab.",
     mark: (ship) => `Zielerfassung auf ${ship}`,
-    planned: (cards) => `${cards} steht bereit. „Zug beenden“ oder Karte antippen zum Zurücknehmen — oder ein Schiff auf dem Brett, um sein Ziel oder seinen Zug zu ändern.`,
+    planned: (cards) =>
+      `${cards} steht bereit. „Zug beenden“ oder Karte antippen zum Zurücknehmen — oder ein Schiff auf dem Brett, um sein Ziel oder seinen Zug zu ändern.`,
     idle: "Schiffs- oder Befehlskarte antippen oder ein eigenes Schiff auf dem Brett, um ihm ein Ziel zu geben oder es zu manövrieren. Ohne Karte „Zug beenden“ (Pass).",
     resolving: "Beide Züge sind aufgedeckt — die Runde wird aufgelöst …",
     matchOver: "Das Match ist beendet.",
@@ -412,7 +422,8 @@ export const de: Messages = {
     attack: (attacker, target, amount, notes) => `Kampf: ${attacker} feuert auf ${target} (${[amount, ...notes].join(", ")})`,
     covered: (attacker, aimed, cover, amount, notes) =>
       `Kampf: ${attacker} feuert auf ${aimed} — ${cover} davor fängt den Schuss ab (${[amount, ...notes].join(", ")})`,
-    drawn: (attacker, aimed, ship, amount, notes) => `Kampf: ${attacker} feuert auf ${aimed} — ${ship} zieht den Schuss auf sich (${[amount, ...notes].join(", ")})`,
+    drawn: (attacker, aimed, ship, amount, notes) =>
+      `Kampf: ${attacker} feuert auf ${aimed} — ${ship} zieht den Schuss auf sich (${[amount, ...notes].join(", ")})`,
     fizzle: (attacker, target) => `Kampf: Der Schuss von ${attacker} verpufft — ${target} ist schon zerstört`,
     fizzleGone: (attacker) => `Kampf: Der Schuss von ${attacker} verpufft — sein Ziel steht nicht mehr auf dem Brett`,
     fizzleCovered: (attacker, aimed, cover) => `Kampf: Der Schuss von ${attacker} auf ${aimed} verpufft — ${cover} davor ist schon zerstört`,
@@ -522,13 +533,17 @@ export const de: Messages = {
     plasma_frigate: { name: "Plasma-Fregatte", effect: "Beim Deploy: 3 Schaden an ein zufälliges gegnerisches Schiff in derselben Lane." },
     repair_drone: { name: "Reparaturdrohne", effect: "Am Ende jeder Runde: Repariert 2 HP beim beschädigten verbündeten Kampfschiff mit den wenigsten HP." },
     scrap_raider: { name: "Schrott-Raider", effect: "Wird ein gegnerisches Schiff in derselben Lane zerstört: dauerhaft +1 ATK." },
-    signal_booster: { name: "Signalverstärker", effect: "Alle anderen verbündeten Schiffe in derselben Lane haben +1 ATK, solange der Signalverstärker dort steht." },
+    signal_booster: {
+      name: "Signalverstärker",
+      effect: "Alle anderen verbündeten Schiffe in derselben Lane haben +1 ATK, solange der Signalverstärker dort steht.",
+    },
     titan_carrier: { name: "Titan-Träger", effect: "Beim Deploy: Erzeugt eine Drohne (1 HP, 1 ATK) in derselben Lane." },
     drone: { name: "Drohne", effect: "Startet beim Deploy vom Titan-Träger, mit der Drohnenstaffel und am Rundenende von der Hive; liegt in keinem Deck." },
     void_interceptor: { name: "Void-Abfangjäger", effect: "Reiner Schaden, keine Tricks." },
     decoy: {
       name: "Trugbild",
-      effect: "Hologramm von Admiral Moreau: steht eine Runde, greift nie an und deckt den Command-Slot dahinter — Schüsse auf das Schiff dort treffen das Trugbild. Flaggschiffe durchschauen es; zerstört hinterlässt es keinen Schrott.",
+      effect:
+        "Hologramm von Admiral Moreau: steht eine Runde, greift nie an und deckt den Command-Slot dahinter — Schüsse auf das Schiff dort treffen das Trugbild. Flaggschiffe durchschauen es; zerstört hinterlässt es keinen Schrott.",
     },
     bastion: {
       name: "Bastion",
@@ -558,14 +573,18 @@ export const de: Messages = {
       name: "Gegenfeuer",
       effect: `Wähle ein eigenes Schiff. Jedes gegnerische Schiff außer einem Flaggschiff, das es im Kampf trifft, nimmt danach je Treffer ${counterfire} Schaden.`,
     },
-    focus_fire: { name: "Fokusfeuer", effect: `Wähle ein gegnerisches Schiff, auch ein gedecktes. In dieser Runde macht jeder Treffer darauf im Kampf +${focusFire} Schaden.` },
+    focus_fire: {
+      name: "Fokusfeuer",
+      effect: `Wähle ein gegnerisches Schiff, auch ein gedecktes. In dieser Runde macht jeder Treffer darauf im Kampf +${focusFire} Schaden.`,
+    },
     swarm_strike: {
       name: "Schwarmangriff",
       effect: `Wähle ein gegnerisches Schiff außer dem Flaggschiff, auch ein gedecktes. Alle deine Drohnen feuern ohne Feuerbefehl darauf, jeder Treffer +${swarmStrike} Schaden.`,
     },
     decoy: {
       name: "Trugbild",
-      effect: "Wähle einen freien Strike-Slot. Dort steht diese Runde ein Trugbild (1 HP) und deckt den Slot dahinter: Schüsse auf das Schiff dort treffen das Trugbild. Flaggschiffe durchschauen es.",
+      effect:
+        "Wähle einen freien Strike-Slot. Dort steht diese Runde ein Trugbild (1 HP) und deckt den Slot dahinter: Schüsse auf das Schiff dort treffen das Trugbild. Flaggschiffe durchschauen es.",
     },
     head_start: { name: "Taktvorsprung", effect: "Wähle ein eigenes Kampfschiff. Es feuert vor allen anderen, und was es zerstört, feuert nicht mehr." },
   },
@@ -579,26 +598,43 @@ export const de: Messages = {
   commands: {
     emergency_shields: { name: "Notschilde", effect: "Das gewählte verbündete Schiff erhält diese Runde Schild 3." },
     emp_blast: { name: "EMP-Stoß", effect: "Das gegnerische Schiff mit der höchsten ATK kann diese Runde nicht angreifen." },
-    flanking_maneuver: { name: "Flankenmanöver", effect: "Das gewählte verbündete Schiff wechselt die Lane (Strike ↔ Command), in einen freien Slot deiner Wahl." },
-    intercept: { name: "Abfangen", effect: "Holt ein gewähltes Schiff aus der Command-Lane in einen freien Slot deiner Wahl in der Strike-Lane. Diese Runde +2 ATK." },
+    flanking_maneuver: {
+      name: "Flankenmanöver",
+      effect: "Das gewählte verbündete Schiff wechselt die Lane (Strike ↔ Command), in einen freien Slot deiner Wahl.",
+    },
+    intercept: {
+      name: "Abfangen",
+      effect: "Holt ein gewähltes Schiff aus der Command-Lane in einen freien Slot deiner Wahl in der Strike-Lane. Diese Runde +2 ATK.",
+    },
     orbital_strike: { name: "Orbitalschlag", effect: "4 Schaden an das gegnerische Schiff mit den meisten HP." },
     overcharge: { name: "Überladung", effect: "Das gewählte Schiff erhält diese Runde +3 ATK. Nimmt nach dem Kampf 2 Schaden." },
     power_surge: { name: "Energiestoß", effect: "Alle verbündeten Schiffe in der Strike-Lane erhalten diese Runde +1 ATK." },
-    recall: { name: "Rückruf", effect: "Ein gewähltes Schiff der Strike-Lane zieht sich in einen freien Slot deiner Wahl in der Command-Lane zurück. Heilt 2 HP." },
+    recall: {
+      name: "Rückruf",
+      effect: "Ein gewähltes Schiff der Strike-Lane zieht sich in einen freien Slot deiner Wahl in der Command-Lane zurück. Heilt 2 HP.",
+    },
     scavenge: { name: "Plündern", effect: "Ziehe 1 zusätzliches Schiff und 1 zusätzlichen Befehl." },
     targeting_jammer: { name: "Zielstörer", effect: "Alle gegnerischen Schiffe in der Strike-Lane erhalten diese Runde -1 ATK (min. 0)." },
     volley_fire: { name: "Salvenfeuer", effect: "1 Schaden an ALLE gegnerischen Schiffe." },
-    torpedo: { name: "Torpedo", effect: "Wähle einen gegnerischen Slot. Nach allen Bewegungen 5 Schaden an das Schiff dort, auch wenn es gedeckt ist. Leerer Slot: verpufft." },
+    torpedo: {
+      name: "Torpedo",
+      effect: "Wähle einen gegnerischen Slot. Nach allen Bewegungen 5 Schaden an das Schiff dort, auch wenn es gedeckt ist. Leerer Slot: verpufft.",
+    },
     barrage: { name: "Sperrfeuer", effect: "3 Schaden an jedes gegnerische Schiff, das in dieser Runde seinen Slot gewechselt hat." },
-    evasive_action: { name: "Ausweichmanöver", effect: "Das gewählte verbündete Schiff wechselt in einen freien Slot derselben Lane und erhält diese Runde Schild 2." },
+    evasive_action: {
+      name: "Ausweichmanöver",
+      effect: "Das gewählte verbündete Schiff wechselt in einen freien Slot derselben Lane und erhält diese Runde Schild 2.",
+    },
     micro_jump: {
       name: "Kurzsprung",
-      effect: "Das gewählte verbündete Schiff verlässt nach allen Bewegungen das Gefecht und kehrt am Rundenende zurück. Bis dahin trifft es nichts, es feuert und deckt aber auch nicht.",
+      effect:
+        "Das gewählte verbündete Schiff verlässt nach allen Bewegungen das Gefecht und kehrt am Rundenende zurück. Bis dahin trifft es nichts, es feuert und deckt aber auch nicht.",
     },
     rapid_deployment: { name: "Schnellverlegung", effect: "Du darfst diese Runde ein Schiff mehr legen." },
     draw_fire: {
       name: "Ablenkung",
-      effect: "Das gewählte verbündete Schiff zieht diese Runde die Schüsse aller gegnerischen Schiffe mit Feuerbefehl auf sich, solange es steht und für sie ungedeckt ist. Schwarmangriff und Railgun behalten ihr Ziel.",
+      effect:
+        "Das gewählte verbündete Schiff zieht diese Runde die Schüsse aller gegnerischen Schiffe mit Feuerbefehl auf sich, solange es steht und für sie ungedeckt ist. Schwarmangriff und Railgun behalten ihr Ziel.",
     },
     shield_grid: { name: "Schildgitter", effect: "Alle verbündeten Schiffe erhalten diese Runde Schild 1." },
     ablative_armor: { name: "Ablativpanzerung", effect: "Das gewählte verbündete Schiff erhält dauerhaft Schild 2. Er verfällt nicht am Rundenende." },
@@ -608,13 +644,18 @@ export const de: Messages = {
     },
     drone_squadron: {
       name: "Drohnenstaffel",
-      effect: "Zwei Drohnen (1 HP, 1 ATK) starten in freie Strike-Slots, zuerst vor ungedeckte Command-Schiffe. Sie decken sofort; in dieser Runde feuern sie nur mit dem Schwarmangriff.",
+      effect:
+        "Zwei Drohnen (1 HP, 1 ATK) starten in freie Strike-Slots, zuerst vor ungedeckte Command-Schiffe. Sie decken sofort; in dieser Runde feuern sie nur mit dem Schwarmangriff.",
     },
     collision_course: {
       name: "Rammkurs",
-      effect: "Das gewählte verbündete Strike-Schiff (kein Flaggschiff) rammt das ungedeckte Gegnerschiff gegenüber. Beide nehmen so viel Schaden, wie das andere HP hat. Der Rammer feuert diese Runde nicht.",
+      effect:
+        "Das gewählte verbündete Strike-Schiff (kein Flaggschiff) rammt das ungedeckte Gegnerschiff gegenüber. Beide nehmen so viel Schaden, wie das andere HP hat. Der Rammer feuert diese Runde nicht.",
     },
-    countermeasures: { name: "Gegenmaßnahmen", effect: "Spielt der Gegner diese Runde einen Angriffs- oder Schwächungsbefehl, verpufft er. Sonst ziehst du einen Befehl." },
+    countermeasures: {
+      name: "Gegenmaßnahmen",
+      effect: "Spielt der Gegner diese Runde einen Angriffs- oder Schwächungsbefehl, verpufft er. Sonst ziehst du einen Befehl.",
+    },
     carte_blanche: { name: "Freie Hand", effect: "Du darfst diese Runde das Grundmanöver und deine Admiralsfähigkeit einsetzen." },
     radio_silence: { name: "Funkstille", effect: "Die gegnerische Admiralsfähigkeit dieser Runde verpufft; ein Trugbild löst sich auf." },
     minefield: {
@@ -623,10 +664,17 @@ export const de: Messages = {
     },
     tractor_beam: {
       name: "Traktorstrahl",
-      effect: "Zieht das gewählte gegnerische Schiff (kein Flaggschiff) nach allen Bewegungen in den nächsten freien Slot der anderen Lane. Es gilt als bewegt.",
+      effect:
+        "Zieht das gewählte gegnerische Schiff (kein Flaggschiff) nach allen Bewegungen in den nächsten freien Slot der anderen Lane. Es gilt als bewegt.",
     },
-    heat_seeker: { name: "Wärmesucher", effect: "Folgt dem gewählten gegnerischen Schiff: 3 Schaden, auch wenn es gedeckt ist; 5, wenn es diese Runde seinen Slot gewechselt hat." },
-    coup_de_grace: { name: "Gnadenstoß", effect: "4 Schaden an das gegnerische Schiff mit den wenigsten HP, auch wenn es gedeckt ist (keine Drohnen und Trugbilder)." },
+    heat_seeker: {
+      name: "Wärmesucher",
+      effect: "Folgt dem gewählten gegnerischen Schiff: 3 Schaden, auch wenn es gedeckt ist; 5, wenn es diese Runde seinen Slot gewechselt hat.",
+    },
+    coup_de_grace: {
+      name: "Gnadenstoß",
+      effect: "4 Schaden an das gegnerische Schiff mit den wenigsten HP, auch wenn es gedeckt ist (keine Drohnen und Trugbilder).",
+    },
     piercing_shot: {
       name: "Durchschlag",
       effect: "Wähle eine gegnerische Slot-Nummer. Nach allen Bewegungen 3 Schaden an das vorderste Schiff dort und 2 an das Schiff dahinter.",

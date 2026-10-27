@@ -7,7 +7,7 @@
 //   FAL_KEY=… bun tools/generateCardArt.ts recall osei   # nur diese Karten bzw. Admirale (immer neu)
 
 import { ADMIRAL_IDS, type AdmiralId } from "../../shared/admirals.ts";
-import { COMMANDS, FLAGSHIPS, SHIPS, TOKENS, type Card, type CommandType, type ShipClass } from "../../shared/cards.ts";
+import { type Card, COMMANDS, type CommandType, FLAGSHIPS, SHIPS, type ShipClass, TOKENS } from "../../shared/cards.ts";
 
 const MODEL = "fal-ai/flux-pro/v1.1";
 const OUT_DIR = `${import.meta.dir}/../assets/images/cards`;
@@ -78,35 +78,24 @@ const SUBJECTS: Record<Card["id"], string> = {
     "A colossal flying fortress battleship, squat, broad and heavy, its bow a towering curved armored wall like a giant shield set with glowing shield emitter lenses, terraced layers of armor decks with battlements and round corner towers topped by shield pylons with glowing crystals, a raised command keep at the stern with lit windows, only a few small turrets, three-quarter front view",
   vanguard:
     "A long, slender, aggressive flagship cruiser shaped like a spearhead, a long armored ram prow with glowing blade edges, two heavy cannons beneath the ram and forward-facing twin turrets, swept-back armor blades along its flanks, a powerful cluster of engines, charging forward, three-quarter front view",
-  hive:
-    "A massive carrier flagship with a rounded, slightly organic two-chambered hull like a giant seed pod, no flat flight deck, its curved back covered by a dense honeycomb of open hexagonal cells, every cell lit bright violet from within like glowing brood chambers, side pods with hexagonal hangar openings and small drone fighters docked on them, a hexagonal command tower with lit windows, a plain unmarked hull, three-quarter view",
+  hive: "A massive carrier flagship with a rounded, slightly organic two-chambered hull like a giant seed pod, no flat flight deck, its curved back covered by a dense honeycomb of open hexagonal cells, every cell lit bright violet from within like glowing brood chambers, side pods with hexagonal hangar openings and small drone fighters docked on them, a hexagonal command tower with lit windows, a plain unmarked hull, three-quarter view",
   mirage:
     "A sleek, flat and narrow stealth flagship made of sharp angular facets, a dark hull with an iridescent turquoise sheen, glowing seams along its edges, swept diamond-shaped wings with a sawtooth trailing edge, two canted holographic projector fins, a faceted raised bridge, three-quarter front view",
   pendulum:
     "A railgun flagship battleship in three-quarter side view, a very long railgun forming its spine and projecting far beyond the bow, the railgun ringed with glowing electromagnetic coils and brass collars, a huge brass toothed gear ring encircling the middle of the hull like a clockwork gimbal, a brass pendulum counterweight with a round bob hanging beneath the keel, a raised bridge with a round clock-face window",
   // Befehle
-  orbital_strike:
-    "A blinding orbital beam strikes down from above onto a warship, an impact explosion of light and debris, seen from the side at a distance",
-  volley_fire:
-    "A dense volley of dozens of glowing missiles and projectiles streaking across space in parallel trails, launched from a line of warships",
-  power_surge:
-    "A wave of energy sweeping through a formation of three warships flying in line, their engines and weapon systems flaring with light",
-  emergency_shields:
-    "A warship enveloped in a glowing hexagonal energy shield bubble, incoming shots splashing harmlessly against the barrier",
+  orbital_strike: "A blinding orbital beam strikes down from above onto a warship, an impact explosion of light and debris, seen from the side at a distance",
+  volley_fire: "A dense volley of dozens of glowing missiles and projectiles streaking across space in parallel trails, launched from a line of warships",
+  power_surge: "A wave of energy sweeping through a formation of three warships flying in line, their engines and weapon systems flaring with light",
+  emergency_shields: "A warship enveloped in a glowing hexagonal energy shield bubble, incoming shots splashing harmlessly against the barrier",
   emp_blast:
     "An electromagnetic shockwave ring expanding outward and engulfing a warship, its lights flickering out, lightning arcs crawling over the dark hull",
-  targeting_jammer:
-    "A warship surrounded by static interference and distorted glitching holographic targeting reticles, scrambled signal waves",
-  flanking_maneuver:
-    "A warship banking sharply along a curved holographic tactical arrow, slipping sideways around an enemy, glowing maneuver vectors",
-  scavenge:
-    "A ship with tractor beams pulling in floating salvage, cargo crates and wreckage from a debris field",
-  intercept:
-    "A warship surging forward with blazing afterburners along a holographic vector pointing ahead, bright engine trails",
-  recall:
-    "A damaged warship pulling back along a curved holographic retreat vector, small repair drones around it, engines glowing",
-  overcharge:
-    "A warship with its reactor core overloading, glowing cracks spreading across the hull, energy venting from every seam",
+  targeting_jammer: "A warship surrounded by static interference and distorted glitching holographic targeting reticles, scrambled signal waves",
+  flanking_maneuver: "A warship banking sharply along a curved holographic tactical arrow, slipping sideways around an enemy, glowing maneuver vectors",
+  scavenge: "A ship with tractor beams pulling in floating salvage, cargo crates and wreckage from a debris field",
+  intercept: "A warship surging forward with blazing afterburners along a holographic vector pointing ahead, bright engine trails",
+  recall: "A damaged warship pulling back along a curved holographic retreat vector, small repair drones around it, engines glowing",
+  overcharge: "A warship with its reactor core overloading, glowing cracks spreading across the hull, energy venting from every seam",
   torpedo:
     "A single heavy torpedo with a glowing warhead diving steeply from above toward a holographic targeting reticle locked onto an empty patch of space, a long bright exhaust trail behind it",
   barrage:
@@ -141,14 +130,12 @@ const SUBJECTS: Record<Card["id"], string> = {
     "A thick, bright, solid beam of light crossing the frame diagonally from the top left corner, its end wrapped around a warship and pulling it sideways out of a row of three warships, the captured ship tilted and dragged off course",
   heat_seeker:
     "Rear view of a fleeing warship with bright hot glowing engines, a small missile right behind it closing in on its engine exhaust, the missile's long smoke trail curving sharply in a tight arc behind it",
-  coup_de_grace:
-    "A single precise thin beam striking a heavily damaged, burning warship, its hull cracked and trailing smoke and debris",
+  coup_de_grace: "A single precise thin beam striking a heavily damaged, burning warship, its hull cracked and trailing smoke and debris",
   piercing_shot:
     "Two warships one behind the other on a single diagonal line from bottom left to top right, one straight beam traveling along that line, entering the nearer ship, bursting out of its bow and striking the second ship, glowing breach holes and explosions in both hulls",
   bombardment:
     "A rain of glowing shells and projectiles falling from above onto a rear row of warships lined up side by side, explosions blooming on their hulls",
-  crossfire:
-    "A single warship caught between two laser beams converging on it from the left and from the right, sparks where both beams hit",
+  crossfire: "A single warship caught between two laser beams converging on it from the left and from the right, sparks where both beams hit",
 };
 
 /** Porträts der Admirale für die Auswahlkarten, im Stil der Kartenbilder; Uniform in der Farbe des Admirals. */
@@ -161,22 +148,19 @@ const PORTRAIT_STYLE =
   "No text, no letters, no numbers, no logos, no user interface, no frame, no border, no watermark.";
 
 const PORTRAITS: Record<AdmiralId, string> = {
-  osei:
-    "Fleet admiral Osei, a calm, steadfast veteran: a West African man in his sixties with dark skin, close-cropped grey hair and a short grey beard, an unshakable composed gaze, wearing a high-collared dark naval uniform with glowing amber piping and white-gold epaulettes, a shield-shaped amber crest on his chest, warm amber rim light",
+  osei: "Fleet admiral Osei, a calm, steadfast veteran: a West African man in his sixties with dark skin, close-cropped grey hair and a short grey beard, an unshakable composed gaze, wearing a high-collared dark naval uniform with glowing amber piping and white-gold epaulettes, a shield-shaped amber crest on his chest, warm amber rim light",
   vance:
     "Fleet admiral Vance, combative and hard: a Latina woman in her forties with tan skin, a fierce challenging stare and a thin scar through one eyebrow, dark hair shaved at the sides and pulled back tight, wearing an armored dark uniform with crimson red accents and white-gold epaulettes, a spearhead insignia on her collar, crimson rim light",
   halvorsen:
     "Fleet admiral Halvorsen, coolly calculating: a stern Scandinavian woman around sixty, weathered pale skin with visible wrinkles and crow's feet, silver-blond hair pulled into a tight severe bun, piercing ice-blue eyes, thin pressed lips, a cold appraising stare, a plain face without makeup, wearing a sleek dark uniform with violet accents and white-gold epaulettes, a hexagonal honeycomb insignia on her chest, three small drones with violet lights hovering in the dark behind her, violet rim light",
   moreau:
     "Fleet admiral Moreau, inscrutable: a French man of North African descent in his forties with olive-brown skin, a neatly trimmed dark beard and a faint enigmatic smile, half of his face lit by cold turquoise hologram light and the other half in deep shadow, wearing a dark high-collared uniform with turquoise accents and white-gold epaulettes, translucent holographic fragments flickering around him",
-  kerr:
-    "Fleet admiral Kerr, precise and meticulous: an elderly Japanese man in his sixties with neatly combed silver hair and a trimmed silver mustache, a brass clockwork monocle with tiny visible gears over his right eye, a focused, exacting gaze, wearing a dark uniform with steel-blue accents, brass buttons and white-gold epaulettes, a gear and clock-hands insignia on his chest, steel-blue rim light",
+  kerr: "Fleet admiral Kerr, precise and meticulous: an elderly Japanese man in his sixties with neatly combed silver hair and a trimmed silver mustache, a brass clockwork monocle with tiny visible gears over his right eye, a focused, exacting gaze, wearing a dark uniform with steel-blue accents, brass buttons and white-gold epaulettes, a gear and clock-hands insignia on his chest, steel-blue rim light",
 };
 
 function prompt(card: Card): string {
   const accent =
-    CARD_ACCENT[card.id] ??
-    (card.kind === "ship" ? `with ${SHIP_ACCENT[card.shipClass]}` : `dominated by ${COMMAND_ACCENT[card.commandType]} light`);
+    CARD_ACCENT[card.id] ?? (card.kind === "ship" ? `with ${SHIP_ACCENT[card.shipClass]}` : `dominated by ${COMMAND_ACCENT[card.commandType]} light`);
   return `${SUBJECTS[card.id]}, ${accent}. ${STYLE}`;
 }
 

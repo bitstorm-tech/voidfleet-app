@@ -4,7 +4,7 @@
 // Seite des Betrachters; der Server spiegelt das Brett für den zweiten Spieler.
 
 import { ABILITY_VALUES, type PowerId } from "./admirals.ts";
-import { extraDeploys, isFlagship, isToken, shipById, type CommandCard, type CommandId, type ShipCard, type ShipId } from "./cards.ts";
+import { type CommandCard, type CommandId, extraDeploys, isFlagship, isToken, type ShipCard, type ShipId, shipById } from "./cards.ts";
 import type { SlotTarget } from "./protocol.ts";
 
 export type Side = "player" | "enemy";
@@ -293,7 +293,10 @@ export class Lane {
   /** Freier Slot für ein Schiff, das hierher wechselt: derselbe Index, sonst der nächstgelegene; ein Token braucht nur einen freien Slot. */
   freeSlotNear(index: number, token = false): Slot | null {
     if (this.isFull && !token) return null;
-    return nearest(this.slots.filter((slot) => slot.isFree), index);
+    return nearest(
+      this.slots.filter((slot) => slot.isFree),
+      index,
+    );
   }
 }
 

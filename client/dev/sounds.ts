@@ -12,7 +12,7 @@ import { loadRadio, say, silenceRadio } from "../src/audio/radio.ts";
 import { loadSounds, loopSound, playSound } from "../src/audio/sounds.ts";
 import { playUiSound, UI_SOUNDS } from "../src/audio/uiSounds.ts";
 import { RADIO, type RadioCue } from "../src/data/radio.ts";
-import { MUSIC, SOUNDS, type MusicMood, type SoundId } from "../src/data/sounds.ts";
+import { MUSIC, type MusicMood, SOUNDS, type SoundId } from "../src/data/sounds.ts";
 import { en } from "../src/i18n/en.ts";
 import { settings, updateSettings } from "../src/settings.ts";
 
@@ -44,21 +44,25 @@ window.soundStats = {};
 await Promise.all([...loadSounds(), ...loadMusic(), ...loadRadio()]);
 
 heading("Lautstärke");
-for (const [setting, label] of [["musicVolume", "Musik"], ["effectsVolume", "Effekte"], ["voiceVolume", "Bordfunk"]] as const) {
+for (const [setting, label] of [
+  ["musicVolume", "Musik"],
+  ["effectsVolume", "Effekte"],
+  ["voiceVolume", "Bordfunk"],
+] as const) {
   const input = Object.assign(document.createElement("input"), { type: "range", min: "0", max: "1", step: "0.05", value: String(settings[setting]) });
   input.addEventListener("input", () => updateSettings({ [setting]: Number(input.value) }));
   row(label, [input]);
 }
 
 heading("Musik");
-row("Stimmung", [
-  ...(Object.keys(MUSIC) as MusicMood[]).map((mood) => button(mood, () => setMusicMood(mood))),
-  button("aus", () => setMusicMood(null)),
-]);
+row("Stimmung", [...(Object.keys(MUSIC) as MusicMood[]).map((mood) => button(mood, () => setMusicMood(mood))), button("aus", () => setMusicMood(null))]);
 for (const [mood, { file }] of Object.entries(MUSIC)) row(mood, [], file, `music/${mood}`);
 
 heading("Oberfläche (synthetisiert)");
-row("", UI_SOUNDS.map((name) => button(name, () => playUiSound(name))));
+row(
+  "",
+  UI_SOUNDS.map((name) => button(name, () => playUiSound(name))),
+);
 
 heading("Effekte");
 for (const id of Object.keys(SOUNDS) as SoundId[]) {
@@ -145,7 +149,11 @@ async function measure(url: string): Promise<Stats> {
     loudness: db(loudest),
     head: db(rms(0, second)),
     tail: db(rms(length - second, length)),
-    onset: Math.max(level.findIndex((value) => value > 0.01), 0) / sampleRate,
+    onset:
+      Math.max(
+        level.findIndex((value) => value > 0.01),
+        0,
+      ) / sampleRate,
     core: [seconds.findIndex((value) => value >= threshold), seconds.findLastIndex((value) => value >= threshold) + 1],
   };
 }

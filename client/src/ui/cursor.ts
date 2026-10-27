@@ -23,10 +23,7 @@ export async function installCursor(): Promise<void> {
     canvas.width = Math.floor(image.naturalWidth * scale);
     canvas.height = Math.floor(image.naturalHeight * scale);
     canvas.getContext("2d")!.drawImage(image, 0, 0, canvas.width, canvas.height);
-    document.documentElement.style.setProperty(
-      "--cursor",
-      `image-set(url("${canvas.toDataURL()}") ${dpr}x) 0 0, default`,
-    );
+    document.documentElement.style.setProperty("--cursor", `image-set(url("${canvas.toDataURL()}") ${dpr}x) 0 0, default`);
     matchMedia(`(resolution: ${dpr}dppx)`).addEventListener("change", apply, { once: true });
   };
   apply();

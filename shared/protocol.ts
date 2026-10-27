@@ -224,11 +224,7 @@ export type RoundEvent =
  * `addBot` setzt den Computergegner auf den freien Platz, statt auf einen Menschen zu warten; er wählt sofort.
  * `surrender` gibt das Match auf, jederzeit, auch nach abgegebenem Zug; der Gegner gewinnt sofort.
  */
-export type ClientMessage =
-  | { type: "chooseAdmiral"; admiral: AdmiralId }
-  | { type: "submit"; plan: TurnPlan }
-  | { type: "addBot" }
-  | { type: "surrender" };
+export type ClientMessage = { type: "chooseAdmiral"; admiral: AdmiralId } | { type: "submit"; plan: TurnPlan } | { type: "addBot" } | { type: "surrender" };
 
 /** Fehler werden als Code übertragen, der Client formuliert sie in seiner Sprache. */
 export type ErrorCode =
@@ -266,7 +262,4 @@ export type ErrorCode =
   | "fire_ship_invalid"
   | "fire_target_invalid";
 
-export type ServerMessage =
-  | { type: "state"; view: PlayerView }
-  | { type: "round"; round: number; events: RoundEvent[] }
-  | { type: "error"; code: ErrorCode };
+export type ServerMessage = { type: "state"; view: PlayerView } | { type: "round"; round: number; events: RoundEvent[] } | { type: "error"; code: ErrorCode };

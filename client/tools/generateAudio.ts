@@ -76,9 +76,7 @@ const SOUNDS: Record<string, SoundJob> = {
     variants: 2,
   },
   explosion_small: {
-    prompt: fx(
-      "A small spaceship exploding: a deep, bass-heavy boom with a punchy low thump, a short rumble and a burst of debris.",
-    ),
+    prompt: fx("A small spaceship exploding: a deep, bass-heavy boom with a punchy low thump, a short rumble and a burst of debris."),
     seconds: 1.5,
     variants: 3,
   },

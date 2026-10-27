@@ -9,8 +9,8 @@
 // Grundfläche des Schiffs gestreckt, damit die Marke um den Rumpf herum sichtbar bleibt, auch bei langen Schlachtschiffen.
 
 import { Constants } from "@babylonjs/core/Engines/constants";
-import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import type { Color3 } from "@babylonjs/core/Maths/math.color";
 import { CreateGround } from "@babylonjs/core/Meshes/Builders/groundBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -60,15 +60,36 @@ export interface Footprint {
 
 /** Zugabe zur Grundfläche (Welteinheiten) und die Ebenen je Marke; der Ring des Flaggschiffs liegt außen. */
 const MARKERS: Record<MarkerKind, { margin: number; alpha: number; layers: readonly Layer[] }> = {
-  halo: { margin: 0.8, alpha: 0.8, layers: [{ glyph: "halo", pulse: { rate: 0.45, amount: 0.02 } }, { glyph: "haloDashes", spin: 0.18 }] },
+  halo: {
+    margin: 0.8,
+    alpha: 0.8,
+    layers: [
+      { glyph: "halo", pulse: { rate: 0.45, amount: 0.02 } },
+      { glyph: "haloDashes", spin: 0.18 },
+    ],
+  },
   lock: { margin: 0.6, alpha: 0.95, layers: [{ glyph: "lock" }, { glyph: "lockRing", spin: -0.5 }] },
   counterfire: { margin: 0.6, alpha: 0.9, layers: [{ glyph: "spikes", spin: 0.35 }] },
   focus_fire: { margin: 0.6, alpha: 0.95, layers: [{ glyph: "brackets", pulse: { rate: 1.6, amount: 0.05 } }] },
   swarm_strike: { margin: 0.6, alpha: 0.9, layers: [{ glyph: "swarm", spin: 1.3 }] },
   head_start: { margin: 0.6, alpha: 0.9, layers: [{ glyph: "clock" }, { glyph: "clockHand", spin: 2.4 }] },
-  taunt: { margin: 0.6, alpha: 0.95, layers: [{ glyph: "beacon", pulse: { rate: 1.2, amount: 0.08 } }, { glyph: "beaconChevrons", spin: -0.4 }] },
+  taunt: {
+    margin: 0.6,
+    alpha: 0.95,
+    layers: [
+      { glyph: "beacon", pulse: { rate: 1.2, amount: 0.08 } },
+      { glyph: "beaconChevrons", spin: -0.4 },
+    ],
+  },
   ready: { margin: 0.6, alpha: 0.6, layers: [{ glyph: "ready", spin: 0.25, pulse: { rate: 0.9, amount: 0.04 } }] },
-  aim: { margin: 0.6, alpha: 0.95, layers: [{ glyph: "aim", pulse: { rate: 1.4, amount: 0.03 } }, { glyph: "aimPointers", spin: 0.8 }] },
+  aim: {
+    margin: 0.6,
+    alpha: 0.95,
+    layers: [
+      { glyph: "aim", pulse: { rate: 1.4, amount: 0.03 } },
+      { glyph: "aimPointers", spin: 0.8 },
+    ],
+  },
 };
 
 /** Quer zur Nase bleibt jede Marke in ihrem Slot (sie liegen 2,2 auseinander), aber nie kleiner als dieser Kreis. */

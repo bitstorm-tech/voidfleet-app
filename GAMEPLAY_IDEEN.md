@@ -54,10 +54,10 @@ Die gegnerische Fregatte steht mit **3 HP und 3 ATK in Strike / Slot 3**. Dein v
 
 Das vorgeschlagene Grundmanöver erlaubt, ein Schiff zu versetzen. Dafür feuert dieses Schiff in der laufenden Runde nicht.
 
-| Vorab geplanter Zug des Gegners | Ergebnis gegen den Torpedo | Abwägung |
-| --- | --- | --- |
-| Stellung halten | Die Fregatte wird vor dem Kampf zerstört. | Falls du einen anderen Befehl gespielt hättest, hätte der Gegner seinen Angriff und seine Manöveroption behalten. |
-| Nach Slot 4 ausweichen | Der Torpedo trifft den leeren Slot 3. Die Fregatte behält 3 HP. | Die Fregatte verzichtet auf ihren Angriff – auch dann, wenn du gar keinen Torpedo gespielt hättest. |
-| Notschilde einsetzen | 3 Schild absorbieren den Großteil des Schadens. Die Fregatte behält 2 HP und kann noch feuern. | Der Gegner hat seinen einzigen Befehl für Schutz eingesetzt. |
+| Vorab geplanter Zug des Gegners | Ergebnis gegen den Torpedo                                                                     | Abwägung                                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Stellung halten                 | Die Fregatte wird vor dem Kampf zerstört.                                                      | Falls du einen anderen Befehl gespielt hättest, hätte der Gegner seinen Angriff und seine Manöveroption behalten. |
+| Nach Slot 4 ausweichen          | Der Torpedo trifft den leeren Slot 3. Die Fregatte behält 3 HP.                                | Die Fregatte verzichtet auf ihren Angriff – auch dann, wenn du gar keinen Torpedo gespielt hättest.               |
+| Notschilde einsetzen            | 3 Schild absorbieren den Großteil des Schadens. Die Fregatte behält 2 HP und kann noch feuern. | Der Gegner hat seinen einzigen Befehl für Schutz eingesetzt.                                                      |
 
 **Beide Pläne werden vor dem Aufdecken festgelegt.** Weitere Angriffe sind in diesem Beispiel ausgeblendet. Die Zahlen dienen als Vorschlag für einen Prototyp.

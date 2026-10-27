@@ -5,7 +5,7 @@
 // aller Karten samt Flaggschiffen und Tokens (`cardView.ts`).
 
 import { ADMIRAL_IDS, ADMIRALS } from "../../../shared/admirals.ts";
-import { COMMAND_ORDER, COMMANDS, deckCopies, FLAGSHIPS, isToken, SHIPS, shipById, TOKENS, type Card, type CommandType } from "../../../shared/cards.ts";
+import { type Card, COMMAND_ORDER, COMMANDS, type CommandType, deckCopies, FLAGSHIPS, isToken, SHIPS, shipById, TOKENS } from "../../../shared/cards.ts";
 import deployScreenshot from "../../assets/images/rules/deploy.jpg";
 import maneuverScreenshot from "../../assets/images/rules/maneuver.jpg";
 import { admiralPortrait, flagshipAdmiral } from "../data/admirals.ts";
@@ -155,7 +155,10 @@ function gallery(entries: readonly { card: Card; meta: string; lines: readonly s
     const description = Object.assign(document.createElement("div"), { className: "description" });
     description.append(
       Object.assign(document.createElement("b"), { textContent: cardText(card).name }),
-      Object.assign(document.createElement("span"), { className: "meta", textContent: [meta, deckCopies(card) > 0 && t.rules.copies(deckCopies(card))].filter(Boolean).join(" · ") }),
+      Object.assign(document.createElement("span"), {
+        className: "meta",
+        textContent: [meta, deckCopies(card) > 0 && t.rules.copies(deckCopies(card))].filter(Boolean).join(" · "),
+      }),
       ...lines.map((line) => Object.assign(document.createElement("span"), { textContent: line })),
     );
     entry.append(createCard(card), description);

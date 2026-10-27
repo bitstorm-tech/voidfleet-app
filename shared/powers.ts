@@ -3,7 +3,7 @@
 // beim Planen; was in der Runde daraus wird, regelt `resolution.ts`.
 
 import { POWER_TARGETS, type PowerId } from "./admirals.ts";
-import { isSameSlot, opposite, slotTarget, type Board, type Side, type Slot } from "./board.ts";
+import { type Board, isSameSlot, opposite, type Side, type Slot, slotTarget } from "./board.ts";
 import { isFlagship, type ShipCard } from "./cards.ts";
 import type { SlotRef, SlotTarget } from "./protocol.ts";
 

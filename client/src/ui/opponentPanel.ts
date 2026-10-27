@@ -8,7 +8,7 @@
 // Kopie; der Effekttext steht im Tooltip.
 
 import { ADMIRALS, type AdmiralId } from "../../../shared/admirals.ts";
-import { COMMAND_ORDER, COMMANDS, deckCopies, type CommandId, type CommandType } from "../../../shared/cards.ts";
+import { COMMAND_ORDER, COMMANDS, type CommandId, type CommandType, deckCopies } from "../../../shared/cards.ts";
 import type { OpponentView } from "../../../shared/protocol.ts";
 import { admiralPortrait } from "../data/admirals.ts";
 import { cardColor } from "../data/cardColors.ts";

@@ -12,8 +12,8 @@ import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { PointLight } from "@babylonjs/core/Lights/pointLight";
-import { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { Effect } from "@babylonjs/core/Materials/effect";
+import { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
 import { HDRCubeTexture } from "@babylonjs/core/Materials/Textures/hdrCubeTexture";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
@@ -23,8 +23,8 @@ import { Tools } from "@babylonjs/core/Misc/tools";
 import { Scene } from "@babylonjs/core/scene";
 import "@babylonjs/core/Culling/ray";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
-import environmentUrl from "../../assets/env/space.hdr";
 import type { Board, Lane, LaneType, Side } from "../../../shared/board.ts";
+import environmentUrl from "../../assets/env/space.hdr";
 import { setScreenSide } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
 import { t, upper } from "../i18n/index.ts";
@@ -35,7 +35,7 @@ import { createGlowLayer } from "./glow.ts";
 import { LaneLabel } from "./laneLabel.ts";
 import { MoveArrow } from "./moveArrow.ts";
 import type { ShipView } from "./ship.ts";
-import { PAD_DEPTH, PAD_WIDTH, SlotPad, createPadMaterials } from "./slotPad.ts";
+import { createPadMaterials, PAD_DEPTH, PAD_WIDTH, SlotPad } from "./slotPad.ts";
 import { TargetLines } from "./targetLines.ts";
 import { TargetReticle } from "./targetReticle.ts";
 import { animationTimeScale, easeInOutSine } from "./tween.ts";
@@ -651,9 +651,6 @@ export class MatchScene {
     const t = Math.min(seconds * FOLLOW_SPEED, 1);
     this.scrollOffset.x += (targetX - this.scrollOffset.x) * t;
     this.scrollOffset.y += (targetY - this.scrollOffset.y) * t;
-    this.background.setScrollOffset(
-      -this.scrollOffset.x * BACKGROUND_SCROLL_STRENGTH.x,
-      -this.scrollOffset.y * BACKGROUND_SCROLL_STRENGTH.y,
-    );
+    this.background.setScrollOffset(-this.scrollOffset.x * BACKGROUND_SCROLL_STRENGTH.x, -this.scrollOffset.y * BACKGROUND_SCROLL_STRENGTH.y);
   }
 }

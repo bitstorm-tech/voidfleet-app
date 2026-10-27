@@ -53,7 +53,15 @@ function arrow(from: [number, number], to: [number, number], className: string):
 
 function arrowheadDefs(): SVGElement {
   const defs = svgElement("defs", {});
-  const marker = svgElement("marker", { id: "rules-arrowhead", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" });
+  const marker = svgElement("marker", {
+    id: "rules-arrowhead",
+    viewBox: "0 0 10 10",
+    refX: 9,
+    refY: 5,
+    markerWidth: 7,
+    markerHeight: 7,
+    orient: "auto-start-reverse",
+  });
   marker.append(svgElement("path", { d: "M0,0 L10,5 L0,10 Z", class: "arrowhead" }));
   defs.append(marker);
   return defs;
@@ -88,7 +96,12 @@ export function boardFigure(): SVGSVGElement {
     svg.append(text(0, middle(row) + 4, t.lanes[row.lane], "lane-label"));
     const ships = row.side === "player" ? playerShips[row.lane] : enemyShips[row.lane];
     for (let index = 0; index < 6; index++) {
-      const covered = row.lane === "command" && ships.includes(index) ? ((row.side === "player" ? playerShips : enemyShips).strike.includes(index) ? "covered" : "exposed") : undefined;
+      const covered =
+        row.lane === "command" && ships.includes(index)
+          ? (row.side === "player" ? playerShips : enemyShips).strike.includes(index)
+            ? "covered"
+            : "exposed"
+          : undefined;
       svg.append(slot(x0 + index * step, row.y, slotWidth, slotHeight, row.side, covered));
       if (row.side === "player" && row.lane === "strike") svg.append(text(center(index), row.y - 5, labels.slot(index), "slot-label", "middle"));
       if (ships.includes(index)) svg.append(ship(center(index), middle(row), row.side));
@@ -140,23 +153,65 @@ export function fireOrdersFigure(): SVGSVGElement {
     return at;
   };
 
-  const free = block(0, labels.anyShip, [["command", 1], ["strike", 0], ["strike", 2], ["own", 0], ["own", 2]], [["command", 1], ["strike", 0]]);
+  const free = block(
+    0,
+    labels.anyShip,
+    [
+      ["command", 1],
+      ["strike", 0],
+      ["strike", 2],
+      ["own", 0],
+      ["own", 2],
+    ],
+    [
+      ["command", 1],
+      ["strike", 0],
+    ],
+  );
   svg.append(arrow(free(["own", 0], -1), free(["command", 1], 1), "shot"), arrow(free(["own", 2], -1), free(["strike", 0], 1), "shot"));
 
-  const cover = block(1, labels.coverTakes, [["command", 1], ["strike", 1], ["own", 0]], [["strike", 1]], ["command", 1]);
+  const cover = block(
+    1,
+    labels.coverTakes,
+    [
+      ["command", 1],
+      ["strike", 1],
+      ["own", 0],
+    ],
+    [["strike", 1]],
+    ["command", 1],
+  );
   svg.append(arrow(cover(["own", 0], -1), cover(["command", 1], 1), "order"), arrow(cover(["own", 0], -1), cover(["strike", 1], 1), "shot"));
 
-  const fizzle = block(2, labels.fizzles, [["own", 0], ["own", 2]], [["strike", 1]]);
+  const fizzle = block(
+    2,
+    labels.fizzles,
+    [
+      ["own", 0],
+      ["own", 2],
+    ],
+    [["strike", 1]],
+  );
   const [wx, wy] = fizzle(["strike", 1]);
   svg.append(ship(wx, wy, "enemy", true));
-  for (const [dx, dy] of [[-9, -9], [9, -9]] as const) svg.append(svgElement("line", { x1: wx + dx, y1: wy + dy, x2: wx - dx, y2: wy - dy, class: "wreck" }));
+  for (const [dx, dy] of [
+    [-9, -9],
+    [9, -9],
+  ] as const)
+    svg.append(svgElement("line", { x1: wx + dx, y1: wy + dy, x2: wx - dx, y2: wy - dy, class: "wreck" }));
   svg.append(arrow(fizzle(["own", 0], -1), fizzle(["strike", 1], 1), "shot"));
   // Der zweite Schuss endet auf halbem Weg in einem matten Wölkchen.
   const [fromX, fromY] = fizzle(["own", 2], -1);
   const [toX, toY] = fizzle(["strike", 1], 1);
   const [endX, endY] = [fromX + (toX - fromX) * 0.55, fromY + (toY - fromY) * 0.55];
-  svg.append(svgElement("line", { x1: fromX, y1: fromY, x2: endX, y2: endY, class: "shot" }), svgElement("circle", { cx: endX, cy: endY, r: 6, class: "fizzle" }));
-  for (const [label, spot] of [["1", ["own", 0]], ["2", ["own", 2]]] as const) {
+  svg.append(
+    svgElement("line", { x1: fromX, y1: fromY, x2: endX, y2: endY, class: "shot" }),
+    svgElement("circle", { cx: endX, cy: endY, r: 6, class: "fizzle" }),
+  );
+  for (const [label, spot] of [
+    ["1", ["own", 0]],
+    ["2", ["own", 2]],
+  ] as const) {
     const [x, y] = fizzle(spot);
     svg.append(text(x + 16, y + 4, label, "note"));
   }
@@ -168,7 +223,10 @@ export function phasesFigure(): HTMLElement {
   const list = Object.assign(document.createElement("ol"), { className: "rules-phases" });
   for (const phase of Object.values(t.rules.phases)) {
     const item = document.createElement("li");
-    item.append(Object.assign(document.createElement("b"), { textContent: phase.name }), Object.assign(document.createElement("span"), { textContent: phase.text }));
+    item.append(
+      Object.assign(document.createElement("b"), { textContent: phase.name }),
+      Object.assign(document.createElement("span"), { textContent: phase.text }),
+    );
     list.append(item);
   }
   return list;
@@ -221,7 +279,8 @@ export function turnFigure(): HTMLElement {
   maneuverIcon.append(svgElement("path", { d: "M100,118 C130,90 130,56 112,52", class: "move", "marker-end": "url(#rules-arrowhead)" }));
   const fireIcon = svgRoot(140, 196);
   fireIcon.append(arrowheadDefs());
-  for (const x of [8, 76]) fireIcon.append(slot(x, 26, 56, 50, "enemy"), slot(x, 120, 56, 50, "player"), ship(x + 28, 51, "enemy"), ship(x + 28, 145, "player"));
+  for (const x of [8, 76])
+    fireIcon.append(slot(x, 26, 56, 50, "enemy"), slot(x, 120, 56, 50, "player"), ship(x + 28, 51, "enemy"), ship(x + 28, 145, "player"));
   fireIcon.append(arrow([40, 116], [100, 80], "shot"), arrow([100, 116], [40, 80], "shot"));
   const [shipPart, commandPart, maneuverPart, firePart] = labels.turnParts;
   const or = Object.assign(document.createElement("span"), { className: "or", textContent: labels.or });

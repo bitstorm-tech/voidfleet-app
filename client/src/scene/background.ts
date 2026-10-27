@@ -2,9 +2,9 @@
 // Viewport wie "cover" füllt und sich leicht gegen die Kamera verschiebt.
 
 import { Layer } from "@babylonjs/core/Layers/layer";
+import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Vector2 } from "@babylonjs/core/Maths/math.vector";
 import type { Scene } from "@babylonjs/core/scene";
-import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import backgroundUrl from "../../assets/images/match_screen_background.png";
 
 /** Etwas größer als der Viewport, damit die Parallaxe keine Ränder zeigt. */
@@ -35,10 +35,7 @@ export class Background {
     const engine = this.scene.getEngine();
     const viewportAspect = engine.getRenderWidth() / engine.getRenderHeight();
     const imageAspect = size.width / size.height;
-    const coverScale =
-      imageAspect > viewportAspect
-        ? new Vector2(imageAspect / viewportAspect, 1)
-        : new Vector2(1, viewportAspect / imageAspect);
+    const coverScale = imageAspect > viewportAspect ? new Vector2(imageAspect / viewportAspect, 1) : new Vector2(1, viewportAspect / imageAspect);
     this.layer.scale.copyFrom(coverScale).scaleInPlace(OVERSCAN);
   }
 }

@@ -3,7 +3,7 @@
 
 import { ABILITY_VALUES, type AdmiralId, type PowerId, type PowerTarget } from "../../../shared/admirals.ts";
 import type { LaneType, Side } from "../../../shared/board.ts";
-import { shipById, type CommandId, type CommandType, type ShipClass, type ShipId, type TargetMode } from "../../../shared/cards.ts";
+import { type CommandId, type CommandType, type ShipClass, type ShipId, shipById, type TargetMode } from "../../../shared/cards.ts";
 import type { ErrorCode, MatchResult } from "../../../shared/protocol.ts";
 import type { AnimationSpeed } from "../settings.ts";
 
@@ -203,14 +203,16 @@ export const en = {
           "Evasive Action stays within the lane, the other movement commands switch to the other lane. Maneuver and movement command can't move the same ship and can't land on the same slot. The slot a ship leaves stays blocked for the rest of the round — it only frees up next round, also for ships you deploy. Deployed ships and both destinations together count toward the limit of 4 ships per lane.",
           "Moving carries a risk: Barrage deals 3 damage to every enemy ship that changed slots this round, no matter how, and Heat Seeker follows its target and hits a ship that changed slots for 5 instead of 3. A Torpedo targets a slot, not a ship — Piercing Shot a slot number: it hits whoever stands there after all moves, so dodging it — or walking into it — is part of the game.",
         ],
-        caption: "A planned maneuver: the Scrap Raider will retreat from the Strike lane into the Command lane and hold fire this round. A maneuver may also stay within the lane.",
+        caption:
+          "A planned maneuver: the Scrap Raider will retreat from the Strike lane into the Command lane and hold fire this round. A maneuver may also stay within the lane.",
       },
       resolution: {
         heading: "Resolving a round",
         paragraphs: [
           "Once both players have ended their turn, both turns are revealed and resolved in fixed phases. Within a phase both sides act at the same time; no side ever goes first.",
         ],
-        caption: "Commands in the Effects phase run by type, not by player: repositioning first, then tactics, buffs, special effects, debuffs, and damage last.",
+        caption:
+          "Commands in the Effects phase run by type, not by player: repositioning first, then tactics, buffs, special effects, debuffs, and damage last.",
       },
       combat: {
         heading: "Combat",
@@ -222,7 +224,8 @@ export const en = {
           "The attack value already includes everything: round bonuses from commands, the Scrap Raider's bonus, the Signal Booster aura, the Vanguard's Spearhead and Overdrive. Support ships never attack, no matter the bonus.",
           `Admirals bend these rules: the Pendulum's railgun fires before anyone else, Head Start lets one ship shoot before the rest, Focus Fire adds +${focusFire} damage to every hit on its target, Swarm Strike sends all your Drones at its target — through cover and without fire orders —, and Counterfire strikes back once all shots are fired. The command Draw Fire pulls the enemy shots onto your chosen ship as long as it stands and is exposed to the shooter; only Swarm Strike and the railgun keep their targets.`,
         ],
-        caption: "Fire orders: each combat ship fires at the enemy ship you pick. A shot at a covered ship hits the ship in front of it; a shot at a ship that is already destroyed fizzles.",
+        caption:
+          "Fire orders: each combat ship fires at the enemy ship you pick. A shot at a covered ship hits the ship in front of it; a shot at a ship that is already destroyed fizzles.",
       },
       ships: {
         heading: "Ships",
@@ -261,7 +264,10 @@ export const en = {
         name: "Deploy",
         text: "New ships land, in round 1 the flagships too. Admiral abilities are revealed (a Decoy appears), Titan Carriers launch Drones, Plasma Frigates fire, the Pendulum locks on.",
       },
-      maneuver: { name: "Maneuvers", text: "Maneuvering ships switch slots and hold fire, the Mirage swaps places. Then the Bastion raises its Guardian Shield." },
+      maneuver: {
+        name: "Maneuvers",
+        text: "Maneuvering ships switch slots and hold fire, the Mirage swaps places. Then the Bastion raises its Guardian Shield.",
+      },
       effects: { name: "Effects", text: "Commands take effect, by type; damage last. Destroyed ships are removed." },
       combat: {
         name: "Combat",
@@ -331,7 +337,8 @@ export const en = {
     waitingForOpponent: (link: string) => `Waiting for the opponent — share this link: ${link}`,
     chooseAdmiral: (link: string | null) => (link ? `Choose your admiral. Invite an opponent with this link: ${link}` : "Choose your admiral."),
     opponentChoosing: "The opponent is choosing their admiral …",
-    flagshipFirst: (flagship: string) => `Round 1: deploy your flagship ${flagship} — tap its card at the front of your hand, then a glowing slot. “End turn” only works once it is planned.`,
+    flagshipFirst: (flagship: string) =>
+      `Round 1: deploy your flagship ${flagship} — tap its card at the front of your hand, then a glowing slot. “End turn” only works once it is planned.`,
     fleet: (count: number, max: number) => `Fleet ${count}/${max}`,
     noFreeSlot: (ship: string, perLane: number, perSide: number) =>
       `no free slot for ${ship} (max. ${perLane} per lane, ${perSide} per side, planned ships included).`,
@@ -346,8 +353,7 @@ export const en = {
       `${command}: tap a slot on the enemy side — it hits the slot number, front ship first, after all moves. Click the card again to take it back.`,
     noEnemyTarget: (command: string) => `no enemy ship to target with ${command}.`,
     commandDropped: (command: string, dropped: string) => `Without ${command}: ${dropped} dropped.`,
-    chooseDestination: (command: string, ship: string) =>
-      `${command}: tap a glowing slot for ${ship}. Click the card again to take it back.`,
+    chooseDestination: (command: string, ship: string) => `${command}: tap a glowing slot for ${ship}. Click the card again to take it back.`,
     /** Ein gewähltes eigenes Schiff: sein Feuerbefehl, sein Grundmanöver und was ein zweiter Klick zurücknimmt. */
     chooseFireTarget: (ship: string) => `${ship}: tap an enemy ship as its target — at a covered one, the ship in front takes the shot.`,
     noFireTarget: (ship: string) => `${ship}: no enemy ship to fire at yet.`,
@@ -429,8 +435,7 @@ export const en = {
     command: (who: string, command: string) => `Command: ${who} — ${command}`,
     commandOn: (who: string, command: string, slot: string) => `Command: ${who} — ${command} on ${slot}`,
     damage: (command: string, ship: string, amount: number) => `Effect: ${command} hits ${ship} for ${amount}`,
-    attackBonus: (command: string, ship: string, delta: number) =>
-      `Effect: ${command} — ${ship} ${delta > 0 ? "+" : ""}${delta} ATK this round`,
+    attackBonus: (command: string, ship: string, delta: number) => `Effect: ${command} — ${ship} ${delta > 0 ? "+" : ""}${delta} ATK this round`,
     shield: (command: string, ship: string, amount: number) => `Effect: ${command} — ${ship} +${amount} shield this round`,
     disable: (command: string, ship: string) => `Effect: ${command} — ${ship} cannot attack this round`,
     heal: (command: string, ship: string, amount: number) => `Effect: ${command} heals ${ship} for ${amount}`,
@@ -473,7 +478,8 @@ export const en = {
     /** Der Schuss verpufft: Sein Ziel steht nicht mehr auf dem Brett (vor dem Kampf zerstört, Kurzsprung). */
     fizzleGone: (attacker: string) => `Combat: the shot of ${attacker} fizzles — its target is no longer on the board`,
     /** Die Deckung vor dem Ziel des Feuerbefehls ist schon zerstört und fängt den Schuss trotzdem ab. */
-    fizzleCovered: (attacker: string, aimed: string, cover: string) => `Combat: the shot of ${attacker} at ${aimed} fizzles — ${cover} in front of it is already destroyed`,
+    fizzleCovered: (attacker: string, aimed: string, cover: string) =>
+      `Combat: the shot of ${attacker} at ${aimed} fizzles — ${cover} in front of it is already destroyed`,
     silenced: (ship: string) => `Head Start: ${ship} is destroyed before it can fire`,
     counterfire: (ship: string, source: string, amount: number) => `Counterfire: ${ship} takes ${amount} for hitting ${source}`,
     selfDamage: (ship: string, amount: number) => `Cleanup: ${ship} takes ${amount} self-damage`,
@@ -591,7 +597,8 @@ export const en = {
     void_interceptor: { name: "Void Interceptor", effect: "Pure damage, no tricks." },
     decoy: {
       name: "Decoy",
-      effect: "Admiral Moreau's hologram: stands for one round, never attacks and covers the Command slot behind it — shots at the ship there hit the Decoy. Flagships see through it; destroyed, it leaves no scrap.",
+      effect:
+        "Admiral Moreau's hologram: stands for one round, never attacks and covers the Command slot behind it — shots at the ship there hit the Decoy. Flagships see through it; destroyed, it leaves no scrap.",
     },
     bastion: {
       name: "Bastion",
@@ -628,7 +635,8 @@ export const en = {
     },
     decoy: {
       name: "Decoy",
-      effect: "Choose a free Strike slot. A Decoy (1 HP) stands there this round and covers the slot behind it: shots at that ship hit the Decoy. Flagships see through it.",
+      effect:
+        "Choose a free Strike slot. A Decoy (1 HP) stands there this round and covers the slot behind it: shots at that ship hit the Decoy. Flagships see through it.",
     },
     head_start: { name: "Head Start", effect: "Choose one of your combat ships. It fires before everyone else, and whatever it destroys no longer fires." },
   } satisfies Record<PowerId, CardText>,
@@ -656,25 +664,35 @@ export const en = {
     evasive_action: { name: "Evasive Action", effect: "Chosen allied ship moves to a free slot in the same lane and gains Shield 2 this round." },
     micro_jump: {
       name: "Micro-Jump",
-      effect: "After all moves, chosen allied ship leaves the battle and returns at the end of the round. Until then nothing can hit it, but it neither fires nor gives cover.",
+      effect:
+        "After all moves, chosen allied ship leaves the battle and returns at the end of the round. Until then nothing can hit it, but it neither fires nor gives cover.",
     },
     rapid_deployment: { name: "Rapid Deployment", effect: "You may deploy one extra ship this round." },
     draw_fire: {
       name: "Draw Fire",
-      effect: "This round the chosen allied ship draws the shots of all enemy ships with a fire order, as long as it stands and is exposed to them. Swarm Strike and the railgun keep their targets.",
+      effect:
+        "This round the chosen allied ship draws the shots of all enemy ships with a fire order, as long as it stands and is exposed to them. Swarm Strike and the railgun keep their targets.",
     },
     shield_grid: { name: "Shield Grid", effect: "All allied ships gain Shield 1 this round." },
     ablative_armor: { name: "Ablative Armor", effect: "Chosen allied ship gains a permanent Shield 2. It does not expire at the end of the round." },
-    covering_fire: { name: "Covering Fire", effect: "Chosen allied ship and the ship directly in front of or behind it each gain +1 ATK and Shield 1 this round." },
+    covering_fire: {
+      name: "Covering Fire",
+      effect: "Chosen allied ship and the ship directly in front of or behind it each gain +1 ATK and Shield 1 this round.",
+    },
     drone_squadron: {
       name: "Drone Squadron",
-      effect: "Two Drones (1 HP, 1 ATK) launch into free Strike slots, in front of uncovered Command ships first. They give cover at once; this round they fire only with Swarm Strike.",
+      effect:
+        "Two Drones (1 HP, 1 ATK) launch into free Strike slots, in front of uncovered Command ships first. They give cover at once; this round they fire only with Swarm Strike.",
     },
     collision_course: {
       name: "Collision Course",
-      effect: "Chosen allied Strike ship (not a flagship) rams the exposed enemy ship opposite. Each takes damage equal to the other's HP. The rammer does not fire this round.",
+      effect:
+        "Chosen allied Strike ship (not a flagship) rams the exposed enemy ship opposite. Each takes damage equal to the other's HP. The rammer does not fire this round.",
     },
-    countermeasures: { name: "Countermeasures", effect: "If your opponent plays an attack or debuff command this round, it fizzles. Otherwise, draw a command." },
+    countermeasures: {
+      name: "Countermeasures",
+      effect: "If your opponent plays an attack or debuff command this round, it fizzles. Otherwise, draw a command.",
+    },
     carte_blanche: { name: "Carte Blanche", effect: "You may use both the basic maneuver and your admiral ability this round." },
     radio_silence: { name: "Radio Silence", effect: "The enemy admiral ability fizzles this round; a Decoy dissolves." },
     minefield: {

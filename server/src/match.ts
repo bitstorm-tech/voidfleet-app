@@ -8,24 +8,24 @@
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
 
 import { ADMIRAL_IDS, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
+import { Board, isSameSlot, maxDeploys, opposite, overdriveBonus, type PlannedMove, type Side } from "../../shared/board.ts";
 import {
   allowsManeuverAndPower,
+  type CommandCard,
+  type CommandId,
   canTargetLane,
   canTargetShip,
   destinationLane,
   needsTarget,
+  type ShipCard,
   shipById,
   targetsEnemyShip,
   targetsEnemySide,
-  type CommandCard,
-  type CommandId,
-  type ShipCard,
 } from "../../shared/cards.ts";
-import { Board, isSameSlot, maxDeploys, opposite, overdriveBonus, type PlannedMove, type Side } from "../../shared/board.ts";
-import { canMark, markTargets, powerTargets, type PlannedArrival } from "../../shared/powers.ts";
+import { canMark, markTargets, type PlannedArrival, powerTargets } from "../../shared/powers.ts";
 import type { ErrorCode, MatchResult, OpponentView, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
-import { resolveTurns, type Commander, type Turn } from "../../shared/resolution.ts";
-import { planBotTurn, type BotView } from "./bot.ts";
+import { type Commander, resolveTurns, type Turn } from "../../shared/resolution.ts";
+import { type BotView, planBotTurn } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
 
 export type Seat = 0 | 1;
@@ -47,9 +47,7 @@ function mirrorSides<T>(seat: Seat, { player, enemy }: Record<Side, T>): Record<
 /** Spiegelt ein Ereignis für Seat 1: Jedes `side`-Feld, auch in verschachtelten Schiffen, wechselt die Seite. */
 function mirrorEvent<T>(value: T): T {
   if (typeof value !== "object" || value === null) return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, inner]) => [key, key === "side" ? opposite(inner as Side) : mirrorEvent(inner)]),
-  ) as T;
+  return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, key === "side" ? opposite(inner as Side) : mirrorEvent(inner)])) as T;
 }
 
 class Player implements Commander {
@@ -331,7 +329,11 @@ export class Match {
    * Sicht von Seat 0 zurück.
    */
   resolveRound(): RoundEvent[] {
-    const events = resolveTurns(this.board, this.players.map((player) => player.reveal()), this.random);
+    const events = resolveTurns(
+      this.board,
+      this.players.map((player) => player.reveal()),
+      this.random,
+    );
     for (const player of this.players) {
       player.plan = null;
       player.drawForRound();

@@ -13,7 +13,7 @@ import type { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { ShipId } from "../../../shared/cards.ts";
 import { playSound } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
-import { randomBetween, randomInCone, type BlastStyle } from "./effects.ts";
+import { type BlastStyle, randomBetween, randomInCone } from "./effects.ts";
 import type { MatchScene } from "./matchScene.ts";
 import type { ShipView, Wreck } from "./ship.ts";
 import { tween } from "./tween.ts";

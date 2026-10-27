@@ -169,7 +169,10 @@ function analyse(buffer: AudioBuffer): Omit<Sample, "buffer"> {
   }
   const peak = level.reduce((max, value) => Math.max(max, value), 0);
   const rms = Math.sqrt(loudest / window);
-  const first = Math.max(level.findIndex((value) => value > ONSET_LEVEL), 0);
+  const first = Math.max(
+    level.findIndex((value) => value > ONSET_LEVEL),
+    0,
+  );
   return {
     gain: rms > 0 ? Math.min(TARGET_LOUDNESS / rms, 1 / peak) : 0,
     onset: Math.max(first / sampleRate - ONSET_MARGIN, 0),

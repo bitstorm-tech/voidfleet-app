@@ -16,25 +16,49 @@
 // ein Mensch nicht einfach berechnen kann.
 
 import { ABILITY_VALUES, ADMIRALS, type AdmiralId, type PowerId } from "../../shared/admirals.ts";
-import { Board, isSameSlot, MAX_SHIPS_PER_SIDE, maxDeploys, nearest, opposite, otherLane, SLOT_COUNT, slotTarget, type Lane, type LaneType, type Side, type Slot } from "../../shared/board.ts";
+import {
+  Board,
+  isSameSlot,
+  type Lane,
+  type LaneType,
+  MAX_SHIPS_PER_SIDE,
+  maxDeploys,
+  nearest,
+  opposite,
+  otherLane,
+  type Side,
+  SLOT_COUNT,
+  type Slot,
+  slotTarget,
+} from "../../shared/board.ts";
 import {
   allowsManeuverAndPower,
+  COMMANDS,
+  type CommandCard,
+  type CommandId,
   canTargetLane,
   canTargetShip,
   commandById,
-  COMMANDS,
   deckCopies,
   isFlagship,
   isToken,
+  type ShipCard,
   shipById,
   targetsEnemyShip,
-  type CommandCard,
-  type CommandId,
-  type ShipCard,
 } from "../../shared/cards.ts";
 import { canMark, powerTargets } from "../../shared/powers.ts";
 import type { Deploy, FireOrder, OpponentView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
-import { highest, resolveCleanup, resolveCombat, resolveEffects, resolveGuardianShields, resolveManeuver, resolvePower, resolveSwap, type Commander } from "../../shared/resolution.ts";
+import {
+  type Commander,
+  highest,
+  resolveCleanup,
+  resolveCombat,
+  resolveEffects,
+  resolveGuardianShields,
+  resolveManeuver,
+  resolvePower,
+  resolveSwap,
+} from "../../shared/resolution.ts";
 
 /** Was der Computergegner beim Planen weiß: Seite, Admiral, eigene Hände und, was jeder vom Gegner sieht. */
 export interface BotView {
@@ -163,7 +187,11 @@ function planShips(board: Board, bot: BotView, count: number): Deploy[] {
   const ships: Deploy[] = [];
   const hand = bot.shipHand.map((card, handIndex) => ({ card, handIndex }));
   for (let i = 0; i < count; i++) {
-    const ship = planShip(board, bot.side, hand.map((entry) => entry.card));
+    const ship = planShip(
+      board,
+      bot.side,
+      hand.map((entry) => entry.card),
+    );
     if (ship === null) break;
     const { card, handIndex } = hand.splice(ship.handIndex, 1)[0]!;
     board.place(board.lane(bot.side, ship.target.lane), ship.target.slotIndex, card);
@@ -175,7 +203,8 @@ function planShips(board: Board, bot: BotView, count: number): Deploy[] {
 /** Ein ungedecktes Command-Schiff, das Deckung braucht: zuerst das Flaggschiff, dann eines, auf das die gegnerische Railgun zielt. */
 function needsGuard(board: Board, side: Side): Slot | null {
   const strike = board.lane(side, "strike");
-  const open = (slot: Slot | null) => slot !== null && slot.lane.type === "command" && !strike.slots[slot.index]!.isOccupied && board.canPlace(strike, slot.index);
+  const open = (slot: Slot | null) =>
+    slot !== null && slot.lane.type === "command" && !strike.slots[slot.index]!.isOccupied && board.canPlace(strike, slot.index);
   const flagship = board.flagship(side);
   if (open(flagship)) return flagship;
   return board.lane(side, "command").occupiedSlots.find((slot) => slot.marked && open(slot)) ?? null;
@@ -187,7 +216,11 @@ function planShip(board: Board, side: Side, shipHand: readonly ShipCard[]): Depl
   // Braucht ein Schiff Deckung, stellt sich das robusteste Kampfschiff davor.
   const guarded = needsGuard(board, side);
   if (guarded) {
-    const guard = highest(shipHand.filter((ship) => ship.atk > 0), (ship) => ship.hp + ship.shield) ?? card;
+    const guard =
+      highest(
+        shipHand.filter((ship) => ship.atk > 0),
+        (ship) => ship.hp + ship.shield,
+      ) ?? card;
     return { handIndex: shipHand.indexOf(guard), target: { lane: "strike", slotIndex: guarded.index } };
   }
   const strike = board.lane(side, "strike");
@@ -266,11 +299,7 @@ function unplayed(bot: BotView, id: CommandId): number {
 function stays(slot: Slot): boolean {
   const { board } = slot.lane;
   const strike = board.lane(slot.lane.side, "strike");
-  return (
-    !damaged(slot) ||
-    !board.isExposed(slot) ||
-    (slot.lane.type === "strike" && !strike.occupiedSlots.some((other) => other !== slot && attacks(other)))
-  );
+  return !damaged(slot) || !board.isExposed(slot) || (slot.lane.type === "strike" && !strike.occupiedSlots.some((other) => other !== slot && attacks(other)));
 }
 
 /**
@@ -486,9 +515,9 @@ class Situation {
 
   /** Wohin sich ein angeschlagenes gegnerisches Strike-Schiff, das sonst fällt, am ehesten zurückzieht. */
   private likelyRetreat(): Move | null {
-    const fleeing = this.board.lane(opposite(this.side), "strike").occupiedSlots.filter(
-      (slot) => damaged(slot) && this.dies(slot) && this.pairsAfterMove(slot),
-    );
+    const fleeing = this.board
+      .lane(opposite(this.side), "strike")
+      .occupiedSlots.filter((slot) => damaged(slot) && this.dies(slot) && this.pairsAfterMove(slot));
     const ship = highest(fleeing, (slot) => damageValue(slot, 5));
     return ship && { ship, destination: this.move(ship)!.destination };
   }
@@ -499,7 +528,10 @@ class Situation {
       const front = this.lane("strike").slots[destination.index]!;
       return front === other?.destination || (front.isOccupied && front !== other?.ship && front !== slot);
     };
-    return nearest(this.destinations(slot, other).filter((destination) => destination.lane.type === "command" && covered(destination)), slot.index);
+    return nearest(
+      this.destinations(slot, other).filter((destination) => destination.lane.type === "command" && covered(destination)),
+      slot.index,
+    );
   }
 
   /** Der Befehl mit dem größten geschätzten Nutzen; null, wenn keiner etwas bringt. */
@@ -585,7 +617,10 @@ class Situation {
       case "flanking_maneuver": {
         // Das robusteste Schiff nach vorne, wenn es damit ein anderes deckt; sonst ein angeschlagenes
         // Schiff vorne in einen gedeckten Slot bringen, solange vorne jemand bleibt.
-        const advance = highest(this.settled(this.lane("command").occupiedSlots).filter((slot) => !isFlagship(slot.card!) && this.pairsAfterMove(slot)), hp);
+        const advance = highest(
+          this.settled(this.lane("command").occupiedSlots).filter((slot) => !isFlagship(slot.card!) && this.pairsAfterMove(slot)),
+          hp,
+        );
         if (advance) return this.moving(advance, 2);
         const retreat = lowest(this.settled(this.lane("strike").occupiedSlots), hp);
         if (retreat && this.endangered(retreat) && this.pairsAfterMove(retreat) && strikeCount >= 2) {
@@ -628,12 +663,18 @@ class Situation {
         // mehr verliert, als sein Schuss bringt. Die Pendulum springt nur zur Rettung, sonst fiele ihre Railgun aus.
         const flagship = this.flagship;
         if (flagship && this.flagshipThreat() >= durability(flagship)) return on(flagship, DECISIVE / 2 - (this.rescues(3) ? 1 : 0));
-        return this.bestTarget(card, this.own.filter((slot) => slot.card!.id !== "pendulum" && this.hit(slot) > 0));
+        return this.bestTarget(
+          card,
+          this.own.filter((slot) => slot.card!.id !== "pendulum" && this.hit(slot) > 0),
+        );
       }
       case "rapid_deployment":
         return this.extraShip === null ? null : untargeted(this.extraShip);
       case "draw_fire":
-        return this.bestTarget(card, this.own.filter((slot) => this.board.isExposed(slot)));
+        return this.bestTarget(
+          card,
+          this.own.filter((slot) => this.board.isExposed(slot)),
+        );
       case "shield_grid":
         return untargeted(Math.max(this.simulated(card, null), this.rescues(1) ? DECISIVE / 2 : 0));
       case "ablative_armor":
@@ -646,7 +687,10 @@ class Situation {
       case "drone_squadron":
         return untargeted(this.simulated(card, null));
       case "collision_course":
-        return this.bestTarget(card, this.lane("strike").occupiedSlots.filter((slot) => canTargetShip(card, slot.card!)));
+        return this.bestTarget(
+          card,
+          this.lane("strike").occupiedSlots.filter((slot) => canTargetShip(card, slot.card!)),
+        );
       case "countermeasures": {
         // Lässt einen Angriff oder eine Schwächung des Gegners verpuffen, sonst zieht er einen Befehl. Wackelt das eigene
         // Flaggschiff erst durch einen Befehl, kann sie das Match retten.
@@ -679,7 +723,10 @@ class Situation {
       }
       case "tractor_beam":
         // Zieht ein Schiff in die andere Lane, am liebsten den Wächter vor dem Flaggschiff.
-        return this.bestTarget(card, enemies.filter((slot) => canTargetShip(card, slot.card!)));
+        return this.bestTarget(
+          card,
+          enemies.filter((slot) => canTargetShip(card, slot.card!)),
+        );
       case "heat_seeker": {
         // Folgt seinem Ziel: 3 Schaden, 5 an einem Schiff, das wohl ausweicht; im Probekampf samt dem, was er dem eigenen Feuer ermöglicht.
         const value = (slot: Slot) => Math.max(damageValue(slot, this.flees(slot) ? 5 : 3), this.simulated(card, slot));
@@ -687,7 +734,10 @@ class Situation {
         return target && on(target, value(target));
       }
       case "coup_de_grace": {
-        const target = lowest(enemies.filter((slot) => !isToken(slot.card!)), hp);
+        const target = lowest(
+          enemies.filter((slot) => !isToken(slot.card!)),
+          hp,
+        );
         return target && untargeted(damageValue(target, 4));
       }
       case "piercing_shot": {
@@ -828,7 +878,10 @@ class Situation {
     const partners = movable.filter((slot) => slot !== mirage && slot !== other?.ship);
     const covered = partners.filter((slot) => !this.board.isExposed(slot));
     if (this.board.isExposed(mirage) && this.fireThreat(mirage) > 0) {
-      const partner = highest(covered.filter((slot) => durability(slot) > this.hit(mirage) + 1 && !isToken(slot.card!)), durability);
+      const partner = highest(
+        covered.filter((slot) => durability(slot) > this.hit(mirage) + 1 && !isToken(slot.card!)),
+        durability,
+      );
       if (partner) return { ship: mirage, destination: partner };
     }
     const torpedo = this.bot.opponent.commandHandSize > 0 && unplayed(this.bot, "torpedo") > 0;
@@ -876,7 +929,11 @@ class Situation {
       const front = this.lane("strike").slots[slot.index]!;
       return front === other?.destination || (front.isOccupied && front !== other?.ship);
     };
-    const shelter = (slot: Slot) => nearest(this.destinations(slot, other).filter((destination) => destination.lane === slot.lane && covered(destination)), slot.index);
+    const shelter = (slot: Slot) =>
+      nearest(
+        this.destinations(slot, other).filter((destination) => destination.lane === slot.lane && covered(destination)),
+        slot.index,
+      );
     const candidates = movable.filter(
       (slot) => slot.lane.type === "command" && this.board.isExposed(slot) && this.loss(slot) > this.shotValue(slot) && shelter(slot),
     );
@@ -913,7 +970,10 @@ class Situation {
 
   /** Ausweichen: das Schiff (kein Flaggschiff), auf das ein gegnerischer Torpedo am ehesten zielt, wechselt die Lane. */
   private dodge(movable: readonly Slot[], other: Move | null): Move | null {
-    const ship = highest(this.settled(this.own).filter((slot) => !isFlagship(slot.card!)), (slot) => this.torpedoValue(slot));
+    const ship = highest(
+      this.settled(this.own).filter((slot) => !isFlagship(slot.card!)),
+      (slot) => this.torpedoValue(slot),
+    );
     if (ship === null || !movable.includes(ship) || this.uncovers(ship) || !this.attackerRemains(ship)) return null;
     const move = this.move(ship, other);
     return move && { ship, destination: move.destination };
@@ -995,7 +1055,12 @@ class Situation {
       if (ship && targetsEnemyShip(command.card)) ship.locks = [command.card.id];
       resolveEffects(board, [{ commander: this.commander, card: command.card, target: ship, destination: command.destination && at(command.destination) }], []);
     }
-    const aims = aimFire(board, this.side, (slot) => planned.has(slot.uid), (slot) => unsure.has(slot.uid));
+    const aims = aimFire(
+      board,
+      this.side,
+      (slot) => planned.has(slot.uid),
+      (slot) => unsure.has(slot.uid),
+    );
     for (const [shooter, target] of aims) shooter.aim = target.uid;
     return { board, planned };
   }
@@ -1023,7 +1088,10 @@ class Situation {
       if (!front.isOccupied) return 0.6;
       return durability(front) <= 5 ? KERR.weakCover : KERR.covered;
     };
-    const target = highest(this.enemies.filter((slot) => !isToken(slot.card!)), (slot) => damageValue(slot, ABILITY_VALUES.railgun) * exposure(slot));
+    const target = highest(
+      this.enemies.filter((slot) => !isToken(slot.card!)),
+      (slot) => damageValue(slot, ABILITY_VALUES.railgun) * exposure(slot),
+    );
     return target && slotTarget(target);
   }
 }
@@ -1031,7 +1099,9 @@ class Situation {
 /** Die Stellung aus Sicht von `side`: HP und Schild aller Schiffe (des Flaggschiffs doppelt), je Schiff außer Tokens ein Bonus; der Fall eines Flaggschiffs entscheidet. */
 function positionScore(board: Board, side: Side): number {
   const value = (of: Side) =>
-    board.ships(of).reduce((total, slot) => total + durability(slot) * (isFlagship(slot.card!) ? FLAGSHIP_WEIGHT : 1) + (isToken(slot.card!) ? 0 : KILL_BONUS), 0);
+    board
+      .ships(of)
+      .reduce((total, slot) => total + durability(slot) * (isFlagship(slot.card!) ? FLAGSHIP_WEIGHT : 1) + (isToken(slot.card!) ? 0 : KILL_BONUS), 0);
   const fallen = (of: Side) => (board.flagship(of) ? 0 : DECISIVE);
   return value(side) - value(opposite(side)) - fallen(side) + fallen(opposite(side));
 }
@@ -1055,7 +1125,12 @@ function predictFire(board: Board, side: Side, deploys: boolean): FireOrder[] {
   const view = copyOf(board);
   resolveGuardianShields(view, []);
   const unsure = unsureShips(view, opposite(side), deploys);
-  const aims = aimFire(view, side, () => true, (slot) => unsure.includes(slot));
+  const aims = aimFire(
+    view,
+    side,
+    () => true,
+    (slot) => unsure.includes(slot),
+  );
   return [...aims].map(([shooter, target]) => ({ ship: slotTarget(shooter), target: slotTarget(target) }));
 }
 

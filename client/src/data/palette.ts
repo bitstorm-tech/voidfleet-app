@@ -61,11 +61,7 @@ export function darkened(color: Rgb, amount: number): Rgb {
 
 /** Entspricht Godots Color.lightened(). */
 export function lightened(color: Rgb, amount: number): Rgb {
-  return [
-    color[0] + (1 - color[0]) * amount,
-    color[1] + (1 - color[1]) * amount,
-    color[2] + (1 - color[2]) * amount,
-  ];
+  return [color[0] + (1 - color[0]) * amount, color[1] + (1 - color[1]) * amount, color[2] + (1 - color[2]) * amount];
 }
 
 /** Nur die drei Kanäle (0..255), für `rgb(var(--x) / alpha)` im CSS. */

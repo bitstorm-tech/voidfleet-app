@@ -2,21 +2,21 @@
 // geplante Zug der laufenden Runde. Der Server ist autoritativ; `apply`
 // übernimmt seine Sicht, geplant wird lokal bis zum Submit.
 
-import { ADMIRALS, targetsEnemy, type AdmiralId, type PowerId } from "../../../shared/admirals.ts";
+import { ADMIRALS, type AdmiralId, type PowerId, targetsEnemy } from "../../../shared/admirals.ts";
+import { Board, isSameSlot, maxDeploys, overdriveBonus, type PlannedMove, type Side, type Slot, slotTarget } from "../../../shared/board.ts";
 import {
   allowsManeuverAndPower,
+  type CommandCard,
+  type CommandId,
   canTargetLane,
   canTargetShip,
   commandById,
   destinationLane,
   isToken,
+  type ShipCard,
   shipById,
   targetsEnemySide,
-  type CommandCard,
-  type CommandId,
-  type ShipCard,
 } from "../../../shared/cards.ts";
-import { Board, isSameSlot, maxDeploys, overdriveBonus, slotTarget, type PlannedMove, type Side, type Slot } from "../../../shared/board.ts";
 import { canMark, markTargets, powerTargets, railgunFires } from "../../../shared/powers.ts";
 import type { FireOrder, MatchResult, OpponentView, PlayerView, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
 
@@ -176,7 +176,11 @@ export class Match {
   /** Nimmt das eingeplante Schiff zurück. */
   unplanShip(pick: ShipPick): void {
     if (pick === "flagship") this.setArrivals(null, this.plan.ships);
-    else this.setArrivals(this.plan.flagship, this.plan.ships.filter((ship) => ship.handIndex !== pick));
+    else
+      this.setArrivals(
+        this.plan.flagship,
+        this.plan.ships.filter((ship) => ship.handIndex !== pick),
+      );
   }
 
   /**
@@ -253,7 +257,10 @@ export class Match {
 
   /** Die eigenen Schiffe, die einen Feuerbefehl bekommen können (`canFire`), als Slot beim Planen. */
   get shooters(): Slot[] {
-    return this.board.lanesFor("player").flatMap((lane) => lane.slots).filter((slot) => this.canFire(slot));
+    return this.board
+      .lanesFor("player")
+      .flatMap((lane) => lane.slots)
+      .filter((slot) => this.canFire(slot));
   }
 
   /** Der Feuerbefehl des eigenen Schiffs auf `slot` (Slot beim Planen). */
@@ -355,7 +362,11 @@ export class Match {
     if (!from.isOccupied || command?.from === from) return [];
     const decoy = this.keepsManeuverAndPower ? this.plannedDecoy : null;
     const free = this.board
-      .maneuverDestinations(from, this.arrivals.map((arrival) => arrival.target), command)
+      .maneuverDestinations(
+        from,
+        this.arrivals.map((arrival) => arrival.target),
+        command,
+      )
       .filter((slot) => !(decoy && isSameSlot(slotTarget(slot), decoy)));
     if (from.card!.id !== "mirage") return free;
     const partners = this.board.ships("player").filter((slot) => slot !== from && slot !== command?.from);
@@ -442,7 +453,9 @@ export class Match {
       flagship: this.needsFlagship ? (this.plan.flagship ? "done" : "open") : null,
       ships: canDeployMore ? "open" : this.plan.ships.length > 0 ? "done" : "blocked",
       command: this.plan.command ? "done" : this.commandHand.length > 0 ? "open" : "blocked",
-      maneuver: both ? state(this.plan.maneuver !== null, canManeuver) : state(this.plan.maneuver !== null || this.plan.power !== null, canManeuver || canPower),
+      maneuver: both
+        ? state(this.plan.maneuver !== null, canManeuver)
+        : state(this.plan.maneuver !== null || this.plan.power !== null, canManeuver || canPower),
       power: both ? state(this.plan.power !== null, canPower) : null,
       mark: this.canMark ? (this.plan.mark ? "done" : this.markTargets.length > 0 ? "open" : "blocked") : null,
       fire: shooters.length === 0 ? "blocked" : assigned === shooters.length ? "done" : "open",

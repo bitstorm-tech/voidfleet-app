@@ -4,8 +4,8 @@
 
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Curve3 } from "@babylonjs/core/Maths/math.path";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
 import { CreateTube } from "@babylonjs/core/Meshes/Builders/tubeBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -63,11 +63,7 @@ export class MoveArrow {
 
     const tube = CreateTube("move-arrow-tube", { path: curve.getPoints(), radius: TUBE_RADIUS, tessellation: 12 }, this.scene);
     // Spitze nach unten: oben breit, unten null.
-    const head = CreateCylinder(
-      "move-arrow-head",
-      { height: HEAD_LENGTH, diameterTop: HEAD_WIDTH, diameterBottom: 0, tessellation: 16 },
-      this.scene,
-    );
+    const head = CreateCylinder("move-arrow-head", { height: HEAD_LENGTH, diameterTop: HEAD_WIDTH, diameterBottom: 0, tessellation: 16 }, this.scene);
     head.position = tip.add(up.scale(HEAD_LENGTH / 2));
 
     this.meshes = [tube, head];

@@ -6,7 +6,7 @@
 
 import { Board, isSameSlot, type Side, type Slot } from "../../../shared/board.ts";
 import type { ShipRef, ShipStats, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
-import { resolveTurns, type Commander, type Turn } from "../../../shared/resolution.ts";
+import { type Commander, resolveTurns, type Turn } from "../../../shared/resolution.ts";
 import type { Match } from "./match.ts";
 
 /** Ein Schuss im Kampf, mit den Slots nach allen Bewegungen. */
@@ -57,7 +57,11 @@ export function previewRound(match: Match, plan: TurnPlan = match.plan): RoundPr
   // Wohin Schiffe gewechselt sind, je Schiff höchstens einmal.
   const moves = events.flatMap((event): { from: SlotRef; to: SlotRef }[] => {
     if (event.kind === "maneuver") return [{ from: at(event.ship), to: { side: event.side, ...event.to } }];
-    if (event.kind === "swap") return [{ from: at(event.a), to: at(event.b) }, { from: at(event.b), to: at(event.a) }];
+    if (event.kind === "swap")
+      return [
+        { from: at(event.a), to: at(event.b) },
+        { from: at(event.b), to: at(event.a) },
+      ];
     if (event.kind === "effect" && event.effect.type === "move") return [{ from: at(event.ship), to: { side: event.ship.side, ...event.effect.to } }];
     return [];
   });
@@ -76,13 +80,20 @@ export function previewRound(match: Match, plan: TurnPlan = match.plan): RoundPr
   const preview: RoundPreview = { shots: [], losses: [], drones: [], outcomes: new Map() };
   for (const event of events) {
     if (event.kind === "attack") {
-      preview.shots.push({ attacker: at(event.attacker), shooter: before(event.attacker), target: event.target, aimedAt: event.aimedAt ?? null, fizzle: false });
+      preview.shots.push({
+        attacker: at(event.attacker),
+        shooter: before(event.attacker),
+        target: event.target,
+        aimedAt: event.aimedAt ?? null,
+        fizzle: false,
+      });
     }
     if (event.kind === "fizzle") {
       const shooter = before(event.attacker);
       preview.shots.push({ attacker: at(event.attacker), shooter, target: event.target ?? gone(shooter), aimedAt: event.aimedAt ?? null, fizzle: true });
     }
-    if (event.kind === "railgun" && !event.blocked) preview.shots.push({ attacker: event.source, shooter: null, target: event.target, aimedAt: null, fizzle: false });
+    if (event.kind === "railgun" && !event.blocked)
+      preview.shots.push({ attacker: event.source, shooter: null, target: event.target, aimedAt: null, fizzle: false });
     if (event.kind === "destroyed") preview.losses.push(at(event.ship));
     if (event.kind === "spawn" && event.source.cardId !== "hive") preview.drones.push(event.ship);
     if (event.kind === "effect" && event.effect.type === "spawn") preview.drones.push(event.ship);

@@ -3,14 +3,8 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": [
-      "ESNext",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "types": [
-      "bun-types"
-    ],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["bun-types"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
@@ -19,9 +13,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": [
-    "src",
-    "index.html",
-    "../shared"
-  ]
+  "include": ["src", "index.html", "../shared"]
 }

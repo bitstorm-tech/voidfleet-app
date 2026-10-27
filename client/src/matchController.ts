@@ -34,18 +34,18 @@
 
 import { PointerEventTypes, type PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import { ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
+import { isSameSlot, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, overdriveBonus, type PlannedMove, type Slot, slotTarget } from "../../shared/board.ts";
 import {
+  type CommandCard,
   canTargetShip,
   needsTarget,
+  type ShipCard,
   shipById,
   targetsEnemyColumn,
   targetsEnemyShip,
   targetsEnemySide,
   targetsEnemySlot,
-  type CommandCard,
-  type ShipCard,
 } from "../../shared/cards.ts";
-import { isSameSlot, MAX_SHIPS_PER_LANE, MAX_SHIPS_PER_SIDE, overdriveBonus, slotTarget, type PlannedMove, type Slot } from "../../shared/board.ts";
 import type { MatchResult, OpponentView, ServerMessage, ShipRef, SlotRef, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { setMusicMood } from "./audio/music.ts";
 import { say } from "./audio/radio.ts";
@@ -59,17 +59,17 @@ import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
 import { preloadAssets } from "./preload.ts";
 import { RoundPlayback } from "./roundPlayback.ts";
-import { MatchScene, pickedPad } from "./scene/matchScene.ts";
 import type { MarkerSpec } from "./scene/markers.ts";
+import { MatchScene, pickedPad } from "./scene/matchScene.ts";
 import type { MoveArrow } from "./scene/moveArrow.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
 import { AdmiralSelect } from "./ui/admiralSelect.ts";
 import { FloatingTexts } from "./ui/floatingText.ts";
+import { installFullscreen, toggleFullscreen } from "./ui/fullscreen.ts";
 import { HandView } from "./ui/hand.ts";
 import { Hud } from "./ui/hud.ts";
 import { LoadingScreen } from "./ui/loadingScreen.ts";
-import { installFullscreen, toggleFullscreen } from "./ui/fullscreen.ts";
 import { OpponentPanel } from "./ui/opponentPanel.ts";
 import { PowerCard, type PowerCardView, type PowerState } from "./ui/powerCard.ts";
 import { RadioSubtitle } from "./ui/radioSubtitle.ts";
@@ -560,7 +560,12 @@ export class MatchController {
         if (!own) return false;
         const target = this.match.plannedOwnTarget;
         const maneuver = this.match.plannedManeuver;
-        return (target != null && isSameSlot(target, slotTarget(slot))) || this.match.plannedCommandMove?.to === slot || maneuver?.from === slot || maneuver?.to === slot;
+        return (
+          (target != null && isSameSlot(target, slotTarget(slot))) ||
+          this.match.plannedCommandMove?.to === slot ||
+          maneuver?.from === slot ||
+          maneuver?.to === slot
+        );
       }
     }
   }
@@ -959,7 +964,12 @@ export class MatchController {
     const power = state(match.plan.power !== null, selection?.kind === "power", match.powerTargets.length > 0);
     if (match.admiral !== "kerr") return { admiral: match.admiral, power, lock: null };
     const railgun = match.railgunTarget;
-    if (railgun) return { admiral: match.admiral, power, lock: { railgun: t.hud.railgun(cardText(railgun.card!).name), warning: match.pendulumMoves ? t.hud.shotLost : null } };
+    if (railgun)
+      return {
+        admiral: match.admiral,
+        power,
+        lock: { railgun: t.hud.railgun(cardText(railgun.card!).name), warning: match.pendulumMoves ? t.hud.shotLost : null },
+      };
     if (!match.canMark) return { admiral: match.admiral, power, lock: null };
     const mark = match.plan.mark;
     const marked = mark && this.view.pad("enemy", mark.lane, mark.slotIndex).slot.card;
@@ -1053,7 +1063,13 @@ export class MatchController {
     const canManeuver = match.maneuverDestinations(slot).length > 0;
     const texts: string[] = [];
     if (!match.canFire(slot)) {
-      texts.push(ship.atk === 0 ? t.status.noGuns(name) : maneuvering ? t.status.maneuvering(name) : t.status.commandHoldsFire(name, cardText(match.plannedCommand!).name));
+      texts.push(
+        ship.atk === 0
+          ? t.status.noGuns(name)
+          : maneuvering
+            ? t.status.maneuvering(name)
+            : t.status.commandHoldsFire(name, cardText(match.plannedCommand!).name),
+      );
       if (canManeuver) texts.push(maneuvering ? t.status.changeManeuver : t.status.maneuverHint);
     } else if (match.board.ships("enemy").length === 0) {
       texts.push(t.status.noFireTarget(name));
@@ -1077,7 +1093,8 @@ export class MatchController {
     const order = match.fireOrderAt(slot);
     const hovered = this.validHoveredPad();
     const aiming = hovered?.slot.lane.side === "enemy" ? slotTarget(hovered.slot) : null;
-    if (order && (aiming === null || isSameSlot(aiming, order.target))) texts.push(t.status.fireTarget(cardText(this.padOf({ side: "enemy", ...order.target }).slot.card!).name));
+    if (order && (aiming === null || isSameSlot(aiming, order.target)))
+      texts.push(t.status.fireTarget(cardText(this.padOf({ side: "enemy", ...order.target }).slot.card!).name));
     if (match.fliesSwarm(slot)) texts.push(t.status.swarmFire(t.powers.swarm_strike.name));
     const shot = this.preview?.shots.find((shot) => shot.shooter !== null && isSameSlot(shot.shooter, slotTarget(slot)));
     if (shot?.fizzle && shot.aimedAt) texts.push(t.status.coverFizzles(name(shot.target), name(shot.aimedAt)));

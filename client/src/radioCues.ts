@@ -3,7 +3,7 @@
 // Gesprochen wird aus Sicht der eigenen Flotte: eigene Befehle bestätigt der Funk, gegnerische Angriffe meldet er.
 // Drohnen sind keinen Funkspruch wert, wenn sie fallen.
 
-import { isToken, shipById, type CommandId } from "../../shared/cards.ts";
+import { type CommandId, isToken, shipById } from "../../shared/cards.ts";
 import type { AbilityEffect, RoundEvent } from "../../shared/protocol.ts";
 import type { RadioCue } from "./data/radio.ts";
 

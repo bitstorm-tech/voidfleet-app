@@ -90,7 +90,10 @@ export class HandView {
     }
     const marked = (pick: ShipPick) => planned.has(pick) || pick === selected;
     const picks: ShipPick[][] = [...(this.flagship ? [["flagship" as const]] : []), ...this.shipStacks.map((stack) => stack.indices)];
-    markSelected(this.shipRow, picks.map((stack) => stack.some(marked)));
+    markSelected(
+      this.shipRow,
+      picks.map((stack) => stack.some(marked)),
+    );
   }
 
   /** Ein Klick auf einen Stapel meint den eingeplanten Befehl, sonst den gewählten, sonst das erste Exemplar. */

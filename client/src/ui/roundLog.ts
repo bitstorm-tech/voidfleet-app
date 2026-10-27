@@ -1,6 +1,6 @@
 // Formuliert die aufgedeckten Ereignisse einer Runde als Log-Zeilen.
 
-import { isFlagship, shipById, type CommandId } from "../../../shared/cards.ts";
+import { type CommandId, isFlagship, shipById } from "../../../shared/cards.ts";
 import type { RoundEvent, ShipRef, SlotRef } from "../../../shared/protocol.ts";
 import { t } from "../i18n/index.ts";
 

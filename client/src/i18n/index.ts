@@ -6,16 +6,13 @@ import type { AdmiralId } from "../../../shared/admirals.ts";
 import type { Card } from "../../../shared/cards.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { de } from "./de.ts";
-import { en, type CardText, type Messages } from "./en.ts";
+import { type CardText, en, type Messages } from "./en.ts";
 
 const LOCALES = { en, de } satisfies Record<string, Messages>;
 
 export type Locale = keyof typeof LOCALES;
 
-export const LOCALE_NAMES = Object.fromEntries(Object.entries(LOCALES).map(([key, messages]) => [key, messages.languageName])) as Record<
-  Locale,
-  string
->;
+export const LOCALE_NAMES = Object.fromEntries(Object.entries(LOCALES).map(([key, messages]) => [key, messages.languageName])) as Record<Locale, string>;
 
 function detectLocale(): Locale {
   const requested = [new URL(location.href).searchParams.get("lang"), settings.language, ...navigator.languages];

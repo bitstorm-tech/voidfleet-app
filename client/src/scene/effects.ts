@@ -170,7 +170,18 @@ const HITS: Record<HitName, Hit> = {
     ring: false,
     bursts: [
       { count: 50, cone: Tools.ToRadians(60), speed: [2, 4], lifeTime: [0.5, 1], size: [0.25, 0.4], grow: 0.25, stretch: 1.5, gravity: 4, colors: FIRE },
-      { count: 18, cone: Tools.ToRadians(70), speed: [0.5, 1.5], lifeTime: [0.9, 1.5], size: [0.35, 0.55], grow: 2.2, stretch: 1, gravity: 1, opaque: true, colors: SMOKE },
+      {
+        count: 18,
+        cone: Tools.ToRadians(70),
+        speed: [0.5, 1.5],
+        lifeTime: [0.9, 1.5],
+        size: [0.35, 0.55],
+        grow: 2.2,
+        stretch: 1,
+        gravity: 1,
+        opaque: true,
+        colors: SMOKE,
+      },
     ],
   },
 };
@@ -187,7 +198,14 @@ const HIT_SOUNDS: Record<HitName, SoundId> = {
 
 /** Verpuffen: ein paar matte Funken in der Schussfarbe ziehen langsam in Flugrichtung weiter und verlöschen, ohne Blitz. */
 const FIZZLE: Burst = {
-  count: 16, cone: Tools.ToRadians(70), speed: [0.4, 1.6], lifeTime: [0.25, 0.55], size: [0.05, 0.11], stretch: 1.5, gravity: 0, colors: (shot) => [
+  count: 16,
+  cone: Tools.ToRadians(70),
+  speed: [0.4, 1.6],
+  lifeTime: [0.25, 0.55],
+  size: [0.05, 0.11],
+  stretch: 1.5,
+  gravity: 0,
+  colors: (shot) => [
     [0, Color4.FromColor3(shot, 0.7)],
     [1, Color4.FromColor3(shot.scale(0.4), 0)],
   ],
@@ -195,7 +213,13 @@ const FIZZLE: Burst = {
 
 /** Leuchtspur der Rakete: ein Dauerstrom kleiner, langsam verwehender Funken in der Schussfarbe hinter dem Kopf. */
 const TRAIL: Omit<Burst, "count" | "cone"> = {
-  speed: [0.1, 0.5], lifeTime: [0.35, 0.7], size: [0.1, 0.16], grow: 0.2, stretch: 1, gravity: 0.3, colors: (shot) => [
+  speed: [0.1, 0.5],
+  lifeTime: [0.35, 0.7],
+  size: [0.1, 0.16],
+  grow: 0.2,
+  stretch: 1,
+  gravity: 0.3,
+  colors: (shot) => [
     [0, new Color4(1, 1, 1, 0.9)],
     [0.25, Color4.FromColor3(shot, 0.8)],
     [1, Color4.FromColor3(shot, 0)],
@@ -207,7 +231,18 @@ const TRAIL_RATE = 220;
 const POP: readonly Burst[] = [
   { count: 24, cone: Tools.ToRadians(75), speed: [1.5, 4], lifeTime: [0.4, 0.8], size: [0.22, 0.4], grow: 0.5, stretch: 1.2, gravity: 0.6, colors: FIRE },
   { count: 36, cone: Tools.ToRadians(65), speed: [3, 8], lifeTime: [0.3, 0.7], size: [0.06, 0.12], stretch: 4, gravity: -5, colors: FIRE },
-  { count: 8, cone: Tools.ToRadians(60), speed: [0.5, 1.4], lifeTime: [1, 1.7], size: [0.3, 0.45], grow: 2.2, stretch: 1, gravity: 0.8, opaque: true, colors: SMOKE },
+  {
+    count: 8,
+    cone: Tools.ToRadians(60),
+    speed: [0.5, 1.4],
+    lifeTime: [1, 1.7],
+    size: [0.3, 0.45],
+    grow: 2.2,
+    stretch: 1,
+    gravity: 0.8,
+    opaque: true,
+    colors: SMOKE,
+  },
 ];
 
 export type BlastStyle = "fire" | "energy";
@@ -457,10 +492,25 @@ export class BoardEffects {
   burn(piece: TransformNode, size: number, spread: number, duration: number): void {
     const anchor = piece.getAbsolutePosition().clone();
     const fire = this.stream("burn-fire", anchor, size, spread, {
-      rate: 50, speed: [0.4, 1.2], lifeTime: [0.4, 0.8], size: [0.25, 0.45], grow: 0.3, stretch: 1.2, gravity: 1.5, colors: FIRE,
+      rate: 50,
+      speed: [0.4, 1.2],
+      lifeTime: [0.4, 0.8],
+      size: [0.25, 0.45],
+      grow: 0.3,
+      stretch: 1.2,
+      gravity: 1.5,
+      colors: FIRE,
     });
     const smoke = this.stream("burn-smoke", anchor, size, spread, {
-      rate: 12, speed: [0.3, 0.8], lifeTime: [1, 1.8], size: [0.3, 0.5], grow: 2.5, stretch: 1, gravity: 0.8, opaque: true, colors: SMOKE,
+      rate: 12,
+      speed: [0.3, 0.8],
+      lifeTime: [1, 1.8],
+      size: [0.3, 0.5],
+      grow: 2.5,
+      stretch: 1,
+      gravity: 0.8,
+      opaque: true,
+      colors: SMOKE,
     });
     const follow = this.scene.onBeforeRenderObservable.add(() => {
       if (!piece.isDisposed()) anchor.copyFrom(piece.getAbsolutePosition());
@@ -642,7 +692,10 @@ function createSpriteTexture(name: string, scene: Scene, alphaAt: (distance: num
 function cubicBezierToRef(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: number, result: Vector3): void {
   const u = 1 - t;
   result.copyFrom(p0).scaleInPlace(u ** 3);
-  result.addInPlace(p1.scale(3 * u ** 2 * t)).addInPlace(p2.scale(3 * u * t ** 2)).addInPlace(p3.scale(t ** 3));
+  result
+    .addInPlace(p1.scale(3 * u ** 2 * t))
+    .addInPlace(p2.scale(3 * u * t ** 2))
+    .addInPlace(p3.scale(t ** 3));
 }
 
 /** Zufällige Richtung im Kegel um `axis`, gleichverteilt über den Raumwinkel. */
@@ -653,7 +706,10 @@ export function randomInCone(axis: Vector3, halfAngle: number): Vector3 {
   const cos = 1 - Math.random() * (1 - Math.cos(halfAngle));
   const sin = Math.sqrt(1 - cos * cos);
   const around = Math.random() * Math.PI * 2;
-  return axis.scale(cos).addInPlace(side.scale(sin * Math.cos(around))).addInPlace(up.scale(sin * Math.sin(around)));
+  return axis
+    .scale(cos)
+    .addInPlace(side.scale(sin * Math.cos(around)))
+    .addInPlace(up.scale(sin * Math.sin(around)));
 }
 
 export function randomBetween([min, max]: readonly [number, number]): number {
