@@ -29,9 +29,9 @@ export interface PadMaterials {
 export function createPadMaterials(scene: Scene): PadMaterials {
   const base = new StandardMaterial("pad-base", scene);
   base.diffuseColor = new Color3(0.07, 0.13, 0.21);
-  base.specularColor = new Color3(0.15, 0.15, 0.15);
-  base.emissiveColor = new Color3(0.09, 0.2, 0.32).scale(0.55);
-  base.alpha = 0.7;
+  base.specularColor = new Color3(0.08, 0.08, 0.08);
+  base.emissiveColor = new Color3(0.09, 0.2, 0.32).scale(0.3);
+  base.alpha = 0.45;
 
   const valid = new StandardMaterial("pad-valid", scene);
   valid.disableLighting = true;
