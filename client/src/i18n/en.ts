@@ -243,7 +243,7 @@ export const en = {
       hand: {
         heading: "Hand and decks",
         paragraphs: [
-          "You start with 4 ships — always 1 support ship and 3 combat ships — and 3 commands. At the end of every round you draw 1 ship and 1 command. Each hand holds at most 6 cards: with a full hand you draw nothing, so play your cards. Scavenge draws 1 extra ship and 1 extra command right away, Countermeasures 1 command if nothing was countered, again within the hand limit.",
+          "You start with 4 ships — always 1 support ship and 3 combat ships — and 3 commands. At the end of every round you draw 1 ship and 1 command. Each hand holds at most 10 cards: with a full hand you draw nothing, so play your cards. Identical cards form a stack, but each still counts. Scavenge draws 1 extra ship and 1 extra command right away, Countermeasures 1 command if nothing was countered, again within the hand limit.",
           "Your ship deck has 16 cards (each ship twice), your command deck 34 (Torpedo and Barrage twice, every other command once). When a deck is empty, you simply draw nothing from it.",
         ],
       },
@@ -271,7 +271,7 @@ export const en = {
         name: "Cleanup",
         text: "Micro-jumped ships return, self-damage from Overcharge, Repair Drones repair, round effects expire, the Decoy dissolves, the Hive launches a Drone.",
       },
-      draw: { name: "Draw", text: "Everyone draws a ship and a command (hand limit 6)." },
+      draw: { name: "Draw", text: "Everyone draws a ship and a command (hand limit 10)." },
       check: { name: "Check", text: "Whoever has lost their flagship loses; if both fell, it's a draw." },
     },
     figures: {

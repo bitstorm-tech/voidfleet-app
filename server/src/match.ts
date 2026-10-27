@@ -30,7 +30,8 @@ import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck
 
 export type Seat = 0 | 1;
 
-const HAND_LIMIT = 6;
+/** Höchstens so viele Schiffe und ebenso viele Befehle auf der Hand; gestapelte gleiche Karten zählen einzeln. */
+const HAND_LIMIT = 10;
 /** Die Starthand bekommt immer 1 Support- und 3 Kampfschiffe, jeweils zufällig aus dem Deck. */
 const STARTING_SUPPORT_SHIPS = 1;
 const STARTING_COMBAT_SHIPS = 3;

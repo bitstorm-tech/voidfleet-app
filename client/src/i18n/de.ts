@@ -160,7 +160,7 @@ export const de: Messages = {
       hand: {
         heading: "Hand und Decks",
         paragraphs: [
-          "Du beginnst mit 4 Schiffen — immer 1 Support- und 3 Kampfschiffe — und 3 Befehlen. Am Ende jeder Runde ziehst du 1 Schiff und 1 Befehl nach. Jede Hand fasst höchstens 6 Karten: Mit voller Hand ziehst du nichts, also spiel deine Karten. Plündern zieht sofort 1 Schiff und 1 Befehl zusätzlich, Gegenmaßnahmen 1 Befehl, wenn nichts verpufft ist, wieder bis zum Handlimit.",
+          "Du beginnst mit 4 Schiffen — immer 1 Support- und 3 Kampfschiffe — und 3 Befehlen. Am Ende jeder Runde ziehst du 1 Schiff und 1 Befehl nach. Jede Hand fasst höchstens 10 Karten: Mit voller Hand ziehst du nichts, also spiel deine Karten. Gleiche Karten liegen als Stapel, jede zählt aber einzeln. Plündern zieht sofort 1 Schiff und 1 Befehl zusätzlich, Gegenmaßnahmen 1 Befehl, wenn nichts verpufft ist, wieder bis zum Handlimit.",
           "Dein Schiffsdeck hat 16 Karten (jedes Schiff zweimal), dein Befehlsdeck 34 (Torpedo und Sperrfeuer zweimal, jeder andere Befehl einmal). Ist ein Deck leer, ziehst du daraus einfach nichts mehr.",
         ],
       },
@@ -188,7 +188,7 @@ export const de: Messages = {
         name: "Cleanup",
         text: "Schiffe im Kurzsprung kehren zurück, Eigenschaden der Überladung, Reparaturdrohnen reparieren, Rundeneffekte enden, das Trugbild löst sich auf, die Hive startet eine Drohne.",
       },
-      draw: { name: "Nachziehen", text: "Jeder zieht ein Schiff und einen Befehl (Handlimit 6)." },
+      draw: { name: "Nachziehen", text: "Jeder zieht ein Schiff und einen Befehl (Handlimit 10)." },
       check: { name: "Prüfung", text: "Wer sein Flaggschiff verloren hat, verliert; fielen beide, ist es unentschieden." },
     },
     figures: {

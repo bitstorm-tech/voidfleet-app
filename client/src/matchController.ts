@@ -903,14 +903,9 @@ export class MatchController {
   private refreshHand(): void {
     const { match, selection } = this;
     this.powerCard.show(this.powerCardView());
-    const shipMarks = new Set<ShipPick>(match.arrivals.map((arrival) => arrival.pick));
-    if (selection?.kind === "ship") shipMarks.add(selection.pick);
-    this.hand.renderShips(match.shipHand, match.needsFlagship ? match.flagship : null, shipMarks);
-
-    const commandMarks = new Set<number>();
-    if (selection?.kind === "command") commandMarks.add(selection.index);
-    if (match.plan.command) commandMarks.add(match.plan.command.handIndex);
-    this.hand.renderCommands(match.commandHand, commandMarks);
+    const planned = new Set<ShipPick>(match.arrivals.map((arrival) => arrival.pick));
+    this.hand.renderShips(match.shipHand, match.needsFlagship ? match.flagship : null, planned, selection?.kind === "ship" ? selection.pick : null);
+    this.hand.renderCommands(match.commandHand, match.plan.command?.handIndex ?? null, selection?.kind === "command" ? selection.index : null);
   }
 
   private refreshSelectionVisuals(): void {

@@ -1,6 +1,7 @@
 // Die Hand: Schiffskarten links, in Runde 1 vorn das Flaggschiff, Submit samt Checkliste in der Mitte,
-// rechts die Admiralsfähigkeit (`powerCard.ts`) und die Befehlskarten. Passt eine Seite nicht in ihre Hälfte
-// der Leiste, schieben sich ihre Karten übereinander; die Karte unter der Maus liegt oben.
+// rechts die Admiralsfähigkeit (`powerCard.ts`) und die Befehlskarten. Gleiche Karten liegen als ein Stapel mit
+// Anzahl. Passt eine Seite nicht in ihre Hälfte der Leiste, schieben sich ihre Karten übereinander; die Karte unter
+// der Maus liegt oben.
 // Karten werden nur neu aufgebaut, wenn sich die Hand ändert (sonst würde die Karte
 // unter der Maus ihr Hover verlieren und neu aufzoomen); aufgebaut werden sie in `cardView.ts`.
 // Neu gezogene Karten fliegen nacheinander ein, jede mit einem Wischen, und leuchten kurz auf.
@@ -30,6 +31,11 @@ export class HandView {
   private shipHand: readonly ShipCard[] = [];
   private flagship: ShipCard | null = null;
   private commandHand: readonly CommandCard[] = [];
+  private shipStacks: Stack<ShipCard>[] = [];
+  private commandStacks: Stack<CommandCard>[] = [];
+  /** Was gerade eingeplant und gewählt ist; ein Klick auf einen Stapel wählt danach das Exemplar. */
+  private ships: { planned: ReadonlySet<ShipPick>; selected: ShipPick | null } = { planned: new Set(), selected: null };
+  private commands: { planned: number | null; selected: number | null } = { planned: null, selected: null };
 
   constructor(
     container: HTMLElement,
@@ -56,18 +62,25 @@ export class HandView {
     window.addEventListener("resize", () => this.fit());
   }
 
-  /** Die Schiffe der Hand, davor in Runde 1 das Flaggschiff; `marked` sind die gewählten und eingeplanten. */
-  renderShips(hand: readonly ShipCard[], flagship: ShipCard | null, marked: ReadonlySet<ShipPick>): void {
+  /**
+   * Die Schiffe der Hand, davor in Runde 1 das Flaggschiff; `planned` sind die eingeplanten, `selected` das gewählte.
+   * Ein Klick auf einen Stapel meint das gewählte Exemplar, sonst das nächste freie, sonst das zuletzt eingeplante.
+   */
+  renderShips(hand: readonly ShipCard[], flagship: ShipCard | null, planned: ReadonlySet<ShipPick>, selected: ShipPick | null): void {
+    this.ships = { planned, selected };
     if (!sameCards(hand, this.shipHand) || flagship !== this.flagship) {
       const drawn = drawnIndices(this.shipHand, hand);
       this.shipHand = hand;
       this.flagship = flagship;
-      const cards = hand.map((card, index) => {
-        const element = createShipCard(card);
-        element.addEventListener("click", () => this.callbacks.onShipCardClick(index));
-        markDrawn(element, drawn.indexOf(index));
-        return element;
-      });
+      this.shipStacks = stacksOf(hand);
+      const cards = this.shipStacks.map((stack) =>
+        stackElement(createShipCard(stack.card), stack, drawn, () => {
+          const { planned, selected } = this.ships;
+          const free = stack.indices.find((index) => !planned.has(index));
+          const pick = stack.indices.find((index) => index === selected) ?? free ?? stack.indices.findLast((index) => planned.has(index))!;
+          this.callbacks.onShipCardClick(pick);
+        }),
+      );
       if (flagship) {
         const element = createShipCard(flagship);
         element.addEventListener("click", () => this.callbacks.onShipCardClick("flagship"));
@@ -75,24 +88,32 @@ export class HandView {
       }
       this.shipRow.replaceChildren(...cards);
     }
-    const picks: ShipPick[] = [...(this.flagship ? (["flagship"] as const) : []), ...hand.map((_, index) => index)];
-    markSelected(this.shipRow, new Set(picks.flatMap((pick, index) => (marked.has(pick) ? [index] : []))));
+    const marked = (pick: ShipPick) => planned.has(pick) || pick === selected;
+    const picks: ShipPick[][] = [...(this.flagship ? [["flagship" as const]] : []), ...this.shipStacks.map((stack) => stack.indices)];
+    markSelected(this.shipRow, picks.map((stack) => stack.some(marked)));
   }
 
-  renderCommands(hand: readonly CommandCard[], markedIndices: ReadonlySet<number>): void {
+  /** Ein Klick auf einen Stapel meint den eingeplanten Befehl, sonst den gewählten, sonst das erste Exemplar. */
+  renderCommands(hand: readonly CommandCard[], planned: number | null, selected: number | null): void {
+    this.commands = { planned, selected };
     if (!sameCards(hand, this.commandHand)) {
       const drawn = drawnIndices(this.commandHand, hand);
       this.commandHand = hand;
+      this.commandStacks = stacksOf(hand);
       this.commandRow.replaceChildren(
-        ...hand.map((card, index) => {
-          const element = createCommandCard(card);
-          element.addEventListener("click", () => this.callbacks.onCommandCardClick(index));
-          markDrawn(element, drawn.indexOf(index));
-          return element;
-        }),
+        ...this.commandStacks.map((stack) =>
+          stackElement(createCommandCard(stack.card), stack, drawn, () => {
+            const { planned, selected } = this.commands;
+            const pick = [planned, selected].find((index) => index !== null && stack.indices.includes(index));
+            this.callbacks.onCommandCardClick(pick ?? stack.indices[0]!);
+          }),
+        ),
       );
     }
-    markSelected(this.commandRow, markedIndices);
+    markSelected(
+      this.commandRow,
+      this.commandStacks.map((stack) => stack.indices.some((index) => index === planned || index === selected)),
+    );
     this.fit();
   }
 
@@ -122,8 +143,37 @@ function rowWidth(count: number): number {
   return count * CARD_WIDTH + Math.max(count - 1, 0) * CARD_GAP;
 }
 
-function markSelected(row: HTMLElement, markedIndices: ReadonlySet<number>): void {
-  [...row.children].forEach((element, index) => element.classList.toggle("selected", markedIndices.has(index)));
+function markSelected(row: HTMLElement, marked: readonly boolean[]): void {
+  for (const [index, element] of [...row.children].entries()) element.classList.toggle("selected", marked[index]!);
+}
+
+/** Gleiche Karten der Hand liegen als ein Stapel, an der Stelle der ersten; `indices` sind ihre Hand-Indizes. */
+interface Stack<T> {
+  card: T;
+  indices: number[];
+}
+
+function stacksOf<T extends ShipCard | CommandCard>(hand: readonly T[]): Stack<T>[] {
+  const stacks = new Map<string, Stack<T>>();
+  hand.forEach((card, index) => {
+    const stack = stacks.get(card.id);
+    if (stack) stack.indices.push(index);
+    else stacks.set(card.id, { card, indices: [index] });
+  });
+  return [...stacks.values()];
+}
+
+/** Die Karte eines Stapels: ab zwei Exemplaren mit Anzahl und Kanten dahinter; sie fliegt ein, wenn ein Exemplar neu ist. */
+function stackElement<T>(element: HTMLElement, stack: Stack<T>, drawn: readonly number[], onClick: () => void): HTMLElement {
+  const count = stack.indices.length;
+  if (count > 1) {
+    element.classList.add(count > 2 ? "stacked-deep" : "stacked");
+    element.insertAdjacentHTML("beforeend", `<span class="stack-count">×${count}</span>`);
+  }
+  element.addEventListener("click", onClick);
+  const orders = stack.indices.map((index) => drawn.indexOf(index)).filter((order) => order !== -1);
+  markDrawn(element, orders.length > 0 ? Math.min(...orders) : -1);
+  return element;
 }
 
 /** Indizes der Karten in `next`, die in `previous` noch nicht lagen (gleiche Karten zählen mehrfach). */

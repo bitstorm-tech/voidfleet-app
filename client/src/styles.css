@@ -1323,6 +1323,42 @@ body {
   pointer-events: none;
 }
 
+/* Gleiche Karten liegen als Stapel: Kanten der Exemplare dahinter (nach links oben, weil rechts die nächste Karte
+   überlappt) und die Anzahl in der Ecke. */
+.card.stacked {
+  box-shadow:
+    -4px -4px 0 #0b0e13,
+    -4px -4px 0 1px rgb(255 255 255 / 0.3);
+}
+
+.card.stacked-deep {
+  box-shadow:
+    -4px -4px 0 #0b0e13,
+    -4px -4px 0 1px rgb(255 255 255 / 0.3),
+    -8px -8px 0 #0b0e13,
+    -8px -8px 0 1px rgb(255 255 255 / 0.2);
+}
+
+.stack-count {
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  z-index: 2;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border: 2px solid rgb(var(--select));
+  border-radius: 13px;
+  background: #0b0e13;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+  text-shadow: none;
+  pointer-events: none;
+}
+
 /* Schiffskarten: Illustration als Hintergrund, oben und unten in die Kartenfarbe verlaufend. */
 .ship-card {
   display: flex;
