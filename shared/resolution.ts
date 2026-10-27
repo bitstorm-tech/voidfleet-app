@@ -318,7 +318,7 @@ export function resolveSwap(mirage: Slot, other: Slot, events: RoundEvent[]): vo
 export function resolveGuardianShields(board: Board, events: RoundEvent[]): void {
   for (const side of SIDES) {
     const bastion = board.flagship(side);
-    if (bastion?.card!.id !== "bastion") continue;
+    if (bastion?.card?.id !== "bastion") continue;
     const front = bastion.lane.type === "command" ? board.lane(side, "strike").slots[bastion.index]! : null;
     for (const slot of front?.isOccupied ? [bastion, front] : [bastion]) {
       const amount = slot === bastion ? ABILITY_VALUES.guardianShield : ABILITY_VALUES.guardianShieldFront;
@@ -854,7 +854,7 @@ function resolveRepairs(board: Board, events: RoundEvent[]): void {
 function resolveBroodChamber(board: Board, events: RoundEvent[]): void {
   for (const side of SIDES) {
     const hive = board.flagship(side);
-    if (hive?.card!.id !== "hive" || board.hiveLaunches[side] >= ABILITY_VALUES.hiveBudget) continue;
+    if (hive?.card?.id !== "hive" || board.hiveLaunches[side] >= ABILITY_VALUES.hiveBudget) continue;
     if (board.ships(side).filter((slot) => slot.card!.id === "drone").length >= ABILITY_VALUES.maxDrones) continue;
     const slot = nearest(
       board.lane(side, "strike").slots.filter((slot) => !slot.isOccupied),

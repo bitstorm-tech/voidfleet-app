@@ -40,7 +40,9 @@ transmitter
   .connect(voiceBus);
 
 const hiss = new AudioBuffer({ length: context.sampleRate * 2, sampleRate: context.sampleRate });
-hiss.getChannelData(0).forEach((_, index, data) => (data[index] = Math.random() * 2 - 1));
+hiss.getChannelData(0).forEach((_, index, data) => {
+  data[index] = Math.random() * 2 - 1;
+});
 
 const samples = new Map<RadioCue, Sample[]>();
 const lastVariant = new Map<RadioCue, number>();

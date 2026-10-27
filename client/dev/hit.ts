@@ -7,7 +7,7 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Board } from "../../shared/board.ts";
 import { SHIPS } from "../../shared/cards.ts";
 import { loadSounds } from "../src/audio/sounds.ts";
-import { HIT_NAMES, type HitName } from "../src/scene/effects.ts";
+import { HIT_NAMES } from "../src/scene/effects.ts";
 import { MatchScene } from "../src/scene/matchScene.ts";
 import { loadShipModels, ShipView } from "../src/scene/ship.ts";
 import type { SlotPad } from "../src/scene/slotPad.ts";

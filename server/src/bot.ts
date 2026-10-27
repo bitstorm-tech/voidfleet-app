@@ -70,7 +70,6 @@ export interface BotView {
   readonly opponent: Pick<OpponentView, "admiral" | "playedCommands" | "commandHandSize" | "shipHandSize">;
 }
 
-const SIDES: readonly Side[] = ["player", "enemy"];
 /** Schiffe landen möglichst mittig in der Lane. */
 const LANE_CENTER = (SLOT_COUNT - 1) / 2;
 /** Runde 1: Das Flaggschiff kommt mittig in die Command-Lane, das robusteste Kampfschiff davor. */
@@ -874,7 +873,7 @@ class Situation {
    */
   private phaseSwap(movable: readonly Slot[], other: Move | null): Move | null {
     const mirage = this.flagship;
-    if (mirage?.card!.id !== "mirage" || !movable.includes(mirage)) return null;
+    if (mirage?.card?.id !== "mirage" || !movable.includes(mirage)) return null;
     const partners = movable.filter((slot) => slot !== mirage && slot !== other?.ship);
     const covered = partners.filter((slot) => !this.board.isExposed(slot));
     if (this.board.isExposed(mirage) && this.fireThreat(mirage) > 0) {

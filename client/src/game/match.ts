@@ -3,7 +3,7 @@
 // übernimmt seine Sicht, geplant wird lokal bis zum Submit.
 
 import { ADMIRALS, type AdmiralId, type PowerId, targetsEnemy } from "../../../shared/admirals.ts";
-import { Board, isSameSlot, maxDeploys, overdriveBonus, type PlannedMove, type Side, type Slot, slotTarget } from "../../../shared/board.ts";
+import { Board, isSameSlot, maxDeploys, overdriveBonus, type PlannedMove, type Slot, slotTarget } from "../../../shared/board.ts";
 import {
   allowsManeuverAndPower,
   type CommandCard,
@@ -427,7 +427,7 @@ export class Match {
   /** Ob sich die eigene Pendulum laut Plan bewegt: Dann verfällt ihre Markierung bzw. ihr Schuss. */
   get pendulumMoves(): boolean {
     const pendulum = this.board.flagship("player");
-    if (pendulum?.card!.id !== "pendulum") return false;
+    if (pendulum?.card?.id !== "pendulum") return false;
     // Auch ein Kurzsprung zählt für die Pendulum als Bewegung.
     const target = this.plannedOwnTarget;
     const jumps = this.plannedCommand?.id === "micro_jump" && target !== null && isSameSlot(target, slotTarget(pendulum));

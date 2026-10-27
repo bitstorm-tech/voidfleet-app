@@ -90,7 +90,9 @@ export class OpponentPanel {
     this.state.textContent = opponent.admiral === null ? waiting : opponent.submitted ? t.opponent.ready : t.opponent.planning;
     this.state.classList.toggle("ready", opponent.submitted);
     this.showAdmiral(opponent.admiral);
-    COUNTS.forEach((key, index) => (this.counts[index]!.textContent = String(opponent[key])));
+    COUNTS.forEach((key, index) => {
+      this.counts[index]!.textContent = String(opponent[key]);
+    });
     for (const card of COMMANDS) {
       const left = deckCopies(card) - opponent.playedCommands.filter((id) => id === card.id).length;
       const { item, count } = this.commands.get(card.id)!;

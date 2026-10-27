@@ -55,7 +55,7 @@ export function railgunFires(board: Board, side: Side): boolean {
 
 /** Ob die Pendulum der Seite in dieser Runde markieren darf (sie steht auf dem Brett und feuert in dieser Runde nicht). */
 export function canMark(board: Board, side: Side): boolean {
-  return board.flagship(side)?.card!.id === "pendulum" && !railgunFires(board, side);
+  return board.flagship(side)?.card?.id === "pendulum" && !railgunFires(board, side);
 }
 
 /** Gültige Ziele der Markierung (gegnerische Schiffe), leer, wenn `canMark` false ist. */

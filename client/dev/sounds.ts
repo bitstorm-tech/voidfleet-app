@@ -73,7 +73,9 @@ for (const id of Object.keys(SOUNDS) as SoundId[]) {
     setTimeout(() => loop.stop(0.5), LOOP_PREVIEW);
   };
   row(id, [button("Zufall", play()), ...files.map((_, variant) => button(String(variant + 1), play(variant)))]);
-  files.forEach((url, variant) => row("", [], url, `${id}_${variant + 1}`));
+  files.forEach((url, variant) => {
+    row("", [], url, `${id}_${variant + 1}`);
+  });
 }
 
 heading("Bordfunk");
@@ -89,7 +91,9 @@ for (const cue of Object.keys(RADIO) as RadioCue[]) {
     return element;
   });
   row(cue, buttons);
-  files.forEach((url, variant) => row("", [], url, `${cue}_${variant + 1}`));
+  files.forEach((url, variant) => {
+    row("", [], url, `${cue}_${variant + 1}`);
+  });
 }
 
 function heading(text: string): void {
@@ -129,7 +133,9 @@ async function measure(url: string): Promise<Stats> {
   const { length, sampleRate } = buffer;
   const level = new Float32Array(length);
   for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-    buffer.getChannelData(channel).forEach((value, index) => (level[index] = Math.max(level[index]!, Math.abs(value))));
+    buffer.getChannelData(channel).forEach((value, index) => {
+      level[index] = Math.max(level[index]!, Math.abs(value));
+    });
   }
   const rms = (from: number, to: number) => {
     let sum = 0;

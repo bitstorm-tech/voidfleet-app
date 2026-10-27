@@ -10,7 +10,9 @@ output.connect(effectsBus);
 
 /** Weißes Rauschen für das Wischen einer Karte. */
 const noise = new AudioBuffer({ length: Math.round(context.sampleRate * 0.3), sampleRate: context.sampleRate });
-noise.getChannelData(0).forEach((_, index, data) => (data[index] = Math.random() * 2 - 1));
+noise.getChannelData(0).forEach((_, index, data) => {
+  data[index] = Math.random() * 2 - 1;
+});
 
 /** Je Klang die Töne ab dem Startzeitpunkt `time` (Sekunden im AudioContext). */
 const SYNTHS = {
