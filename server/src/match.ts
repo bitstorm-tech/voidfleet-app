@@ -375,8 +375,8 @@ export class Match {
   }
 
   /**
-   * Deckt beide Züge auf und löst die Runde in Phasen auf (`resolveTurns`). Danach wird geprüft, ob ein Flaggschiff
-   * gefallen ist; sonst beginnt die nächste Runde mit dem Nachschub, den der Computergegner gleich wählt. Gibt die Ereignisse aus
+   * Deckt beide Züge auf und löst die Runde in Phasen auf (`resolveTurns`), die mit einem gefallenen Flaggschiff
+   * sofort abbricht. Danach wird geprüft, ob ein Flaggschiff gefallen ist; sonst beginnt die nächste Runde mit dem Nachschub, den der Computergegner gleich wählt. Gibt die Ereignisse aus
    * Sicht von Seat 0 zurück.
    */
   resolveRound(): RoundEvent[] {

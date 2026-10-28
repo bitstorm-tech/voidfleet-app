@@ -88,8 +88,9 @@ export function highest<T>(items: readonly T[], value: (item: T) => number): T |
  * Löst eine Runde mit den Zügen beider Seiten auf und gibt ihre Ereignisse zurück: Deploy samt Flaggschiff,
  * Feuerbefehle (`Slot.aim`), Admiralsfähigkeiten, Erfassung durch Wärmesucher und Traktorstrahl (`Slot.locks`),
  * Fähigkeiten beim Deploy, Markierung der Pendulum, Manöver und Phasentausch,
- * Wächterschild, Effects, Combat, Cleanup, Brutkammer. `random` liefert Zahlen in [0, 1); ohne ihn
- * (Zielvorschau) feuern Plasma Frigates beim Deploy nicht, weil ihr Ziel Zufall ist.
+ * Wächterschild, Effects, Combat, Cleanup, Brutkammer. Fällt ein Flaggschiff, ist das Spiel sofort zu Ende: Die
+ * Runde bricht nach dem Schritt ab (`endMatch`). `random` liefert Zahlen in [0, 1); ohne ihn (Zielvorschau) feuern
+ * Plasma Frigates beim Deploy nicht, weil ihr Ziel Zufall ist.
  */
 export function resolveTurns(board: Board, turns: readonly Turn[], random: (() => number) | null): RoundEvent[] {
   const events: RoundEvent[] = [];
@@ -132,6 +133,7 @@ export function resolveTurns(board: Board, turns: readonly Turn[], random: (() =
     random,
     events,
   );
+  if (flagshipFallen(board, events)) return endMatch(board, events);
   for (const { commander, mark } of turns) {
     if (mark) resolveMark(board, commander.side, mark, events);
   }
@@ -157,6 +159,7 @@ export function resolveTurns(board: Board, turns: readonly Turn[], random: (() =
     .filter((turn) => turn.command !== null)
     .map((turn) => revealCommand(board, stayed.has(turn.commander.side) ? { ...turn, maneuver: null } : turn, swapped.has(turn.commander.side), events));
   resolveEffects(board, commands, events);
+  if (flagshipFallen(board, events)) return endMatch(board, events);
   // Bewegt sich die Pendulum (auch per Kurzsprung), fällt ihr Schuss aus: in dieser Runde und, wenn sie gerade markiert hat, in der nächsten.
   const pendulums = [...SIDES.flatMap((side) => board.ships(side)), ...board.jumping].filter((slot) => slot.card!.id === "pendulum");
   const moved = SIDES.filter((side) => pendulums.some((slot) => slot.lane.side === side && slot.moved));
@@ -165,12 +168,34 @@ export function resolveTurns(board: Board, turns: readonly Turn[], random: (() =
     events,
     railguns.filter((side) => !moved.includes(side)),
   );
+  if (flagshipFallen(board, events)) return endMatch(board, events);
   resolveCleanup(board, events);
+  if (flagshipFallen(board, events)) return events;
   resolveBroodChamber(board, events);
   // Nach dem Schuss, auch einem ausgefallenen, ist die Markierung verbraucht.
   for (const side of SIDES.filter((side) => railguns.includes(side) || moved.includes(side))) {
     for (const slot of board.ships(opposite(side))) slot.marked = false;
   }
+  return events;
+}
+
+/** Ein Flaggschiff ist in dieser Runde gefallen: steht zerstört auf dem Brett oder hat es schon verlassen. */
+function flagshipFallen(board: Board, events: readonly RoundEvent[]): boolean {
+  if (SIDES.some((side) => board.flagship(side)?.isDestroyed)) return true;
+  return events.some((event) => event.kind === "destroyed" && isFlagship(shipById(event.ship.cardId)));
+}
+
+/**
+ * Das Spiel ist mit dem gefallenen Flaggschiff zu Ende, der Rest der Runde entfällt: Die Zerstörten verlassen das
+ * Brett, Schiffe im Kurzsprung stehen ohne Auftritt wieder in ihrem Slot.
+ */
+function endMatch(board: Board, events: RoundEvent[]): RoundEvent[] {
+  for (const slot of SIDES.flatMap((side) => board.ships(side)).filter((slot) => slot.isDestroyed)) {
+    events.push({ kind: "destroyed", ship: shipRef(slot) });
+    slot.clear();
+  }
+  for (const ship of board.jumping) ship.lane.slots[ship.index]!.copy(ship);
+  board.jumping = [];
   return events;
 }
 
@@ -704,20 +729,27 @@ interface Counterfire {
  * Drohnen feuern auf das Ziel des Schwarmangriffs, solange es auf dem Brett steht, auch durch Deckung und ohne
  * eigenen Feuerbefehl. Die übrigen Schüsse zieht ein Schiff mit Ablenkung auf sich, solange es steht und für den
  * Schützen ungedeckt ist. Jeder Treffer auf das Ziel des Fokusfeuers macht mehr Schaden. Zuletzt das Gegenfeuer:
- * Wer ein Schiff damit getroffen hat, nimmt je Treffer Schaden, Flaggschiffe ausgenommen.
+ * Wer ein Schiff damit getroffen hat, nimmt je Treffer Schaden, Flaggschiffe ausgenommen. Fällt ein Flaggschiff,
+ * endet der Kampf nach dem Schritt: nach dem Taktvorsprung, wenn es dabei fiel (ein Ziel der Railgun feuert noch
+ * mit allen übrigen), sonst vor dem Gegenfeuer.
  */
 export function resolveCombat(board: Board, events: RoundEvent[], railguns: readonly Side[] = SIDES.filter((side) => railgunFires(board, side))): void {
   const attackers = SIDES.map((side) => board.ships(side).filter((slot) => slot.canAttack && (slot.aim !== null || swarmTarget(board, slot) !== null)));
-  const railgunShots = railguns.flatMap((side) => fireRailgun(board, side));
+  events.push(...railguns.flatMap((side) => fireRailgun(board, side)));
   const counterfire: Counterfire[] = [];
   const fire = (shooters: readonly (readonly Slot[])[]) => interleave(shooters.map((slots, index) => volley(board, SIDES[index]!, slots, counterfire)));
   const headStart = (slot: Slot) => slot.powers.includes("head_start");
   const later = attackers.map((slots) => slots.filter((slot) => !headStart(slot)));
   const standing = later.flat().filter((slot) => !slot.isDestroyed);
-  const earlyShots = fire(attackers.map((slots) => slots.filter(headStart)));
+  const flagships = SIDES.flatMap((side) => board.flagship(side) ?? []).filter((slot) => !slot.isDestroyed);
+  events.push(...fire(attackers.map((slots) => slots.filter(headStart))));
+  if (flagships.some((slot) => slot.isDestroyed)) return;
   const silenced = standing.filter((slot) => slot.isDestroyed);
-  const shots = fire(later.map((slots) => slots.filter((slot) => !silenced.includes(slot))));
-  events.push(...railgunShots, ...earlyShots, ...silenced.map((slot) => ({ kind: "silenced" as const, ship: shipRef(slot) })), ...shots);
+  events.push(
+    ...silenced.map((slot) => ({ kind: "silenced" as const, ship: shipRef(slot) })),
+    ...fire(later.map((slots) => slots.filter((slot) => !silenced.includes(slot)))),
+  );
+  if (SIDES.some((side) => board.flagship(side)?.isDestroyed)) return;
   for (const { attacker, source } of counterfire) {
     attacker.damage(ABILITY_VALUES.counterfire);
     events.push({ kind: "counterfire", source: shipRef(source), ship: shipRef(attacker), amount: ABILITY_VALUES.counterfire, after: stats(attacker) });

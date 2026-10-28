@@ -1603,3 +1603,55 @@ describe("Angriff", () => {
     ]);
   });
 });
+
+describe("Spielende", () => {
+  test("Fällt ein Flaggschiff bei den Effects, endet die Runde sofort: kein Kampf, kein Cleanup", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "horizon_cruiser");
+    place(board, "enemy", "strike", 2, "vanguard").hp = 1;
+    place(board, "enemy", "strike", 3, "horizon_cruiser");
+    place(board, "enemy", "command", 3, "repair_drone");
+    const events = resolve(
+      board,
+      { command: order("torpedo", at("strike", 2)), fire: [fire(at("strike", 0), at("strike", 3))] },
+      { fire: [fire(at("strike", 3), at("strike", 0))] },
+    );
+    expect(events.at(-1)).toEqual({ kind: "destroyed", ship: { side: "enemy", ...at("strike", 2), cardId: "vanguard" } });
+    expect(events.some((event) => event.kind === "attack")).toBe(false);
+    expect(board.flagship("enemy")).toBeNull();
+  });
+
+  test("Fallen beide Flaggschiffe im selben Kampf, ist es unentschieden; danach folgt nichts mehr", () => {
+    const board = new Board();
+    const wounded = place(board, "player", "strike", 1, "horizon_cruiser");
+    wounded.hp -= 1;
+    place(board, "player", "strike", 0, "vanguard").hp = 1;
+    place(board, "player", "command", 1, "repair_drone");
+    place(board, "enemy", "strike", 0, "vanguard").hp = 1;
+    place(board, "enemy", "strike", 1, "horizon_cruiser");
+    const events = resolve(board, { fire: [fire(at("strike", 1), at("strike", 0))] }, { fire: [fire(at("strike", 1), at("strike", 0))] });
+    expect(events.slice(-2)).toMatchObject([
+      { kind: "destroyed", ship: { side: "player", cardId: "vanguard" } },
+      { kind: "destroyed", ship: { side: "enemy", cardId: "vanguard" } },
+    ]);
+    expect(wounded.hp).toBe(hp("horizon_cruiser") - 1);
+    expect([board.flagship("player"), board.flagship("enemy")]).toEqual([null, null]);
+  });
+
+  test("Fällt ein Flaggschiff durch Taktvorsprung, feuern die übrigen Schiffe nicht mehr", () => {
+    const board = new Board();
+    place(board, "player", "strike", 0, "void_interceptor");
+    const own = place(board, "player", "strike", 1, "vanguard");
+    own.hp = 1;
+    place(board, "enemy", "strike", 0, "vanguard").hp = 1;
+    place(board, "enemy", "strike", 1, "horizon_cruiser");
+    const events = resolve(
+      board,
+      { power: { id: "head_start", target: at("strike", 0) }, fire: [fire(at("strike", 0), at("strike", 0))] },
+      { fire: [fire(at("strike", 1), at("strike", 1))] },
+    );
+    expect(attacksBy(events, "enemy")).toEqual([]);
+    expect(events.at(-1)).toMatchObject({ kind: "destroyed", ship: { side: "enemy", cardId: "vanguard" } });
+    expect(board.flagship("player")).toBe(own);
+  });
+});

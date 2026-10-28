@@ -177,7 +177,7 @@ export const en = {
       goal: {
         heading: "Goal of the game",
         paragraphs: [
-          "Voidfleet is a duel between two fleets, each led by an admiral and their flagship. You win by destroying the enemy flagship: whoever loses their flagship loses the match. If both flagships fall in the same round, the match is a draw.",
+          "Voidfleet is a duel between two fleets, each led by an admiral and their flagship. You win by destroying the enemy flagship: whoever loses their flagship loses the match on the spot, and the rest of the round is skipped. If both flagships fall at the same time, for example in the same combat, the match is a draw.",
           "Before round 1 each player secretly picks one of five admirals. The admiral brings a flagship — a ship outside the decks with an ability of its own — and an admiral ability you can use every round instead of the maneuver (see “Admirals and flagships”).",
           "Both players plan their moves at the same time, without seeing each other's choice, and there is no time limit: a turn may take as long as you like. There is no energy or mana — every card in your hand is playable right away.",
           "So that no match drags on forever, Overdrive kicks in from round 8: every combat ship on both sides gets +1 ATK, and the bonus grows by one every 4 rounds (round 12, 16, …). Repairs can't keep up with that forever.",

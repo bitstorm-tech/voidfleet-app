@@ -93,7 +93,7 @@ export const de: Messages = {
       goal: {
         heading: "Ziel des Spiels",
         paragraphs: [
-          "Voidfleet ist ein Duell zweier Flotten, jede geführt von einem Admiral und seinem Flaggschiff. Du gewinnst, indem du das gegnerische Flaggschiff zerstörst: Wer sein Flaggschiff verliert, verliert das Match. Fallen beide Flaggschiffe in derselben Runde, endet es unentschieden.",
+          "Voidfleet ist ein Duell zweier Flotten, jede geführt von einem Admiral und seinem Flaggschiff. Du gewinnst, indem du das gegnerische Flaggschiff zerstörst: Wer sein Flaggschiff verliert, verliert das Match, und zwar sofort: Der Rest der Runde entfällt. Fallen beide Flaggschiffe gleichzeitig, etwa im selben Kampf, endet es unentschieden.",
           "Vor Runde 1 wählt jeder verdeckt einen von fünf Admiralen. Der Admiral bringt ein Flaggschiff mit — ein Schiff außerhalb der Decks mit eigener Fähigkeit — und eine Admiralsfähigkeit, die du jede Runde statt des Grundmanövers einsetzen kannst (siehe „Admirale und Flaggschiffe“).",
           "Beide Spieler planen ihren Zug gleichzeitig, ohne die Wahl des anderen zu sehen, und ohne Zeitlimit: Ein Zug darf beliebig lange dauern. Es gibt keine Energie und kein Mana — jede Karte auf deiner Hand ist sofort spielbar.",
           "Damit sich keine Partie endlos hinzieht, beginnt ab Runde 8 der Overdrive: Alle Kampfschiffe beider Seiten bekommen +1 ATK, und der Bonus wächst alle 4 Runden um eins (Runde 12, 16, …). Dagegen kommen Reparaturen auf Dauer nicht an.",
