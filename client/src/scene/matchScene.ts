@@ -68,7 +68,7 @@ const VIEWS: Record<"side" | "top", ViewSpec> = {
     yaw: 0,
     pitch: Tools.ToRadians(42),
     fov: Tools.ToRadians(33.5),
-    frame: [0.175, 0.767],
+    frame: [0.16, 0.725],
     laneX: { player: { command: -6.15, strike: -2.75 }, enemy: { strike: 2.75, command: 6.15 } },
     slotStep: 2.2,
     labelZ: 6.4,

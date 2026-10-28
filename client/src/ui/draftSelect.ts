@@ -36,8 +36,10 @@ export class DraftSelect {
       `<div class="draft-overlay" hidden>
         <h2 class="admiral-title"></h2>
         <p class="admiral-hint"></p>
-        <section class="draft-row"><h3></h3><div class="draft-cards ships"></div></section>
-        <section class="draft-row"><h3></h3><div class="draft-cards commands"></div></section>
+        <div class="draft-rows">
+          <section class="draft-row"><h3></h3><div class="draft-cards ships"></div></section>
+          <section class="draft-row"><h3></h3><div class="draft-cards commands"></div></section>
+        </div>
         <button type="button" class="draft-confirm"></button>
       </div>`,
     );

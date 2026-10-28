@@ -11,8 +11,10 @@ import { playUiSound } from "../audio/uiSounds.ts";
 import type { ShipPick } from "../game/match.ts";
 import { createCommandCard, createShipCard } from "./cardView.ts";
 
-/** Breite einer Karte, Abstand zweier Karten und der Abstand zwischen Fähigkeitskarte und Befehlen (`styles.css`). */
-const CARD_WIDTH = 140;
+/** Zoom der Karten auf der Hand, Breite einer Karte darin, Abstand zweier Karten und der Abstand zwischen
+ * Fähigkeitskarte und Befehlen in Bildschirm-Pixeln (`styles.css`). */
+const HAND_ZOOM = 1.3;
+const CARD_WIDTH = 140 * HAND_ZOOM;
 const CARD_GAP = 10;
 const SIDE_GAP = 16;
 /** Mindestabstand jeder Hand zum Aktionsknopf in der Mitte. */
@@ -126,7 +128,7 @@ export class HandView {
    */
   private fit(): void {
     const room = this.bar.clientWidth - this.submitArea.offsetWidth - 2 * CENTER_MARGIN;
-    const admiral = this.admiralElement.hidden ? 0 : this.admiralElement.offsetWidth + SIDE_GAP;
+    const admiral = this.admiralElement.hidden ? 0 : this.admiralElement.getBoundingClientRect().width + SIDE_GAP;
     const rows = [
       { row: this.shipRow, extra: 0 },
       { row: this.commandRow, extra: admiral },
@@ -136,7 +138,8 @@ export class HandView {
       const count = row.children.length;
       const space = Math.max(room / 2, room - widths[1 - index]!) - extra;
       const gap = count > 1 && rowWidth(count) > space ? CARD_GAP - (rowWidth(count) - space) / (count - 1) : CARD_GAP;
-      row.style.setProperty("--card-gap", `${gap}px`);
+      // Der Rand der Karte wächst mit ihrem Zoom.
+      row.style.setProperty("--card-gap", `${gap / HAND_ZOOM}px`);
     });
   }
 }

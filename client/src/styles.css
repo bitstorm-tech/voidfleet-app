@@ -445,7 +445,7 @@ body {
 .radio-subtitle {
   position: absolute;
   left: 50%;
-  bottom: 236px;
+  bottom: 296px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1128,11 +1128,17 @@ body {
   position: absolute;
   left: 28px;
   right: 28px;
-  bottom: 20px;
-  height: 206px;
+  bottom: 12px;
+  height: 266px;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+}
+
+/* Karten und Fähigkeitskarte der Hand sind um 30 % größer als in Regeln und Nachschub (`CARD_WIDTH` in `hand.ts`). */
+.hand > .card,
+.admiral-area {
+  zoom: 1.3;
 }
 
 /* Passt eine Hand nicht in ihre Hälfte der Leiste, schieben sich ihre Karten übereinander (`--card-gap`, `hand.ts`). */
@@ -1397,7 +1403,7 @@ body {
 /* Hover vergrößert die Karte nach oben, damit der Text lesbar wird; die äußeren Karten wachsen zur Bildschirmmitte. */
 .card:hover {
   z-index: 1;
-  scale: 1.8;
+  scale: 1.5;
 }
 
 .ship-hand .card:first-child {
@@ -2028,7 +2034,7 @@ body {
   top: 60px;
   left: 0;
   right: 0;
-  bottom: 230px;
+  bottom: 290px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2048,7 +2054,7 @@ body {
 
 .admiral-title {
   margin: 0;
-  font-size: 32px;
+  font-size: 38px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -2057,14 +2063,15 @@ body {
 .admiral-hint {
   margin: 0 0 8px;
   max-width: 980px;
-  font-size: 16px;
+  font-size: 17px;
   text-align: center;
   color: var(--text-dim);
 }
 
 .admiral-cards {
   display: flex;
-  gap: 14px;
+  max-width: 100%;
+  gap: 16px;
 }
 
 /* Eine Karte je Admiral: Porträt, Name und Beiname, Flaggschiff und Admiralsfähigkeit, alles in seiner Farbe. */
@@ -2072,8 +2079,8 @@ body {
   flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 240px;
+  gap: 8px;
+  width: 330px;
   min-width: 170px;
   padding: 0 0 9px;
   overflow: hidden;
@@ -2105,7 +2112,7 @@ body {
 }
 
 .admiral-card .portrait {
-  height: 76px;
+  height: 120px;
   background: center 25% / cover;
   mask-image: linear-gradient(to bottom, black 70%, transparent);
 }
@@ -2114,24 +2121,24 @@ body {
   display: flex;
   flex-direction: column;
   margin-top: -18px;
-  padding: 0 12px;
+  padding: 0 14px;
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
 }
 
 .admiral-card .identity b {
-  font-size: 19px;
+  font-size: 24px;
   font-weight: 600;
   color: var(--text);
 }
 
 .admiral-card .identity span {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   color: rgb(var(--admiral-rgb));
 }
 
 .admiral-card section {
-  padding: 0 12px;
+  padding: 0 14px;
 }
 
 .admiral-card h4 {
@@ -2139,7 +2146,7 @@ body {
   align-items: center;
   gap: 5px;
   margin: 0 0 3px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: rgb(199 219 250 / 0.6);
@@ -2159,18 +2166,18 @@ body {
 }
 
 .admiral-card .ship b {
-  font-size: 15px;
+  font-size: 18px;
   color: rgb(var(--flagshipTrim));
 }
 
 .admiral-card .ship span {
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--text-dim);
 }
 
 .admiral-card p {
   margin: 0;
-  font-size: 12px;
+  font-size: 14.5px;
   line-height: 1.3;
   color: var(--text-dim);
 }
@@ -2184,9 +2191,9 @@ body {
 }
 
 .admiral-card .choose {
-  margin: auto 12px 0;
-  padding: 4px 0;
-  font-size: 15px;
+  margin: auto 14px 0;
+  padding: 6px 0;
+  font-size: 18px;
   font-weight: 600;
   text-align: center;
   color: rgb(var(--admiral-rgb));
@@ -2198,6 +2205,58 @@ body {
 #ui .admiral-card.chosen .choose {
   color: rgb(var(--background));
   background: rgb(var(--admiral-rgb));
+}
+
+/* In niedrigen Fenstern muss die Wahl zwischen Statuszeile und Hand passen. */
+@media (max-height: 900px) {
+  .admiral-title {
+    font-size: 30px;
+  }
+
+  .admiral-hint {
+    font-size: 15px;
+  }
+
+  .admiral-card .portrait {
+    height: 64px;
+  }
+
+  .admiral-card .identity b {
+    font-size: 20px;
+  }
+
+  .admiral-card .identity span {
+    font-size: 15px;
+  }
+
+  .admiral-card .ship b {
+    font-size: 16px;
+  }
+
+  .admiral-card p {
+    font-size: 13px;
+    line-height: 1.28;
+  }
+
+  .admiral-card .choose {
+    font-size: 16px;
+    padding: 3px 0;
+  }
+}
+
+/* Noch niedriger fällt der Hinweis weg; er steht auch in den Regeln. */
+@media (max-height: 820px) {
+  .admiral-overlay .admiral-hint {
+    display: none;
+  }
+
+  .admiral-card .portrait {
+    height: 52px;
+  }
+
+  .admiral-card p {
+    font-size: 12.5px;
+  }
 }
 
 /* Die Admirale im Regel-Dialog: Porträt, Name, Flaggschiff und Fähigkeitskarte je Admiral. */
@@ -2255,6 +2314,13 @@ body {
 
 /* --- Nachschub: Overlay über dem Brett mit je bis zu drei Schiffen und Befehlen, die Hand darunter bleibt sichtbar --- */
 
+.draft-rows {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 48px;
+}
+
 .draft-row {
   display: flex;
   flex-direction: column;
@@ -2277,9 +2343,9 @@ body {
   gap: 18px;
 }
 
-/* Größer als auf der Hand, damit die Texte ohne Lupe lesbar sind; beim Überfahren hebt sich die Karte nur an. */
+/* So groß wie auf der Hand; beim Überfahren hebt sich die Karte nur an. */
 .draft-cards .card {
-  zoom: 1.25;
+  zoom: 1.3;
   transition:
     translate 0.15s ease-out,
     box-shadow 0.15s ease-out;
