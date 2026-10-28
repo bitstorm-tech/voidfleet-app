@@ -493,7 +493,10 @@ export class ToonRenderer {
     this.glow.customEmissiveColorSelector = (mesh, _subMesh, material, result) => glowColor(mesh, material as ToonMaterial, result);
     this.glow.customEmissiveTextureSelector = (_mesh, _subMesh, material) => (material as ToonMaterial).heatTexture as Texture;
 
-    scene.onBeforeRenderTargetsRenderObservable.add(() => this.update());
+    // Erst hier hat Babylon die Kamera dieses Bilds gerechnet; davor (`onBeforeRenderTargetsRenderObservable`) liefert sie
+    // nach einer Bewegung ihres Rigs noch die Lage des letzten Bilds, und Puffer und Bild rechneten mit verschiedener
+    // Bezugstiefe: Die Schiffe wären im ersten Bild jeder Kameradrehung ganz Kontur, also schwarz.
+    this.outlineBuffer.onBeforeRenderObservable.add(() => this.update());
   }
 
   /**
