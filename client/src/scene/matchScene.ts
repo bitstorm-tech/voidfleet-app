@@ -1,7 +1,8 @@
 // Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe, Zoom per Mausrad und ↑ ↓, Verschieben per Ziehen, zwei
 // Ansichten mit jedem Stand dazwischen (Drehen mit ← → oder der mittleren Maustaste), Toon-Darstellung der Schiffe,
-// Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen. Lichter gibt es keine: Die Schiffe rechnen ihr Licht
-// selbst (`toon.ts`), alles andere leuchtet aus sich.
+// Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen, vor den Spalten der Gegnerseite die Pfeile fürs
+// Spaltenfeuer (`columnMarks.ts`). Lichter gibt es keine: Die Schiffe rechnen ihr Licht selbst (`toon.ts`), alles andere
+// leuchtet aus sich.
 //
 // Koordinaten: Babylon ist linkshändig, die Godot-Szene rechtshändig. Alle
 // Z-Werte aus der Godot-Szene sind hier negiert; x (Lanes) und y bleiben.
@@ -26,6 +27,7 @@ import { color3 } from "../data/palette.ts";
 import { t, upper } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { Background } from "./background.ts";
+import { ColumnMark, createColumnMarkMaterials } from "./columnMarks.ts";
 import { BoardEffects } from "./effects.ts";
 import { createGlowLayer } from "./glow.ts";
 import { LaneLabel } from "./laneLabel.ts";
@@ -127,11 +129,17 @@ const ZOOM_FOCUS_Z: [number, number] = [BOARD_Z - 7.5, BOARD_Z + 7.5];
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
-const isPadHitbox = (mesh: AbstractMesh): boolean => mesh.metadata?.pad !== undefined;
+/** Getroffen werden nur die Hitboxen der Pads und der Pfeile vor den Spalten, diese nur, solange sie zu sehen sind. */
+const isHitbox = (mesh: AbstractMesh): boolean => mesh.metadata?.pad !== undefined || (mesh.metadata?.columnMark as ColumnMark | undefined)?.isShown === true;
 
 /** Der SlotPad unter dem Zeiger eines Pointer-Events, sofern einer getroffen wurde. */
 export function pickedPad(info: PointerInfo): SlotPad | null {
   return (info.pickInfo?.pickedMesh?.metadata?.pad as SlotPad | undefined) ?? null;
+}
+
+/** Der Pfeil vor einer gegnerischen Spalte unter dem Zeiger eines Pointer-Events, sofern einer getroffen wurde. */
+export function pickedColumn(info: PointerInfo): ColumnMark | null {
+  return (info.pickInfo?.pickedMesh?.metadata?.columnMark as ColumnMark | undefined) ?? null;
 }
 
 export class MatchScene {
@@ -139,6 +147,8 @@ export class MatchScene {
   readonly scene: Scene;
   readonly pads: SlotPad[] = [];
   readonly padsByLane = new Map<Lane, SlotPad[]>();
+  /** Die Pfeile vor den Spalten der Gegnerseite, nach Spalte. */
+  readonly columnMarks: ColumnMark[] = [];
   readonly effects: BoardEffects;
   /** Pfeile der Bewegungen eines Zugs: Bewegungsbefehl, Grundmanöver und beim Phasentausch der Rückweg des Tauschpartners. */
   readonly moveArrow: MoveArrow;
@@ -201,10 +211,9 @@ export class MatchScene {
     camera.minZ = 0.1;
     camera.maxZ = 80;
 
-    // Pointer-Events der Szene treffen nur die Hitboxen der Pads.
-    this.scene.pointerMovePredicate = isPadHitbox;
-    this.scene.pointerDownPredicate = isPadHitbox;
-    this.scene.pointerUpPredicate = isPadHitbox;
+    this.scene.pointerMovePredicate = isHitbox;
+    this.scene.pointerDownPredicate = isHitbox;
+    this.scene.pointerUpPredicate = isHitbox;
 
     const toon = new ToonRenderer(this.scene, camera);
     // Nur die Rahmen gültiger Ziele bekommen Bloom, alles andere bleibt scharf.
@@ -343,6 +352,12 @@ export class MatchScene {
       for (const pad of pads) this.glow.addIncludedOnlyMesh(pad.validGlow);
       this.pads.push(...pads);
       this.padsByLane.set(lane, pads);
+    }
+    const markMaterials = createColumnMarkMaterials(this.scene);
+    for (const pad of this.padsByLane.get(board.lane("enemy", "strike"))!) {
+      const mark = new ColumnMark(this.scene, pad, markMaterials);
+      this.glow.addIncludedOnlyMesh(mark.icon);
+      this.columnMarks.push(mark);
     }
   }
 

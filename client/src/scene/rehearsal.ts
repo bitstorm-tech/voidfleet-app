@@ -79,7 +79,7 @@ export async function rehearse(view: MatchScene): Promise<void> {
       await release();
     })(),
   ];
-  // Auch alles, was noch ausgeblendet ist (leuchtende Slots, Bogenpfeil), wird dabei übersetzt.
+  // Auch alles, was noch ausgeblendet ist (leuchtende Slots, Pfeile vor den Spalten, Bogenpfeil), wird dabei übersetzt.
   await scene.whenReadyAsync();
   await Promise.all(shots);
   view.targetLines.show([]);

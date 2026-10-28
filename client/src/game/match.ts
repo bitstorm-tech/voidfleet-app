@@ -29,6 +29,9 @@ export interface Arrival {
   target: SlotTarget;
 }
 
+/** Worauf ein Tipp beim Zielen gilt: der Pfeil vor einer gegnerischen Spalte oder ein gegnerisches Schiff (sein Slot). */
+export type FireTarget = { column: number } | { target: Slot };
+
 /** Stand eines Zug-Teils: eingeplant, noch möglich oder gar nicht möglich. */
 export type TurnPartState = "done" | "open" | "blocked";
 
@@ -271,17 +274,15 @@ export class Match {
   }
 
   /**
-   * Der Feuerbefehl des eigenen Schiffs auf `ship` nach einem Tipp auf den gegnerischen Slot `target`: Spaltenfeuer auf
-   * dessen Spalte; gilt es ihr schon, Schiffsfeuer auf das Schiff dort; gilt diesem schon das Schiffsfeuer oder ist der
-   * Slot der Spalte leer, null (kein Feuerbefehl mehr).
+   * Der Feuerbefehl des eigenen Schiffs auf `ship` nach einem Tipp auf `aim`: Spaltenfeuer auf die Spalte bzw.
+   * Schiffsfeuer auf das Schiff; gilt ihm der Befehl schon, null (kein Feuerbefehl mehr).
    */
-  nextFire(ship: Slot, target: Slot): FireOrder | null {
-    const order = this.fireOrderAt(ship);
-    const column = { ship: slotTarget(ship), column: target.index };
-    if (order === null) return column;
-    if ("target" in order) return isSameSlot(order.target, slotTarget(target)) ? null : column;
-    if (order.column !== target.index) return column;
-    return target.isOccupied ? { ship: slotTarget(ship), target: slotTarget(target) } : null;
+  nextFire(ship: Slot, aim: FireTarget): FireOrder | null {
+    const order: FireOrder = "column" in aim ? { ship: slotTarget(ship), column: aim.column } : { ship: slotTarget(ship), target: slotTarget(aim.target) };
+    const current = this.fireOrderAt(ship);
+    if (current === null) return order;
+    const same = "column" in order ? "column" in current && current.column === order.column : "target" in current && isSameSlot(current.target, order.target);
+    return same ? null : order;
   }
 
   /** Setzt den Feuerbefehl des eigenen Schiffs auf `ship`; ein alter weicht, null nimmt ihn zurück. */

@@ -8,11 +8,11 @@
 // ein Schiff in die andere Lane verlegen, brauchen zwei Klicks: Schiff, dann Ziel-Slot;
 // dort steht das verlegte Schiff ebenfalls als Geist, ein Bogenpfeil zeigt den Weg.
 // Ist keine Karte gewählt, wählt ein Klick ein eigenes Schiff auf dem Brett oder einen Geist (eingeplantes oder
-// bewegtes Schiff). Kann es feuern, leuchten alle Slots der Gegnerseite als Ziel, auch leere: Ein Klick gibt ihm
-// Spaltenfeuer auf die Spalte des Slots, ein weiterer auf ein Schiff dieser Spalte Schiffsfeuer auf genau dieses (es
-// folgt ihm), noch einer hebt den Feuerbefehl auf; das Schiff bleibt dabei gewählt. Ohne Feuerbefehl feuert kein
-// Schiff, und jede Runde beginnt ohne. Steht das Schiff schon auf dem Brett, leuchten dazu die
-// Ziel-Slots des Grundmanövers (Geist und Pfeil); dann feuert es nicht, seine Balken sind gedämpft und sein
+// bewegtes Schiff). Kann es feuern, liegt vor jeder gegnerischen Spalte ein Pfeil, und die gegnerischen Schiffe leuchten
+// als Ziel: Ein Klick auf einen Pfeil gibt ihm Spaltenfeuer auf diese Spalte, einer auf ein Schiff Schiffsfeuer auf
+// genau dieses (es folgt ihm), ein zweiter auf dasselbe Ziel hebt den Feuerbefehl auf; das Schiff bleibt dabei gewählt.
+// Ohne Feuerbefehl feuert kein Schiff, und jede Runde beginnt ohne. Steht das Schiff schon auf dem Brett, leuchten dazu
+// die Ziel-Slots des Grundmanövers (Geist und Pfeil); dann feuert es nicht, seine Balken sind gedämpft und sein
 // Feuerbefehl fällt weg. Die Mirage darf auch auf ein eigenes Schiff: Beim Phasentausch stehen beide als Geist über
 // dem anderen, je mit Pfeil, und beide feuern. Ein Klick auf ein anderes eigenes Schiff wählt dieses; ein zweiter
 // Klick auf das gewählte (oder seinen Geist) nimmt zurück, was es in dieser Runde bringt oder bewegt — das eingeplante
@@ -54,14 +54,15 @@ import { playUiSound } from "./audio/uiSounds.ts";
 import { powerAdmiral } from "./data/admirals.ts";
 import { color3 } from "./data/palette.ts";
 import type { RadioCue } from "./data/radio.ts";
-import { Match, type ShipPick } from "./game/match.ts";
+import { type FireTarget, Match, type ShipPick } from "./game/match.ts";
 import { previewRound, type RoundPreview } from "./game/preview.ts";
 import { cardText, t } from "./i18n/index.ts";
 import { ServerConnection } from "./net/connection.ts";
 import { preloadAssets } from "./preload.ts";
 import { RoundPlayback } from "./roundPlayback.ts";
+import type { ColumnMark } from "./scene/columnMarks.ts";
 import type { MarkerSpec } from "./scene/markers.ts";
-import { MatchScene, pickedPad } from "./scene/matchScene.ts";
+import { MatchScene, pickedColumn, pickedPad } from "./scene/matchScene.ts";
 import type { MoveArrow } from "./scene/moveArrow.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
@@ -130,6 +131,8 @@ export class MatchController {
   /** Die Wahl aus dem Nachschub ist geschickt, aber noch nicht bestätigt. */
   private pendingDraft = false;
   private hoveredPad: SlotPad | null = null;
+  /** Der Pfeil vor einer gegnerischen Spalte unter dem Zeiger. */
+  private hoveredMark: ColumnMark | null = null;
   private ghostPads: SlotPad[] = [];
   private validTargetCount = 0;
   /** Die Zielvorschau des eingeplanten Zugs; null, solange keine Runde geplant wird. */
@@ -449,12 +452,16 @@ export class MatchController {
    */
   private onScenePointer(info: PointerInfo): void {
     if (info.type === PointerEventTypes.POINTERMOVE) {
-      this.setHoveredPad(this.selection !== null ? pickedPad(info) : null);
+      const selecting = this.selection !== null;
+      this.setHovered(selecting ? pickedPad(info) : null, selecting ? pickedColumn(info) : null);
     } else if (info.type === PointerEventTypes.POINTERUP && info.event.button === 0 && !this.view.wasPanned) {
       this.notice = null;
-      if (this.selection !== null) this.onBoardClick(pickedPad(info));
+      // Die Pfeile sind nur zu sehen und zu treffen, solange ein eigenes Schiff zielt.
+      const mark = pickedColumn(info);
+      if (mark !== null) this.stageFire(this.selectedShooter!, { column: mark.column });
+      else if (this.selection !== null) this.onBoardClick(pickedPad(info));
       else if (this.canPlan && !this.isResolving) this.onShipClick(pickedPad(info));
-    } else if (info.type === PointerEventTypes.POINTERDOUBLETAP && info.event.button === 0 && pickedPad(info) === null) {
+    } else if (info.type === PointerEventTypes.POINTERDOUBLETAP && info.event.button === 0 && pickedPad(info) === null && pickedColumn(info) === null) {
       toggleFullscreen();
     }
   }
@@ -500,13 +507,13 @@ export class MatchController {
   }
 
   /**
-   * Klick bei gewähltem Schiff: auf das Schiff selbst (auch auf seinen Geist) nimmt zurück (`takeBack`), auf einen
-   * gegnerischen Slot ändert seinen Feuerbefehl (`stageFireOn`), auf einen Ziel-Slot plant das Grundmanöver, auf ein anderes
-   * eigenes Schiff wählt dieses.
+   * Klick bei gewähltem Schiff: auf das Schiff selbst (auch auf seinen Geist) nimmt zurück (`takeBack`), auf ein
+   * gegnerisches Schiff ändert seinen Feuerbefehl (`stageFire`), auf einen Ziel-Slot plant das Grundmanöver, auf ein
+   * anderes eigenes Schiff wählt dieses.
    */
   private onUnitClick(unit: Slot, pad: SlotPad): void {
     if (this.showsUnit(pad, unit)) return this.takeBack(unit);
-    if (this.isValidTarget(pad)) return pad.slot.lane.side === "enemy" ? this.stageFireOn(unit, pad) : this.stageManeuverOn(unit, pad);
+    if (this.isValidTarget(pad)) return pad.slot.lane.side === "enemy" ? this.stageFire(unit, { target: pad.slot }) : this.stageManeuverOn(unit, pad);
     const other = this.unitAt(pad);
     if (other !== null) return this.selectUnit(other);
     playUiSound("denied");
@@ -556,8 +563,9 @@ export class MatchController {
 
   /**
    * Einzige Gültigkeitsregel für Highlight und Klick: gewählte Schiffskarte -> freie eigene Slots, die den eingeplanten
-   * Bewegungen nicht im Weg stehen; gewähltes Schiff auf dem Brett -> jeder Slot der Gegnerseite, auch ein leerer, wenn
-   * es feuern kann, dazu seine Ziel-Slots des Grundmanövers in beiden Lanes (bei der Mirage auch eigene Schiffe);
+   * Bewegungen nicht im Weg stehen; gewähltes Schiff auf dem Brett -> die gegnerischen Schiffe, wenn es feuern kann (fürs
+   * Spaltenfeuer liegen dann Pfeile vor den Spalten, `refreshColumnMarks`), dazu seine Ziel-Slots des Grundmanövers in
+   * beiden Lanes (bei der Mirage auch eigene Schiffe);
    * gewählter Befehl -> eigene Schiffe in einer erlaubten Lane, auch das eingeplante, bei verlegenden
    * Befehlen nur mit freiem Ziel-Slot, danach die freien Slots der Ziel-Lane; Torpedo und Durchschlag -> jeder Slot
    * der Gegnerseite; Wärmesucher und Traktorstrahl -> gegnerische Schiffe (`canTargetShip`); Fähigkeit und
@@ -578,7 +586,7 @@ export class MatchController {
       case "ship":
         return own && this.match.canDeploy(slot, selection.pick);
       case "unit":
-        if (!own) return this.match.canFire(selection.slot);
+        if (!own) return slot.isOccupied && this.match.canFire(selection.slot);
         return this.match.maneuverDestinations(selection.slot).includes(slot);
       case "command": {
         const command = this.selectedCommand!;
@@ -623,11 +631,12 @@ export class MatchController {
   }
 
   /**
-   * Der Feuerbefehl des gewählten Schiffs nach einem Klick auf den gegnerischen Slot (`Match.nextFire`): erst Spaltenfeuer
-   * auf seine Spalte, dann Schiffsfeuer auf das Schiff dort, dann keiner mehr. Das Schiff bleibt gewählt.
+   * Der Feuerbefehl des gewählten Schiffs nach einem Klick auf einen Pfeil vor einer gegnerischen Spalte oder ein
+   * gegnerisches Schiff (`Match.nextFire`): Spalten- bzw. Schiffsfeuer, beim zweiten Klick auf dasselbe Ziel keiner mehr.
+   * Das Schiff bleibt gewählt.
    */
-  private stageFireOn(shooter: Slot, pad: SlotPad): void {
-    const order = this.match.nextFire(shooter, pad.slot);
+  private stageFire(shooter: Slot, aim: FireTarget): void {
+    const order = this.match.nextFire(shooter, aim);
     this.match.setFire(shooter, order);
     playUiSound(order ? "place" : "cancel");
     this.refreshSelectionVisuals();
@@ -695,7 +704,17 @@ export class MatchController {
       this.ghostPads = targets.map((target) => target.pad);
     }
     this.refreshMarkers();
+    this.refreshColumnMarks();
     this.showPreview();
+  }
+
+  /** Die Pfeile vor den gegnerischen Spalten, solange ein eigenes Schiff zielt; gefüllt der seines Spaltenfeuers. */
+  private refreshColumnMarks(): void {
+    const shooter = this.isResolving ? null : this.selectedShooter;
+    const order = shooter && this.match.fireOrderAt(shooter);
+    for (const mark of this.view.columnMarks) {
+      mark.show(shooter !== null, order != null && "column" in order && order.column === mark.column, mark === this.hoveredMark);
+    }
   }
 
   /**
@@ -832,11 +851,20 @@ export class MatchController {
   /** Der Plan der Zielvorschau: beim gewählten Schiff mit dem Ziel bzw. Ziel-Slot unter dem Zeiger, sonst der eingeplante. */
   private previewPlan(): TurnPlan {
     const { match, selection } = this;
-    const hovered = this.validHoveredPad();
-    if (selection?.kind !== "unit" || hovered === null) return match.plan;
+    if (selection?.kind !== "unit") return match.plan;
     const unit = selection.slot;
-    if (hovered.slot.lane.side === "enemy") return match.tryPlan(() => match.setFire(unit, match.nextFire(unit, hovered.slot)));
+    const aim = this.hoveredAim();
+    if (aim !== null) return match.tryPlan(() => match.setFire(unit, match.nextFire(unit, aim)));
+    const hovered = this.validHoveredPad();
+    if (hovered === null) return match.plan;
     return match.tryPlan(() => match.setManeuver({ ship: slotTarget(unit), destination: slotTarget(hovered.slot) }));
+  }
+
+  /** Worauf ein Klick des zielenden Schiffs gerade gälte: der Pfeil vor einer Spalte oder das gegnerische Schiff unter dem Zeiger. */
+  private hoveredAim(): FireTarget | null {
+    if (this.hoveredMark?.isShown) return { column: this.hoveredMark.column };
+    const hovered = this.validHoveredPad();
+    return hovered?.slot.lane.side === "enemy" ? { target: hovered.slot } : null;
   }
 
   /**
@@ -1125,9 +1153,9 @@ export class MatchController {
     const name = (ref: ShipRef) => cardText(shipById(ref.cardId)).name;
     const enemyName = (target: SlotTarget) => cardText(this.padOf({ side: "enemy", ...target }).slot.card!).name;
     const texts: string[] = [];
-    const hovered = this.validHoveredPad();
-    if (hovered?.slot.lane.side === "enemy") {
-      const next = match.nextFire(slot, hovered.slot);
+    const aim = this.hoveredAim();
+    if (aim !== null) {
+      const next = match.nextFire(slot, aim);
       if (next === null) texts.push(t.status.tapClearsFire);
       else texts.push("column" in next ? t.status.tapColumnFire(next.column + 1) : t.status.tapTrackFire(enemyName(next.target)));
     } else {
@@ -1154,12 +1182,16 @@ export class MatchController {
     return ship ? cardText(ship).name : slotLabel(ref);
   }
 
-  /** Beim gewählten Schiff rechnet die Vorschau mit dem Ziel unter dem Zeiger, und die Statuszeile sagt, wohin der Schuss geht. */
-  private setHoveredPad(pad: SlotPad | null): void {
-    if (pad === this.hoveredPad) return;
+  /**
+   * Slot bzw. Pfeil unter dem Zeiger. Beim gewählten Schiff rechnet die Vorschau mit dem Ziel unter dem Zeiger, und die
+   * Statuszeile sagt, wohin der Schuss geht.
+   */
+  private setHovered(pad: SlotPad | null, mark: ColumnMark | null): void {
+    if (pad === this.hoveredPad && mark === this.hoveredMark) return;
     this.hoveredPad?.setHovered(false);
     this.hoveredPad = pad;
     this.hoveredPad?.setHovered(true);
+    this.hoveredMark = mark;
     if (this.selection?.kind !== "unit") return this.refreshGhosts();
     this.updatePreview();
     this.refreshGhosts();
