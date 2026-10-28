@@ -74,11 +74,6 @@ export class Match {
   result: MatchResult | null = null;
   surrendered = false;
 
-  /** Die eigenen Scrap Raider auf dem Brett, für die Schrottverwertung des Nachschubs. */
-  get raiders(): Slot[] {
-    return this.board.ships("player").filter((slot) => slot.card!.id === "scrap_raider");
-  }
-
   /** Das eigene Flaggschiff; null, solange kein Admiral gewählt ist. */
   get flagship(): ShipCard | null {
     return this.admiral && shipById(ADMIRALS[this.admiral].flagship);

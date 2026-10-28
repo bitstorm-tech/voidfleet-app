@@ -118,6 +118,7 @@ const COMBOS: ReadonlySet<CommandId> = new Set<CommandId>([
   "targeting_jammer",
   "power_surge",
   "overcharge",
+  "scrap_salvage",
   "coup_de_grace",
   "bombardment",
   "crossfire",
@@ -161,21 +162,15 @@ export function planBotTurn(board: Board, bot: BotView, round: number, random: (
 }
 
 /**
- * Die Wahl aus dem Nachschub: das stärkste Schiff (`shipValue`, Kampfschiffe vor Support), die Schrottverwertung für den
- * Scrap Raider mit den meisten HP, sonst den Befehl, von dem er am wenigsten auf der Hand hat (bei Gleichstand den ersten).
+ * Die Wahl aus dem Nachschub: das stärkste Schiff (`shipValue`, Kampfschiffe vor Support), die Schrottverwertung, sonst
+ * den Befehl, von dem er am wenigsten auf der Hand hat (bei Gleichstand den ersten).
  */
-export function planBotDraft(board: Board, bot: BotView, offer: DraftOffer): DraftPick {
+export function planBotDraft(bot: BotView, offer: DraftOffer): DraftPick {
   const ships = offer.ships.map(shipById);
   const ship = highest(ships, shipValue);
-  const raiders = board.ships(bot.side).filter((slot) => slot.card!.id === "scrap_raider");
-  const raider = offer.salvage ? highest(raiders, hp) : null;
   const held = (id: CommandId) => bot.commandHand.filter((card) => card.id === id).length;
-  const command = raider ? null : highest(offer.commands, (id) => -held(id));
-  return {
-    ship: ship && ships.indexOf(ship),
-    command: command && offer.commands.indexOf(command),
-    salvage: raider && slotTarget(raider),
-  };
+  const command = offer.commands.includes("scrap_salvage") ? "scrap_salvage" : highest(offer.commands, (id) => -held(id));
+  return { ship: ship && ships.indexOf(ship), command: command && offer.commands.indexOf(command) };
 }
 
 /** Kopie zum Durchspielen, mit dem Overdrive der Runde und den Drohnen, die die Hive schon gestartet hat. */
@@ -630,6 +625,14 @@ class Situation {
         );
         const target = highest(sturdy, hp);
         return target && on(target, 2);
+      }
+      case "scrap_salvage": {
+        // +1 ATK für immer: für den Scrap Raider, der am längsten durchhält.
+        const target = highest(
+          this.own.filter((slot) => canTargetShip(card, slot.card!)),
+          hp,
+        );
+        return target && on(target, 1.5);
       }
       case "flanking_maneuver": {
         // Das robusteste Schiff nach vorne, wenn es damit ein anderes deckt; sonst ein angeschlagenes

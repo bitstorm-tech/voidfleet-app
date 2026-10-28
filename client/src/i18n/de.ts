@@ -56,12 +56,6 @@ export const de: Messages = {
     confirm: "Übernehmen",
     peek: "Schlachtfeld ansehen",
     show: "Nachschub zeigen",
-    salvage: {
-      name: "Schrottverwertung",
-      target: "Eigener Schrott-Raider",
-      effect: "Dein Schrott-Raider hat Schrott geborgen: Einer deiner Schrott-Raider bekommt sofort dauerhaft +1 ATK.",
-    },
-    raider: (lane, slot, atk) => `${lane} · Slot ${slot} · ${atk} ATK`,
   },
   settings: {
     title: "Einstellungen",
@@ -192,7 +186,7 @@ export const de: Messages = {
       hand: {
         heading: "Hand und Decks",
         paragraphs: [
-          "Du beginnst mit 4 Schiffen — immer 1 Support- und 3 Kampfschiffe — und 3 Befehlen. Nach jeder Runde kommt Nachschub: 3 Schiffe und 3 Befehle aus deinen Decks, davon nimmst du ein Schiff und einen Befehl auf die Hand; der Rest wird zurück ins Deck gemischt. Erst danach planst du deinen Zug. Jede Hand fasst höchstens 10 Karten: Eine volle Hand bekommt keinen Nachschub, also spiel deine Karten. Hat einer deiner Schrott-Raider in der Runde Schrott geborgen und steht noch einer auf dem Brett, ist einer der drei Befehle die Schrottverwertung: sofort dauerhaft +1 ATK für einen deiner Schrott-Raider. Gleiche Karten liegen als Stapel, jede zählt aber einzeln. Plündern zieht sofort 1 Schiff und 1 Befehl zusätzlich, Gegenmaßnahmen 1 Befehl, wenn nichts verpufft ist, wieder bis zum Handlimit.",
+          "Du beginnst mit 4 Schiffen — immer 1 Support- und 3 Kampfschiffe — und 3 Befehlen. Nach jeder Runde kommt Nachschub: 3 Schiffe und 3 Befehle aus deinen Decks, davon nimmst du ein Schiff und einen Befehl auf die Hand; der Rest wird zurück ins Deck gemischt. Erst danach planst du deinen Zug. Jede Hand fasst höchstens 10 Karten: Eine volle Hand bekommt keinen Nachschub, also spiel deine Karten. Hat einer deiner Schrott-Raider in der Runde Schrott geborgen und steht noch einer auf dem Brett, ist einer der drei Befehle die Schrottverwertung: Du spielst sie wie jeden Befehl, und der gewählte Schrott-Raider erhält dauerhaft +1 ATK. Nimmst du sie nicht, verfällt sie. Gleiche Karten liegen als Stapel, jede zählt aber einzeln. Plündern zieht sofort 1 Schiff und 1 Befehl zusätzlich, Gegenmaßnahmen 1 Befehl, wenn nichts verpufft ist, wieder bis zum Handlimit.",
           "Dein Schiffsdeck hat 16 Karten (jedes Schiff zweimal), dein Befehlsdeck 34 (Torpedo und Sperrfeuer zweimal, jeder andere Befehl einmal). Geht ein Deck zur Neige, zeigt der Nachschub nur noch, was übrig ist.",
         ],
       },
@@ -523,7 +517,7 @@ export const de: Messages = {
     target_wrong_lane: "Dieser Befehl kann kein Schiff in dieser Lane zum Ziel haben.",
     target_not_enemy_slot: "Das Befehlsziel ist kein Slot auf der Gegnerseite.",
     target_not_enemy_ship: "Das Befehlsziel ist kein gegnerisches Schiff.",
-    target_flagship: "Dieser Befehl kann kein Flaggschiff zum Ziel haben.",
+    target_wrong_ship: "Dieser Befehl kann dieses Schiff nicht zum Ziel haben.",
     destination_required: "Dieser Befehl braucht einen Slot, in den das Schiff wechselt.",
     destination_not_allowed: "Dieser Befehl verlegt kein Schiff.",
     destination_unavailable: "In diesen Slot kann das Schiff nicht wechseln.",
@@ -718,5 +712,6 @@ export const de: Messages = {
     },
     bombardment: { name: "Bombardement", effect: "2 Schaden an jedes Schiff der gegnerischen Command-Lane." },
     crossfire: { name: "Kreuzfeuer", effect: "3 Schaden an jedes gegnerische Schiff ohne Schiff direkt davor oder dahinter." },
+    scrap_salvage: { name: "Schrottverwertung", target: "Eigener Schrott-Raider", effect: "Der gewählte Schrott-Raider erhält dauerhaft +1 ATK." },
   },
 };

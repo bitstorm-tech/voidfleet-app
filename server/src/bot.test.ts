@@ -56,7 +56,7 @@ test("Bot gegen Bot: über 300 Partien mit allen Admiralen gilt jeder Zug und je
       }
       for (const player of match.players) {
         const offer = player.draftOffer;
-        if (offer) expect(match.draft(player.seat, planBotDraft(match.board, match.botView(player.seat), offer))).toBeNull();
+        if (offer) expect(match.draft(player.seat, planBotDraft(match.botView(player.seat), offer))).toBeNull();
         expect(match.submit(player.seat, planBotTurn(match.board, match.botView(player.seat), match.round))).toBeNull();
       }
       match.resolveRound();

@@ -2303,23 +2303,6 @@ body {
   opacity: 0.45;
 }
 
-/* Die Schrottverwertung mit einem Knopf je eigenem Scrap Raider darunter. */
-.draft-salvage {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-#ui .draft-salvage button {
-  padding: 6px 10px;
-  font-size: 15px;
-}
-
-#ui .draft-salvage button.selected {
-  border-color: rgb(var(--select));
-  box-shadow: 0 0 0 1px rgb(var(--select));
-}
-
 .draft-none {
   margin: 0;
   padding: 40px 0;

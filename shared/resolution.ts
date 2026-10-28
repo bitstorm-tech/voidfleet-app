@@ -582,6 +582,11 @@ function applyCommand(board: Board, { commander, card, target, destination }: Pl
         slot.shield += 2;
         return { type: "shield", amount: 2, permanent: true };
       });
+    case "scrap_salvage":
+      return affectOne(target, (slot) => {
+        slot.scrapBonus += 1;
+        return { type: "attack", delta: 1 };
+      });
     case "covering_fire": {
       const partner = board.lane(side, otherLane(target!.lane.type)).slots[target!.index]!;
       for (const slot of partner.isOccupied ? [target!, partner] : [target!]) {
@@ -902,7 +907,7 @@ function resolveBroodChamber(board: Board, events: RoundEvent[]): void {
 /**
  * Entfernt die zerstörten Schiffe. Jeder überlebende Scrap Raider, auf dessen Gegenseite in der gleichnamigen Lane ein
  * Schiff fiel (egal wodurch), birgt Schrott (`salvage`): Steht nach der Runde noch ein Scrap Raider auf seiner Seite,
- * gehört zum Nachschub die Schrottverwertung (`DraftOffer.salvage`).
+ * gehört zum Nachschub die Schrottverwertung (`DraftOffer`).
  */
 function removeDestroyed(board: Board, events: RoundEvent[]): void {
   const destroyed = SIDES.flatMap((side) => board.ships(side)).filter((slot) => slot.isDestroyed);

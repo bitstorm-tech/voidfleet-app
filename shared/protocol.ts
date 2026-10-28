@@ -86,24 +86,21 @@ export interface OpponentView {
 /**
  * Der Nachschub nach jeder Runde: bis zu 3 Schiffe und 3 Befehle aus den Decks, davon nimmt der Spieler je eines auf die
  * Hand; die übrigen gehen zurück ins Deck. Eine volle Handhälfte bekommt kein Angebot. Hat ein eigener Scrap Raider in
- * der Runde Schrott geborgen und steht danach noch einer auf dem Brett, ist einer der Befehle die Schrottverwertung
- * (`salvage`, dann höchstens 2 Befehle aus dem Deck): +1 ATK dauerhaft für einen eigenen Scrap Raider nach Wahl, sofort.
+ * der Runde Schrott geborgen und steht danach noch einer auf dem Brett, ist der erste Befehl die Schrottverwertung
+ * (`scrap_salvage`, dann höchstens 2 Befehle aus dem Deck). Sie liegt in keinem Deck: Bleibt sie liegen, verfällt sie.
  */
 export interface DraftOffer {
   ships: ShipId[];
   commands: CommandId[];
-  salvage: boolean;
 }
 
 /**
- * Die Wahl aus dem Nachschub: `ship` ist ein Index in `DraftOffer.ships` (Pflicht, wenn es Schiffe gibt); entweder
- * `command` als Index in `DraftOffer.commands` oder `salvage` als Slot des eigenen Scrap Raiders, der +1 ATK bekommt
- * (eines davon ist Pflicht, wenn es Befehle oder die Schrottverwertung gibt).
+ * Die Wahl aus dem Nachschub: Indizes in `DraftOffer.ships` und `DraftOffer.commands`; jeder ist Pflicht, sobald es in
+ * seiner Reihe etwas zu wählen gibt.
  */
 export interface DraftPick {
   ship: number | null;
   command: number | null;
-  salvage: SlotTarget | null;
 }
 
 /**
@@ -162,7 +159,7 @@ export type CommandEffect =
   | { type: "ram"; target: ShipRef; dealt: number; taken: number; targetAfter: ShipStats }
   | { type: "jam"; power: PowerId };
 
-/** Was eine Schiffs-Fähigkeit an einem Schiff bewirkt; `salvage`: Der Scrap Raider birgt Schrott (`DraftOffer.salvage`). */
+/** Was eine Schiffs-Fähigkeit an einem Schiff bewirkt; `salvage`: Der Scrap Raider birgt Schrott (`DraftOffer`). */
 export type AbilityEffect = Extract<CommandEffect, { type: "heal" | "damage" | "shield" }> | { type: "salvage" };
 
 /**
@@ -286,7 +283,7 @@ export type ErrorCode =
   | "target_wrong_lane"
   | "target_not_enemy_slot"
   | "target_not_enemy_ship"
-  | "target_flagship"
+  | "target_wrong_ship"
   | "destination_required"
   | "destination_not_allowed"
   | "destination_unavailable"

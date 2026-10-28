@@ -139,7 +139,7 @@ function commandGallery(): HTMLElement {
       gallery(
         COMMANDS.filter((card) => card.commandType === type).map((card) => ({
           card,
-          meta: t.targets[card.targetMode],
+          meta: cardText(card).target ?? t.targets[card.targetMode],
           lines: [cardText(card).effect],
         })),
       ),

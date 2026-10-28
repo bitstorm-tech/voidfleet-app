@@ -103,6 +103,7 @@ const COMMAND_SOUNDS: Record<CommandId, SoundId | null> = {
   piercing_shot: "cannon_heavy",
   bombardment: "orbital_strike",
   crossfire: "laser_medium",
+  scrap_salvage: "scavenge",
 };
 
 /** Pause zwischen zwei Schritten, damit man sie auseinanderhalten kann. */

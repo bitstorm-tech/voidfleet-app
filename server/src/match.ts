@@ -12,10 +12,13 @@ import { ADMIRAL_IDS, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts"
 import { Board, isSameSlot, maxDeploys, opposite, overdriveBonus, type PlannedMove, type Side } from "../../shared/board.ts";
 import {
   allowsManeuverAndPower,
+  type Card,
   type CommandCard,
   type CommandId,
   canTargetLane,
   canTargetShip,
+  commandById,
+  deckCopies,
   destinationLane,
   needsTarget,
   type ShipCard,
@@ -64,7 +67,7 @@ class Player implements Commander {
   admiral: AdmiralId | null = null;
   plan: TurnPlan | null = null;
   /** Der Nachschub nach der letzten Runde, bis er gewählt hat (`Match.draft`); die Karten fehlen solange im Deck. */
-  draft: { ships: ShipCard[]; commands: CommandCard[]; salvage: boolean } | null = null;
+  draft: { ships: ShipCard[]; commands: CommandCard[] } | null = null;
 
   /** Der Computergegner hat kein Token; er wird nie über einen Socket angesprochen. */
   constructor(
@@ -92,14 +95,18 @@ class Player implements Commander {
   }
 
   /**
-   * Zieht den Nachschub: je bis zu 3 Karten, für eine volle Handhälfte keine; mit der Schrottverwertung (`salvage`) ein
-   * Befehl weniger. Ohne Karten und Schrottverwertung gibt es nichts zu wählen.
+   * Zieht den Nachschub: je bis zu 3 Karten, für eine volle Handhälfte keine; mit der Schrottverwertung (`salvage`) ist
+   * sie die erste der Befehle. Ohne Karten gibt es nichts zu wählen.
    */
   offerDraft(salvage: boolean): void {
-    const offer = <T extends ShipCard | CommandCard>(hand: T[], deck: Deck<T>, count: number) => (hand.length >= HAND_LIMIT ? [] : deck.drawMany(count));
-    const ships = offer(this.shipHand, this.shipDeck, DRAFT_SIZE);
-    const commands = offer(this.commandHand, this.commandDeck, salvage ? DRAFT_SIZE - 1 : DRAFT_SIZE);
-    this.draft = ships.length > 0 || commands.length > 0 || salvage ? { ships, commands, salvage } : null;
+    const full = (hand: readonly Card[]) => hand.length >= HAND_LIMIT;
+    const ships = full(this.shipHand) ? [] : this.shipDeck.drawMany(DRAFT_SIZE);
+    const commands = full(this.commandHand)
+      ? []
+      : salvage
+        ? [commandById("scrap_salvage"), ...this.commandDeck.drawMany(DRAFT_SIZE - 1)]
+        : this.commandDeck.drawMany(DRAFT_SIZE);
+    this.draft = ships.length > 0 || commands.length > 0 ? { ships, commands } : null;
   }
 
   /** Nimmt die gewählten Karten des Nachschubs auf die Hand; die übrigen gehen zurück ins Deck. */
@@ -112,7 +119,7 @@ class Player implements Commander {
 
   get draftOffer(): DraftOffer | null {
     const { draft } = this;
-    return draft && { ships: draft.ships.map((card) => card.id), commands: draft.commands.map((card) => card.id), salvage: draft.salvage };
+    return draft && { ships: draft.ships.map((card) => card.id), commands: draft.commands.map((card) => card.id) };
   }
 
   drawExtra(ships: number, commands: number): { ships: number; commands: number } {
@@ -166,7 +173,8 @@ function drawManyWhere(deck: Deck<ShipCard>, count: number, predicate: (card: Sh
 /** Die gewählte Karte (Index in `offered`) kommt auf die Hand, die übrigen zurück ins Deck. */
 function takeFrom<T extends ShipCard | CommandCard>(offered: T[], index: number | null, hand: T[], deck: Deck<T>): void {
   if (index !== null) hand.push(...offered.splice(index, 1));
-  deck.putBack(offered);
+  // Was in keinem Deck liegt (die Schrottverwertung), verfällt.
+  deck.putBack(offered.filter((card) => deckCopies(card) > 0));
 }
 
 /** Zieht eine Karte; true, wenn sie auf der Hand gelandet ist. */
@@ -245,24 +253,16 @@ export class Match {
     return null;
   }
 
-  /**
-   * Die Wahl aus dem Nachschub: ein Schiff, wenn es welche gibt, und ein Befehl oder die Schrottverwertung auf einen
-   * eigenen Scrap Raider, wenn es eines davon gibt. Die Schrottverwertung wirkt sofort.
-   */
+  /** Die Wahl aus dem Nachschub: ein Schiff, wenn es welche gibt, und ein Befehl, wenn es welche gibt. */
   draft(seat: Seat, pick: DraftPick): ErrorCode | null {
     const player = this.players[seat]!;
     if (this.winner !== null) return "match_over";
     const offer = player.draft;
     if (offer === null) return "draft_unavailable";
-    const raider = pick.salvage && this.board.lane(player.side, pick.salvage.lane).slots[pick.salvage.slotIndex];
-    if (pick.salvage && (!offer.salvage || raider?.card?.id !== "scrap_raider")) return "draft_invalid";
-    // Ein Index ist Pflicht, sobald es etwas zu wählen gibt; die Schrottverwertung zählt zu den Befehlen.
+    // Ein Index ist Pflicht, sobald es etwas zu wählen gibt.
     const valid = (index: number | null, count: number) => (index === null ? count === 0 : index >= 0 && index < count);
-    if (!valid(pick.ship, offer.ships.length)) return "draft_invalid";
-    const command = raider ? pick.command === null : valid(pick.command, offer.commands.length) && !(offer.salvage && pick.command === null);
-    if (!command) return "draft_invalid";
+    if (!valid(pick.ship, offer.ships.length) || !valid(pick.command, offer.commands.length)) return "draft_invalid";
     player.takeDraft(pick.ship, pick.command);
-    if (raider) raider.scrapBonus += 1;
     return null;
   }
 
@@ -336,7 +336,7 @@ export class Match {
       if (target && targetsEnemyShip(card) && !ship) return "target_not_enemy_ship";
       if (target && !enemy && !ship) return "target_not_own_ship";
       if (target && !canTargetLane(card, target.lane)) return "target_wrong_lane";
-      if (ship && !canTargetShip(card, ship)) return "target_flagship";
+      if (ship && !canTargetShip(card, ship)) return "target_wrong_ship";
       const { destination } = plan.command;
       if (card.moves && destination === null) return "destination_required";
       if (!card.moves && destination !== null) return "destination_not_allowed";
@@ -393,7 +393,7 @@ export class Match {
       this.board.overdrive = overdriveBonus(this.round);
       for (const player of this.players) {
         player.offerDraft(this.salvaged(player.side, events));
-        if (player.isBot && player.draft) this.draft(player.seat, planBotDraft(this.board, this.botView(player.seat), player.draftOffer!));
+        if (player.isBot && player.draft) this.draft(player.seat, planBotDraft(this.botView(player.seat), player.draftOffer!));
       }
     }
     return events;

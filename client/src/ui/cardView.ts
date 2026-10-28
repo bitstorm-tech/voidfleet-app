@@ -68,7 +68,7 @@ export function createCommandCard(card: CommandCard): HTMLElement {
     <div class="keys"><span></span><span></span><span></span><span></span></div>`;
   const text = cardText(card);
   element.querySelector(".name")!.textContent = text.name;
-  element.querySelector(".target")!.textContent = t.targets[card.targetMode];
+  element.querySelector(".target")!.textContent = text.target ?? t.targets[card.targetMode];
   element.querySelector(".effect")!.textContent = text.effect;
   return element;
 }

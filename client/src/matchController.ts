@@ -983,7 +983,7 @@ export class MatchController {
     this.hud.setChecklist(planning ? match.turnProgress : null, { planned: match.plan.ships.length, max: match.deployLimit });
     this.admiralSelect.show(this.isConnected && match.round > 0 && match.admiral === null && match.result === null, this.pendingAdmiral);
     const drafting = this.isConnected && !this.isResolving && match.result === null;
-    this.draftSelect.show(drafting ? match.draft : null, match.raiders, this.pendingDraft);
+    this.draftSelect.show(drafting ? match.draft : null, this.pendingDraft);
     this.surrenderDialog.setAvailable(this.isConnected && match.opponent !== null && match.result === null);
     this.opponentPanel.show(match.opponent, match.admiral !== null);
   }

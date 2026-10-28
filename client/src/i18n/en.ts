@@ -11,6 +11,8 @@ import type { CursorId } from "../ui/cursor.ts";
 export interface CardText {
   name: string;
   effect: string;
+  /** Statt der Zielart (`targets`), wenn der Befehl nur bestimmte Schiffe zum Ziel haben darf. */
+  target?: string;
 }
 
 /** Name und Beiname eines Admirals und der Name der Fähigkeit seines Flaggschiffs; deren Text steht beim Schiff (`ships`). */
@@ -139,12 +141,6 @@ export const en = {
     confirm: "Take",
     peek: "View battlefield",
     show: "Show supplies",
-    salvage: {
-      name: "Scrap Salvage",
-      target: "Allied Scrap Raider",
-      effect: "Your Scrap Raider salvaged scrap: one of your Scrap Raiders gets +1 ATK permanently, right away.",
-    },
-    raider: (lane: string, slot: number, atk: number) => `${lane} · Slot ${slot} · ${atk} ATK`,
   },
   settings: {
     title: "Settings",
@@ -276,7 +272,7 @@ export const en = {
       hand: {
         heading: "Hand and decks",
         paragraphs: [
-          "You start with 4 ships — always 1 support ship and 3 combat ships — and 3 commands. After every round you get supplies: 3 ships and 3 commands from your decks, of which you take one ship and one command into your hand; the rest is shuffled back into the deck. Only then do you plan your turn. Each hand holds at most 10 cards: a full hand gets no supplies, so play your cards. If one of your Scrap Raiders salvaged scrap in the round and one is still on the board, one of the three commands is Scrap Salvage: +1 ATK permanently for one of your Scrap Raiders, right away. Identical cards form a stack, but each still counts. Scavenge draws 1 extra ship and 1 extra command right away, Countermeasures 1 command if nothing was countered, again within the hand limit.",
+          "You start with 4 ships — always 1 support ship and 3 combat ships — and 3 commands. After every round you get supplies: 3 ships and 3 commands from your decks, of which you take one ship and one command into your hand; the rest is shuffled back into the deck. Only then do you plan your turn. Each hand holds at most 10 cards: a full hand gets no supplies, so play your cards. If one of your Scrap Raiders salvaged scrap in the round and one is still on the board, one of the three commands is Scrap Salvage: you play it like any command, and the chosen Scrap Raider gets +1 ATK permanently. If you don't take it, it's gone. Identical cards form a stack, but each still counts. Scavenge draws 1 extra ship and 1 extra command right away, Countermeasures 1 command if nothing was countered, again within the hand limit.",
           "Your ship deck has 16 cards (each ship twice), your command deck 34 (Torpedo and Barrage twice, every other command once). When a deck runs low, the supplies show only what is left.",
         ],
       },
@@ -579,7 +575,7 @@ export const en = {
     target_wrong_lane: "This command can't target a ship in that lane.",
     target_not_enemy_slot: "The command target isn't a slot on the enemy side.",
     target_not_enemy_ship: "The command target isn't an enemy ship.",
-    target_flagship: "This command can't target a flagship.",
+    target_wrong_ship: "This command can't target this ship.",
     destination_required: "This command needs a slot to move the ship to.",
     destination_not_allowed: "This command doesn't move a ship.",
     destination_unavailable: "The ship can't move to this slot.",
@@ -748,6 +744,7 @@ export const en = {
     },
     bombardment: { name: "Bombardment", effect: "Deal 2 damage to every ship in the enemy Command lane." },
     crossfire: { name: "Crossfire", effect: "Deal 3 damage to every enemy ship with no ship directly in front of or behind it." },
+    scrap_salvage: { name: "Scrap Salvage", target: "Allied Scrap Raider", effect: "The chosen Scrap Raider gets +1 ATK permanently." },
   } satisfies Record<CommandId, CardText>,
 };
 

@@ -97,6 +97,8 @@ const ART: Record<Card["id"], string> = {
   piercing_shot,
   bombardment,
   crossfire,
+  // Die Schrottverwertung hat kein eigenes Bild; sie zeigt den Scrap Raider, für den sie ist.
+  scrap_salvage: scrap_raider,
 };
 
 /** URL der Illustration einer Karte. */

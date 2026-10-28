@@ -76,7 +76,7 @@ export class Slot {
   card: ShipCard | null = null;
   hp = 0;
   shield = 0;
-  /** Scrap Raider: +1 ATK je gewählter Schrottverwertung (`DraftOffer.salvage`); bleibt bis zu seiner Zerstörung. */
+  /** Scrap Raider: +1 ATK je gespielter Schrottverwertung (`scrap_salvage`); bleibt bis zu seiner Zerstörung. */
   scrapBonus = 0;
   /** Pendulum: Die Markierung folgt dem Schiff und hält über das Rundenende, bis die Railgun gefeuert hat. */
   marked = false;

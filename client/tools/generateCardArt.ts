@@ -40,7 +40,7 @@
 
 import sharp from "sharp";
 import { ADMIRAL_IDS, type AdmiralId } from "../../shared/admirals.ts";
-import { type Card, COMMANDS, type CommandId, type CommandType, FLAGSHIPS, SHIPS, type ShipId, TOKENS } from "../../shared/cards.ts";
+import { type Card, COMMANDS, type CommandCard, type CommandId, type CommandType, FLAGSHIPS, SHIPS, type ShipId, TOKENS } from "../../shared/cards.ts";
 
 const ASSETS = `${import.meta.dir}/../assets`;
 const CACHE = `${import.meta.dir}/cache`;
@@ -85,7 +85,7 @@ const COMMAND_ACCENT: Record<CommandType, [name: string, hex: string]> = {
   special: ["bright orange", "#E6801A"],
 };
 
-const SUBJECTS: Record<CommandId, string> = {
+const SUBJECTS: Record<Exclude<CommandId, "scrap_salvage">, string> = {
   orbital_strike: "A blinding orbital beam strikes down from above onto a warship, an impact explosion of light and debris, seen from the side at a distance",
   volley_fire: "A dense volley of dozens of glowing missiles and projectiles streaking across space in parallel trails, launched from a line of warships",
   power_surge: "A wave of energy sweeping through a formation of three warships flying in line, their engines and weapon systems flaring with light",
@@ -371,7 +371,8 @@ const JOBS: Job[] = [
       paint: () => toon(shipPrompt(card.id), seed(card.id), "3:4", [render]),
     };
   }),
-  ...COMMANDS.map(
+  // Die Schrottverwertung zeigt das Bild des Scrap Raiders (`cardArt.ts`).
+  ...COMMANDS.filter((card): card is CommandCard & { id: keyof typeof SUBJECTS } => card.id !== "scrap_salvage").map(
     (card): Job => ({
       id: card.id,
       group: "commands",

@@ -39,6 +39,8 @@ interface CommandStats {
   targetLane?: LaneType;
   /** Bei Zielwahl eines Schiffs: nie ein Flaggschiff (Rammkurs, Traktorstrahl). */
   notFlagship?: true;
+  /** Bei Zielwahl eines eigenen Schiffs: nur Schiffe dieser Karte (Schrottverwertung). */
+  targetShip?: keyof typeof SHIP_STATS;
   /** Verlegt das Zielschiff in einen frei gewählten Slot: der anderen Lane (`lane`) oder derselben (`within`, Ausweichmanöver). */
   moves?: "lane" | "within";
 }
@@ -111,6 +113,8 @@ const COMMAND_STATS = {
   piercing_shot: { commandType: "attack", targetMode: "choose_enemy_column" },
   bombardment: { commandType: "attack", targetMode: "all_enemy_command" },
   crossfire: { commandType: "attack", targetMode: "auto_unpaired" },
+  // Liegt in keinem Deck: kommt nur über den Nachschub, wenn ein eigener Scrap Raider Schrott geborgen hat (`deckCopies`).
+  scrap_salvage: { commandType: "buff", targetMode: "choose_friendly", targetShip: "scrap_raider" },
 } satisfies Record<string, CommandStats>;
 
 export type ShipId = keyof typeof SHIP_STATS | keyof typeof TOKEN_STATS | keyof typeof FLAGSHIP_STATS;
@@ -203,9 +207,9 @@ export function canTargetLane(card: CommandCard, lane: LaneType): boolean {
   return needsTarget(card) && (card.targetLane === undefined || card.targetLane === lane);
 }
 
-/** Ob der Befehl dieses Schiff zum Ziel haben darf: Manche Befehle nie ein Flaggschiff (`notFlagship`). */
+/** Ob der Befehl dieses Schiff zum Ziel haben darf: Manche nie ein Flaggschiff (`notFlagship`), manche nur eine Karte (`targetShip`). */
 export function canTargetShip(card: CommandCard, ship: ShipCard): boolean {
-  return !(card.notFlagship && isFlagship(ship));
+  return !(card.notFlagship && isFlagship(ship)) && (card.targetShip === undefined || card.targetShip === ship.id);
 }
 
 /** Die Lane, in die ein verlegender Befehl sein Ziel bringt: die andere (`moves: "lane"`) oder dieselbe (`moves: "within"`). */
@@ -234,8 +238,11 @@ export function isFlagship(card: Card): boolean {
   return card.id in FLAGSHIP_STATS;
 }
 
-/** Kopien je Karte im Nachziehstapel: jedes Schiff zweimal, die Konter Torpedo und Sperrfeuer auch, jeder andere Befehl einmal, Tokens und Flaggschiffe nie. */
+/**
+ * Kopien je Karte im Nachziehstapel: jedes Schiff zweimal, die Konter Torpedo und Sperrfeuer auch, jeder andere Befehl
+ * einmal; Tokens, Flaggschiffe und die Schrottverwertung nie.
+ */
 export function deckCopies(card: Card): number {
-  if (isToken(card) || isFlagship(card)) return 0;
+  if (isToken(card) || isFlagship(card) || card.id === "scrap_salvage") return 0;
   return card.kind === "ship" || card.id === "torpedo" || card.id === "barrage" ? 2 : 1;
 }

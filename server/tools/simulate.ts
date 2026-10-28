@@ -113,7 +113,7 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
   while (match.winner === null && match.round <= ROUND_LIMIT) {
     for (const player of match.players) {
       const offer = player.draftOffer;
-      if (offer) match.draft(player.seat, planBotDraft(match.board, match.botView(player.seat), offer));
+      if (offer) match.draft(player.seat, planBotDraft(match.botView(player.seat), offer));
       if (player.commandHand.length === 0) emptyCommandHand[player.seat]! += 1;
       for (const { id } of player.commandHand) card(id).held += 1;
       const error = match.submit(player.seat, planBotTurn(match.board, match.botView(player.seat), match.round));
