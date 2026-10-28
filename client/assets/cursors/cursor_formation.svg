@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Formation: drei gestaffelte Chevrons, Hotspot an der Spitze (2,2). -->
+  <g transform="translate(2 2) rotate(-45)" stroke="#0B1220" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M0 21.5 5 28.5 0 26.5-5 28.5Z" fill="#3E8FD6"/>
+    <path d="M0 11.5 7.5 22 0 19-7.5 22Z" fill="#5BA9EE"/>
+    <path d="M0 0 10 15 0 10.5-10 15Z" fill="#9AD2FF"/>
+  </g>
+</svg>

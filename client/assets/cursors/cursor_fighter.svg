@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Jäger: Schiffssilhouette, Nase ist der Hotspot (2,2). -->
+  <g transform="translate(2 2) rotate(-45)" stroke-linejoin="round">
+    <path d="M-1.8 26.5H1.8L0 31.5Z" fill="#FFB347" stroke="#0B1220" stroke-width="1.6"/>
+    <path d="M0 0 3 9 3.5 14 11 21.5V25.5L4 23.2 2.5 26.8H-2.5L-4 23.2-11 25.5V21.5L-3.5 14-3 9Z" fill="#78C2FF" stroke="#0B1220" stroke-width="2"/>
+    <path d="M0 0 3 9 3.5 14 11 21.5V25.5L4 23.2 2.5 26.8H0Z" fill="#3E8FD6"/>
+    <path d="M-1.6 13.5-2.2 9.5-0.6 4.5Z" fill="#DDF0FF"/>
+    <ellipse cx="0" cy="12.5" rx="1.7" ry="3.2" fill="#13294A" stroke="#0B1220" stroke-width="0.8"/>
+    <path d="M0 0 3 9 3.5 14 11 21.5V25.5L4 23.2 2.5 26.8H-2.5L-4 23.2-11 25.5V21.5L-3.5 14-3 9Z" fill="none" stroke="#0B1220" stroke-width="2"/>
+  </g>
+</svg>

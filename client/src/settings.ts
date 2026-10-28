@@ -2,6 +2,7 @@
 // Änderungen gelten sofort; wer darauf reagieren muss, meldet sich mit `onSettingsChange` an.
 
 import type { Locale } from "./i18n/index.ts";
+import type { CursorId } from "./ui/cursor.ts";
 
 /**
  * Animationsgeschwindigkeit als Streckungsfaktor aller Animationen (Tweens,
@@ -28,6 +29,8 @@ export interface Settings {
    * hinten oben) und Versatz durch Zoom und Verschieben aus der Ruhelage (Welt-x, -y, -z).
    */
   camera: { view: number; zoom: [number, number, number] };
+  /** Gewählter Mauszeiger (`ui/cursor.ts`). */
+  cursor: CursorId;
   /** Gewählte Sprache; ohne Wahl gilt die Browsersprache. */
   language?: Locale;
 }
@@ -41,6 +44,7 @@ const DEFAULTS: Settings = {
   movementSpeed: "normal",
   animationSpeed: "normal",
   camera: { view: 1, zoom: [0, 0, 0] },
+  cursor: "classic",
 };
 
 export const settings: Settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") };

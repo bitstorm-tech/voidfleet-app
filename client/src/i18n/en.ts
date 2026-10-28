@@ -6,6 +6,7 @@ import type { LaneType, Side } from "../../../shared/board.ts";
 import { type CommandId, type CommandType, type ShipClass, type ShipId, shipById, type TargetMode } from "../../../shared/cards.ts";
 import type { ErrorCode, MatchResult } from "../../../shared/protocol.ts";
 import type { AnimationSpeed } from "../settings.ts";
+import type { CursorId } from "../ui/cursor.ts";
 
 export interface CardText {
   name: string;
@@ -155,6 +156,20 @@ export const en = {
     install: "App",
     installButton: "Install Voidfleet as an app",
     speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
+    cursor: "Mouse pointer",
+    cursors: {
+      classic: "Classic",
+      arrow: "Toon arrow",
+      fighter: "Fighter",
+      delta: "Delta glider",
+      flagship: "Flagship",
+      needle: "Navigation needle",
+      shard: "Crystal shard",
+      formation: "Formation",
+      holo: "Holo arrow",
+      thruster: "Thruster",
+      crosshair: "Crosshair",
+    } satisfies Record<CursorId, string>,
   },
   rules: {
     title: "Rules",

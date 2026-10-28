@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Triebwerk: Pfeil mit Schaft und Antriebsflamme, Hotspot an der Spitze (2,2). -->
+  <g transform="translate(2 2) rotate(-45)" stroke-linejoin="round">
+    <path d="M-3.4 20.5H3.4L0 31Z" fill="#FF6B3D" stroke="#0B1220" stroke-width="1.6"/>
+    <path d="M-1.6 20.5H1.6L0 26.5Z" fill="#FFD36B"/>
+    <path d="M0 0 8 13H3.6V21H-3.6V13H-8Z" fill="#E6FDFF"/>
+    <path d="M0 0 8 13H3.6V21H0Z" fill="#73EBFF"/>
+    <path d="M0 0 8 13H3.6V21H-3.6V13H-8Z" fill="none" stroke="#0B1220" stroke-width="2.2"/>
+  </g>
+</svg>

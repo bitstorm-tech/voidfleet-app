@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Flaggschiff: dunkler Pfeil mit goldenem Zierrand (flagshipTrim), Hotspot an der Spitze (2,2). -->
+  <path d="M2 2V24.5L7.6 19.2 11.5 27.8 15.8 25.9 12 17.4H19.8Z" fill="#1C2740" stroke="#0B1220" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M2 2V24.5L7.6 19.2 11.5 27.8 15.8 25.9 12 17.4H19.8Z" fill="#1C2740" stroke="#F4D68C" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M2 2 19.8 17.4H12L9.8 18.6Z" fill="#2B3A5C"/>
+  <path d="M7.2 9.6 8 12.2 10.6 13 8 13.8 7.2 16.4 6.4 13.8 3.8 13 6.4 12.2Z" fill="#F4D68C"/>
+</svg>

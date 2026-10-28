@@ -1,11 +1,12 @@
 // Einstellungen: Zahnrad-Knopf oben rechts neben dem Ansichts-Knopf öffnet einen modalen Dialog
 // mit Reglern für die Lautstärke von Musik, Effekten und Bordfunk, je einer Geschwindigkeitswahl für Angriffe,
-// Schiffsbewegungen und die übrigen Animationen, der Sprache und, solange der Browser es anbietet, dem Installieren als
-// eigene App (`install.ts`). Jede Auswahl wird gespeichert (`settings.ts`); Lautstärken und Geschwindigkeiten gelten
-// sofort, ein Sprachwechsel lädt die Seite neu.
+// Schiffsbewegungen und die übrigen Animationen, dem Mauszeiger, der Sprache und, solange der Browser es anbietet, dem Installieren als
+// eigene App (`install.ts`). Jede Auswahl wird gespeichert (`settings.ts`); Lautstärken, Geschwindigkeiten und Cursor
+// gelten sofort, ein Sprachwechsel lädt die Seite neu.
 
 import { LOCALE_NAMES, locale, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
+import { CURSORS, type CursorId } from "./cursor.ts";
 import { iconDialog } from "./iconDialog.ts";
 import { installApp, onInstallable } from "./install.ts";
 
@@ -27,6 +28,7 @@ export class SettingsDialog {
         speedChoice("attackSpeed"),
         speedChoice("movementSpeed"),
         speedChoice("animationSpeed"),
+        cursorChoice(),
         choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
         installRow(),
       );
@@ -43,6 +45,26 @@ function volumeSlider(setting: VolumeSetting): HTMLLabelElement {
 
 function speedChoice(setting: SpeedSetting): HTMLFieldSetElement {
   return choice(setting, t.settings[setting], t.settings.speeds, settings[setting], (next) => updateSettings({ [setting]: next }));
+}
+
+/** Mauszeiger als Raster aus Vorschaubildern; die Legende nennt den gewählten. */
+function cursorChoice(): HTMLFieldSetElement {
+  const fieldset = Object.assign(document.createElement("fieldset"), { className: "settings-cursor" });
+  const legend = document.createElement("legend");
+  const showName = () => (legend.textContent = `${t.settings.cursor}: ${t.settings.cursors[settings.cursor]}`);
+  showName();
+  fieldset.append(legend);
+  for (const [id, cursor] of Object.entries(CURSORS) as [CursorId, (typeof CURSORS)[CursorId]][]) {
+    const label = Object.assign(document.createElement("label"), { title: t.settings.cursors[id] });
+    const input = Object.assign(document.createElement("input"), { type: "radio", name: "cursor", value: id, checked: id === settings.cursor });
+    input.addEventListener("change", () => {
+      updateSettings({ cursor: id });
+      showName();
+    });
+    label.append(input, Object.assign(document.createElement("img"), { src: cursor.url, alt: t.settings.cursors[id] }));
+    fieldset.append(label);
+  }
+  return fieldset;
 }
 
 /** „Als App installieren“, nur solange der Browser die Installation anbietet. */

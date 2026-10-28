@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Navigationsnadel: schmale Kompassnadel, Hotspot an der Spitze (2,2). -->
+  <g transform="translate(2 2) rotate(-45)" stroke-linejoin="round">
+    <path d="M0 0 5.5 20 0 27-5.5 20Z" fill="#E6FDFF"/>
+    <path d="M0 0 5.5 20 0 27Z" fill="#2FB8D9"/>
+    <circle cx="0" cy="20" r="1.8" fill="#0B1220"/>
+    <path d="M0 0 5.5 20 0 27-5.5 20Z" fill="none" stroke="#0B1220" stroke-width="2.2"/>
+  </g>
+</svg>

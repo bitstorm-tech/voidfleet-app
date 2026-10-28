@@ -595,6 +595,51 @@ body {
   outline: 2px solid rgb(var(--select));
 }
 
+.settings-cursor {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 0;
+  border: none;
+}
+
+.settings-cursor legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.settings-cursor input {
+  position: absolute;
+  opacity: 0;
+}
+
+.settings-cursor img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 8px;
+  object-fit: contain;
+  background: rgb(255 255 255 / 0.04);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 3px;
+}
+
+.settings-cursor img:hover {
+  background: var(--panel-hover);
+}
+
+.settings-cursor input:checked + img {
+  background: rgb(var(--player) / 0.18);
+  border-color: var(--accent);
+}
+
+.settings-cursor input:focus-visible + img {
+  outline: 2px solid rgb(var(--select));
+}
+
 .settings-volume {
   display: block;
   margin: 0 0 18px;
