@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { ADMIRAL_IDS, type AdmiralId } from "../../shared/admirals.ts";
 import { Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import { COMMANDS, type CommandId, commandById, deckCopies, type ShipId, shipById } from "../../shared/cards.ts";
-import type { TurnPlan } from "../../shared/protocol.ts";
+import type { FireOrder, TurnPlan } from "../../shared/protocol.ts";
 import { type BotView, planBotDraft, planBotTurn } from "./bot.ts";
 import { Match } from "./match.ts";
 
@@ -198,7 +198,7 @@ test("Ein angeschlagenes Strike-Schiff, das sonst fällt, zieht sich hinter ein 
   const plan = planTurn(board, hands([], []));
   expect(plan.maneuver).toEqual({ ship: { lane: "strike", slotIndex: 2 }, destination: { lane: "command", slotIndex: 3 } });
   // Wer manövriert, feuert nicht und bekommt keinen Feuerbefehl.
-  expect(plan.fire).toEqual([{ ship: { lane: "strike", slotIndex: 3 }, target: { lane: "strike", slotIndex: 2 } }]);
+  expect(plan.fire).toEqual([{ ship: { lane: "strike", slotIndex: 3 }, column: 2 }]);
   // Zerstört sein Schuss den Gegner, ist er mehr wert als die 2 HP: Die Fregatte bleibt und tauscht.
   enemy.hp = 3;
   expect(planTurn(board, hands([], [])).maneuver).toBeNull();
@@ -452,7 +452,10 @@ test("Gegen den letzten Gegner ohne Partner trifft Kreuzfeuer, gegen die Command
 /** Ein Zug ohne Schiff, Befehl und Feuer. */
 const PASS: TurnPlan = { ships: [], command: null, maneuver: null, flagship: null, power: null, mark: null, fire: [] };
 
-test("Fällt das gegnerische Flaggschiff, zielen so viele darauf, wie es braucht; die übrigen nehmen andere Ziele", () => {
+/** Worauf ein Feuerbefehl zielt: die Spalte (Spaltenfeuer) oder der Slot des Ziels beim Planen (Schiffsfeuer). */
+const aimOf = (order: FireOrder) => ("column" in order ? order.column : order.target);
+
+test("Fällt das gegnerische Flaggschiff, zielen so viele darauf, wie es braucht; die übrigen fällen es auch dort, wohin es in Deckung ausweichen würde", () => {
   const match = matchWith([], []);
   const { board } = match;
   for (const index of [1, 2, 3]) place(board, "player", "strike", index, "horizon_cruiser");
@@ -461,9 +464,9 @@ test("Fällt das gegnerische Flaggschiff, zielen so viele darauf, wie es braucht
   place(board, "enemy", "command", 2, "hive").hp = 4;
   place(board, "enemy", "strike", 0, "drone");
   const plan = planBotTurn(board, match.botView(0), match.round, () => 1);
-  // Interceptor und Hive reichen für die 4 HP, ein Kreuzer schießt die Drohne ab, die übrigen zielen zur Sicherheit aufs Flaggschiff.
-  expect(plan.fire).toHaveLength(5);
-  expect(plan.fire.filter((order) => order.target.lane === "strike")).toHaveLength(1);
+  // Interceptor und Hive reichen für die 4 HP. Die Kreuzer fällen sie auch hinter der Drohne, wohin sie gedeckt am ehesten
+  // auswiche, per Spaltenfeuer durch die Drohne: Der erste verschenkt 1 an ihr, dann braucht die Hive beide anderen.
+  expect(plan.fire.map(aimOf)).toEqual([0, 0, 0, 2, 2]);
   expect(match.submit(0, plan)).toBeNull();
   expect(match.submit(1, PASS)).toBeNull();
   const destroyed = match.resolveRound().flatMap((event) => (event.kind === "destroyed" ? [event.ship.cardId] : []));
@@ -479,38 +482,40 @@ test("Er verteilt das Feuer, statt Schaden zu verschenken", () => {
   // Jeder Kreuzer reicht für einen Jäger; ein zweiter Schuss auf denselben verpuffte.
   expect(
     planTurn(board, hands([], []))
-      .fire.map((order) => order.target.slotIndex)
+      .fire.map((order) => ("column" in order ? order.column : null))
       .sort(),
   ).toEqual([1, 3]);
 });
 
-test("Feuerbefehle gibt es für eigene Kampfschiffe, auch ein frisch gelegtes, auf gegnerische Schiffe; der Zug gilt", () => {
+test("Feuerbefehle gibt es für eigene Kampfschiffe, auch ein frisch gelegtes, auf Spalten mit gegnerischen Schiffen; der Zug gilt", () => {
   const match = matchWith(["void_interceptor"], []);
   place(match.board, "player", "strike", 2, "iron_dreadnought");
   place(match.board, "player", "command", 2, "repair_drone");
   place(match.board, "enemy", "strike", 2, "horizon_cruiser");
   const plan = planBotTurn(match.board, match.botView(0), match.round, () => 1);
-  // Die Repair Drone greift nie an; Dreadnought und der gelegte Jäger feuern auf den Kreuzer.
+  // Die Repair Drone greift nie an; Dreadnought und der gelegte Jäger feuern auf den Kreuzer. Der Gegner kann noch ein
+  // Schiff legen, hinter das er ausweichen könnte: Spaltenfeuer, denn Schiffsfeuer brächte nichts mehr.
   expect(plan.ships).toEqual([{ handIndex: 0, target: { lane: "strike", slotIndex: 3 } }]);
   expect(plan.fire).toEqual([
-    { ship: { lane: "strike", slotIndex: 2 }, target: { lane: "strike", slotIndex: 2 } },
-    { ship: { lane: "strike", slotIndex: 3 }, target: { lane: "strike", slotIndex: 2 } },
+    { ship: { lane: "strike", slotIndex: 2 }, column: 2 },
+    { ship: { lane: "strike", slotIndex: 3 }, column: 2 },
   ]);
   expect(match.submit(0, plan)).toBeNull();
 });
 
-test("Schüsse auf ein gedecktes Schiff rechnet er dem Schiff davor zu", () => {
+test("Ein Schuss auf eine Spalte trifft das Schiff vorne; reicht das Feuer nicht durch, zählt nur, was es dort anrichtet", () => {
   const board = new Board();
   place(board, "player", "strike", 1, "void_interceptor");
   place(board, "player", "strike", 2, "horizon_cruiser");
   place(board, "enemy", "command", 2, "hive").hp = 2;
   place(board, "enemy", "strike", 2, "horizon_cruiser");
   place(board, "enemy", "strike", 4, "void_interceptor").hp = 3;
-  // Die Hive fiele mit einem Schuss, doch der Kreuzer davor fängt ihn ab: Der Jäger schießt den Interceptor ab, der
-  // eigene Kreuzer beschädigt den gegnerischen.
+  // Die Hive fiele mit einem Schuss, doch erst nimmt der Kreuzer davor alle 5 Schaden: Der Jäger schießt den Interceptor
+  // ab, per Schiffsfeuer, das ihm folgt, wenn er ausweicht (Deckung findet er nirgends); der eigene Kreuzer beschädigt den
+  // gegnerischen.
   expect(planTurn(board, hands([], [])).fire).toEqual([
     { ship: { lane: "strike", slotIndex: 1 }, target: { lane: "strike", slotIndex: 4 } },
-    { ship: { lane: "strike", slotIndex: 2 }, target: { lane: "strike", slotIndex: 2 } },
+    { ship: { lane: "strike", slotIndex: 2 }, column: 2 },
   ]);
 });
 
@@ -523,8 +528,9 @@ test("Der Torpedo räumt die Deckung vor dem gegnerischen Flaggschiff weg, wenn 
   place(board, "enemy", "strike", 2, "horizon_cruiser").hp = 5;
   const plan = planTurn(board, hands([], ["torpedo"]));
   expect(plan.command).toEqual({ handIndex: 0, target: { lane: "strike", slotIndex: 2 }, destination: null });
-  // Ohne Deckung reichen 2 + 3 + 2 für die 6 HP: Alle zielen auf die Hive.
-  expect(plan.fire.map((order) => order.target)).toEqual(Array(3).fill({ lane: "command", slotIndex: 2 }));
+  // Ohne den Kreuzer davor reichen 2 + 3 + 2 für die 6 HP. Ausweichen kann die Hive nur ungedeckt: Alle zielen per
+  // Schiffsfeuer auf sie; der Kreuzer davor deckt nicht mehr, wenn sie schießen.
+  expect(plan.fire.map(aimOf)).toEqual(Array(3).fill({ lane: "command", slotIndex: 2 }));
 });
 
 test("Kerr gibt Taktvorsprung dem Schiff, das einen gegnerischen Schützen abschießt, bevor er feuert", () => {
@@ -538,9 +544,11 @@ test("Kerr gibt Taktvorsprung dem Schiff, das einen gegnerischen Schützen absch
   expect(plan.fire).toContainEqual({ ship: { lane: "strike", slotIndex: 2 }, target: { lane: "strike", slotIndex: 2 } });
 });
 
-test("Drohnen, die den Schwarmangriff fliegen, zielen auch per Feuerbefehl auf sein Ziel", () => {
+test("Drohnen, die den Schwarmangriff fliegen, zielen auch per Feuerbefehl auf die Spalte seines Ziels", () => {
   const board = new Board();
   place(board, "player", "command", 2, "hive");
+  // Der Titan Carrier vor der Hive nimmt die gegnerischen Schüsse auf ihre Spalte; sie muss nicht ausweichen.
+  place(board, "player", "strike", 2, "titan_carrier");
   place(board, "player", "strike", 1, "drone");
   place(board, "player", "strike", 3, "drone");
   place(board, "enemy", "strike", 2, "iron_dreadnought");
@@ -548,5 +556,161 @@ test("Drohnen, die den Schwarmangriff fliegen, zielen auch per Feuerbefehl auf s
   // Hinter dem Dreadnought erreicht nur der Schwarmangriff den angeschlagenen Raider: 2 × (1 + 1) Schaden.
   const plan = planTurn(board, hands([], []));
   expect(plan.power).toEqual({ target: { lane: "command", slotIndex: 2 } });
-  for (const slotIndex of [1, 3]) expect(plan.fire).toContainEqual({ ship: { lane: "strike", slotIndex }, target: { lane: "command", slotIndex: 2 } });
+  for (const slotIndex of [1, 3]) expect(plan.fire).toContainEqual({ ship: { lane: "strike", slotIndex }, column: 2 });
+});
+
+test("Durchbruch: Reicht das Feuer für den Wächter und das Flaggschiff dahinter, zielen alle auf die Spalte, samt dem Schuss, den Overkill vorne kostet", () => {
+  const match = matchWith([], []);
+  const { board } = match;
+  place(board, "player", "strike", 1, "void_interceptor");
+  place(board, "player", "strike", 3, "horizon_cruiser");
+  place(board, "player", "strike", 4, "horizon_cruiser");
+  place(board, "player", "command", 4, "hive");
+  place(board, "enemy", "strike", 2, "scrap_raider").hp = 2;
+  place(board, "enemy", "command", 2, "hive").hp = 3;
+  const plan = planBotTurn(board, match.botView(0), match.round, () => 1);
+  // Der Interceptor feuert zuerst und verschenkt 1 am Raider, dann braucht die Hive beide Kreuzer; die eigene Hive zielt
+  // zur Sicherheit auch dorthin. Der Gegner kann noch ein Schiff legen, hinter das die Hive ausweichen könnte: Spaltenfeuer.
+  expect(plan.fire.map(aimOf)).toEqual([2, 2, 2, 2]);
+  expect(match.submit(0, plan)).toBeNull();
+  expect(match.submit(1, PASS)).toBeNull();
+  const shots = match
+    .resolveRound()
+    .flatMap((event) =>
+      event.kind === "attack"
+        ? [[event.target.cardId, event.through ?? false]]
+        : event.kind === "fizzle"
+          ? [["fizzle", "cleared" in event && event.cleared === true]]
+          : [],
+    );
+  expect(shots).toEqual([
+    ["scrap_raider", false],
+    ["hive", true],
+    ["hive", true],
+    ["fizzle", true],
+  ]);
+  expect(match.winner).toBe("player");
+});
+
+test("Droht dem Flaggschiff der Fall, weicht es in eine Spalte aus, die der Gegner nicht beschießt, am liebsten gedeckt", () => {
+  const board = new Board();
+  place(board, "player", "command", 2, "hive").hp = 4;
+  place(board, "player", "strike", 2, "void_interceptor").hp = 2;
+  place(board, "player", "strike", 4, "iron_dreadnought");
+  for (const index of [1, 2, 3]) place(board, "enemy", "strike", index, "horizon_cruiser");
+  // Der Gegner zielt mit 6 Schaden auf die Spalte der Hive: Der Interceptor davor fällt, der Rest geht durch. Hinter dem
+  // Dreadnought schießt niemand hin; der Interceptor vor ihr weicht nie aus, sonst stünde sie offen.
+  expect(planTurn(board, hands([], [])).maneuver).toEqual({ ship: { lane: "command", slotIndex: 2 }, destination: { lane: "command", slotIndex: 4 } });
+});
+
+test("Unter gleich guten Slots zum Ausweichen entscheidet der Zufall", () => {
+  const board = new Board();
+  place(board, "player", "command", 2, "hive").hp = 4;
+  place(board, "player", "strike", 0, "iron_dreadnought");
+  place(board, "player", "strike", 4, "iron_dreadnought");
+  place(board, "enemy", "strike", 1, "horizon_cruiser");
+  place(board, "enemy", "strike", 2, "horizon_cruiser");
+  // Hinter beiden Dreadnoughts ist die Hive gleich sicher. (Unter 0,2 bliebe sie, weil es nicht um das Match geht, manchmal stehen.)
+  const destination = (value: number) => planTurn(board, hands([], []), () => value).maneuver?.destination;
+  expect(destination(0.25)).toEqual({ lane: "command", slotIndex: 0 });
+  expect(destination(0.99)).toEqual({ lane: "command", slotIndex: 4 });
+});
+
+test("Vorhalten: Reicht das Feuer nur für das gegnerische Flaggschiff, wo es steht, oder hinter der Deckung, hinter die es ausweichen würde, setzt er manchmal auf das Ausweichen", () => {
+  const board = new Board();
+  for (const index of [1, 2, 3]) place(board, "player", "strike", index, "horizon_cruiser");
+  place(board, "enemy", "command", 2, "hive").hp = 4;
+  place(board, "enemy", "strike", 0, "drone");
+  // Zwei Kreuzer reichen für die Hive, wo sie steht; hinter der Drohne braucht es alle drei, weil der erste 1 an ihr
+  // verschenkt. Sonst schießt der dritte die Drohne ab.
+  const columns = (value: number) =>
+    planTurn(board, hands([], []), () => value)
+      .fire.map(aimOf)
+      .sort();
+  expect(columns(1)).toEqual([0, 2, 2]);
+  expect(columns(0.3)).toEqual([0, 0, 0]);
+});
+
+test("Kann das gegnerische Flaggschiff nur ungedeckt ausweichen, zielen alle per Schiffsfeuer darauf, und es fällt, auch wenn es ausweicht", () => {
+  const match = matchWith([], []);
+  const { board } = match;
+  for (const index of [1, 2, 3, 4]) place(board, "player", "strike", index, "horizon_cruiser");
+  place(board, "player", "command", 2, "hive");
+  place(board, "enemy", "command", 2, "hive").hp = 4;
+  // Ohne Schiff auf der Hand schafft der Gegner keine Deckung mehr. Zwei Kreuzer reichen, die übrigen Schützen zielen zur
+  // Sicherheit auch auf die Hive.
+  match.players[1]!.shipHand.length = 0;
+  const plan = planBotTurn(board, match.botView(0), match.round, () => 1);
+  expect(plan.fire.map(aimOf)).toEqual(Array(5).fill({ lane: "command", slotIndex: 2 }));
+  expect(match.submit(0, plan)).toBeNull();
+  expect(match.submit(1, { ...PASS, maneuver: { ship: { lane: "command", slotIndex: 2 }, destination: { lane: "command", slotIndex: 5 } } })).toBeNull();
+  match.resolveRound();
+  expect(match.winner).toBe("player");
+});
+
+test("Könnte vor dem gegnerischen Flaggschiff ein Wächter landen, zielt er per Spaltenfeuer durch ihn hindurch; kann davor nur ein Trugbild landen, setzt er manchmal auf das Ausweichen", () => {
+  const board = new Board();
+  for (const index of [1, 2]) place(board, "player", "strike", index, "horizon_cruiser");
+  place(board, "enemy", "command", 2, "mirage").hp = 4;
+  const bot = hands([], []);
+  const fire = (shipHandSize: number, random: number) =>
+    planTurn(board, { ...bot, opponent: { ...bot.opponent, admiral: "moreau", shipHandSize } }, () => random).fire.map(aimOf);
+  expect(fire(2, 1)).toEqual([2, 2]);
+  expect(fire(2, 0.3)).toEqual([2, 2]);
+  // Ohne Schiff auf der Hand stellt Moreau ein Trugbild oder weicht aus, beides zugleich geht nicht.
+  expect(fire(0, 1)).toEqual([2, 2]);
+  expect(fire(0, 0.3)).toEqual(Array(2).fill({ lane: "command", slotIndex: 2 }));
+});
+
+test("Die Kombination: Spaltenfeuer aus der Strike-Lane bricht die Deckung, Schiffsfeuer aus der Command-Lane trifft das Schiff dahinter; auf ein Schiff hinter Deckung, die hält, zielt kein Schiffsfeuer", () => {
+  const board = new Board();
+  for (const index of [0, 1, 2]) place(board, "player", "strike", index, "horizon_cruiser");
+  place(board, "player", "command", 2, "plasma_frigate");
+  place(board, "enemy", "strike", 3, "iron_dreadnought").hp = 4;
+  place(board, "enemy", "command", 3, "hive").hp = 3;
+  // Die Kreuzer zerstören den Dreadnought (4 HP, Schild 2), dann trifft die Fregatte die Hive, auch wenn sie ausweicht.
+  expect(planTurn(board, hands([], [])).fire.map(aimOf)).toEqual([3, 3, 3, { lane: "command", slotIndex: 3 }]);
+  // Mit zwei Kreuzern fällt nur der Dreadnought; auf die Hive dahinter zielt keiner.
+  board.lane("player", "strike").slots[0]!.clear();
+  expect(planTurn(board, hands([], [])).fire.map(aimOf)).toEqual([3, 3, 3]);
+});
+
+test("Gegen Schiffsfeuer weicht ein Schiff nicht ungedeckt aus; legt der Bot ein neues Schiff, zieht es dahinter in Deckung", () => {
+  const board = new Board();
+  place(board, "player", "strike", 1, "plasma_frigate").hp = 2;
+  place(board, "player", "strike", 4, "void_interceptor");
+  place(board, "player", "command", 4, "signal_booster");
+  place(board, "enemy", "strike", 1, "horizon_cruiser");
+  // Ohne Schiff auf der Hand findet die Fregatte keine Deckung: Der Gegner zielt per Schiffsfeuer auf sie, und ausweichen
+  // brächte nichts.
+  expect(planTurn(board, hands([], [])).maneuver).toBeNull();
+  // Der neue Kreuzer landet vorne mittig; hinter ihm ist die Fregatte vor beiden Modi sicher.
+  const plan = planTurn(board, hands(["horizon_cruiser"], []));
+  expect(plan.ships).toEqual([{ handIndex: 0, target: { lane: "strike", slotIndex: 2 } }]);
+  expect(plan.maneuver).toEqual({ ship: { lane: "strike", slotIndex: 1 }, destination: { lane: "command", slotIndex: 2 } });
+});
+
+test("Ein neues Schiff stellt sich vor das ungedeckte Command-Schiff, auf das der Gegner wohl feuert", () => {
+  const board = new Board();
+  place(board, "player", "strike", 2, "iron_dreadnought");
+  place(board, "player", "command", 2, "hive");
+  place(board, "player", "command", 1, "signal_booster");
+  place(board, "player", "command", 4, "repair_drone").hp = 3;
+  place(board, "enemy", "strike", 4, "horizon_cruiser");
+  place(board, "enemy", "strike", 5, "horizon_cruiser");
+  // Der Gegner zerstört die angeschlagene Repair Drone; der Kreuzer davor nimmt die Schüsse auf ihre Spalte.
+  expect(planTurn(board, hands(["horizon_cruiser"], [])).ships).toEqual([{ handIndex: 0, target: { lane: "strike", slotIndex: 4 } }]);
+});
+
+test("Notschild statt Kurzsprung auch für ein gedecktes Flaggschiff, wenn Overkill am Wächter durchgeht und der Schild reicht", () => {
+  const board = new Board();
+  place(board, "player", "command", 2, "hive").hp = 5;
+  place(board, "player", "strike", 2, "void_interceptor").hp = 2;
+  for (const index of [0, 1, 3, 4]) place(board, "enemy", "strike", index, "horizon_cruiser");
+  // Schlimmstenfalls nimmt der Interceptor 2 der 8 Schaden, 6 gehen durch; mit dem Schild bleiben der Hive 2 HP.
+  expect(planTurn(board, hands([], ["micro_jump", "emergency_shields"])).command).toEqual({
+    handIndex: 1,
+    target: { lane: "command", slotIndex: 2 },
+    destination: null,
+  });
 });

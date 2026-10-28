@@ -1,7 +1,7 @@
-// Illustrationen des Regel-Dialogs: Brett mit Deckungsregel und Feuerbefehle als Inline-SVG,
-// Phasenfolge, Overdrive-Verlauf und die Teile eines Zugs als DOM (Schiff, Befehl, Manöver oder
-// Admiralsfähigkeit, Feuerbefehle). Beschriftet aus `t.rules.figures`; Farben kommen aus den
-// CSS-Variablen der Palette (`styles.css`).
+// Illustrationen des Regel-Dialogs: Brett mit Spalten und Deckungsregel und die Feuerbefehle (Spalten-
+// und Schiffsfeuer) als Inline-SVG, Phasenfolge, Overdrive-Verlauf und die Teile eines Zugs als DOM
+// (Schiff, Befehl, Manöver oder Admiralsfähigkeit, Feuerbefehle). Beschriftet aus `t.rules.figures`;
+// Farben kommen aus den CSS-Variablen der Palette (`styles.css`).
 
 import { overdriveBonus } from "../../../shared/board.ts";
 import { commandById, shipById } from "../../../shared/cards.ts";
@@ -68,12 +68,13 @@ function arrowheadDefs(): SVGElement {
 }
 
 /**
- * Das Brett: oben der Gegner (Command, Strike), unten die eigene Seite (Strike, Command). Eigene
- * Command-Schiffe hinter einem Strike-Schiff sind gedeckt, die anderen ungedeckt; eine gestrichelte
- * Linie zeigt den Schuss auf das ungedeckte und den abgefangenen auf das gedeckte Schiff.
+ * Das Brett: oben der Gegner (Command, Strike), unten die eigene Seite (Strike, Command), darunter die Nummern der
+ * Slots, die zugleich die Spalten zählen. Eigene Command-Schiffe hinter einem Strike-Schiff sind gedeckt, die anderen
+ * ungedeckt; zwei gegnerische Schüsse fallen in eigene Spalten, in der gedeckten auf das Schiff vorn, sonst auf das
+ * Command-Schiff.
  */
 export function boardFigure(): SVGSVGElement {
-  const svg = svgRoot(640, 300);
+  const svg = svgRoot(640, 316);
   svg.append(arrowheadDefs());
   const slotWidth = 80;
   const step = 86;
@@ -103,118 +104,168 @@ export function boardFigure(): SVGSVGElement {
             : "exposed"
           : undefined;
       svg.append(slot(x0 + index * step, row.y, slotWidth, slotHeight, row.side, covered));
-      if (row.side === "player" && row.lane === "strike") svg.append(text(center(index), row.y - 5, labels.slot(index), "slot-label", "middle"));
+      if (row.side === "player" && row.lane === "command")
+        svg.append(text(center(index), row.y + slotHeight + 14, labels.slot(index + 1), "slot-label", "middle"));
       if (ships.includes(index)) svg.append(ship(center(index), middle(row), row.side));
     }
   }
-  const strikeRow = rows[1];
-  const playerStrike = rows[2];
-  const playerCommand = rows[3];
-  // Schuss des Gegners auf das ungedeckte Command-Schiff und der abgefangene auf das gedeckte.
+  const [commandRow, strikeRow, playerStrike, playerCommand] = rows;
+  // Die Schüsse des Gegners: in die Spalte ohne Strike-Schiff auf das ungedeckte Command-Schiff, in die gedeckte auf das Schiff vorn.
   svg.append(arrow([center(2) + 8, middle(strikeRow) + 12], [center(4) - 4, playerCommand.y - 2], "shot"));
-  svg.append(svgElement("line", { x1: center(2) - 8, y1: middle(strikeRow) + 12, x2: center(1) + 2, y2: playerStrike.y - 2, class: "shot blocked" }));
-  svg.append(text(center(1), playerCommand.y + slotHeight + 16, labels.covered, "badge covered", "middle"));
-  svg.append(text(center(4), playerCommand.y + slotHeight + 16, labels.exposed, "badge exposed", "middle"));
-  svg.append(text(640, 292, labels.laneLimit, "note", "end"));
+  svg.append(arrow([center(2) - 8, middle(commandRow) + 12], [center(1) + 4, playerStrike.y - 2], "shot"));
+  svg.append(text(center(1), playerCommand.y + slotHeight + 30, labels.covered, "badge covered", "middle"));
+  svg.append(text(center(4), playerCommand.y + slotHeight + 30, labels.exposed, "badge exposed", "middle"));
+  svg.append(text(640, 310, labels.laneLimit, "note", "end"));
   return svg;
 }
 
 type FigureRow = "command" | "strike" | "own";
 /** Ein Slot in einer Spalte der Feuerbefehl-Figur: Reihe (gegnerische Command- und Strike-Lane, eigene Strike-Lane) und Nummer. */
 type Spot = readonly [row: FigureRow, slot: number];
+type Point = [x: number, y: number];
 
 /**
- * Feuerbefehle im Kampf, drei Fälle nebeneinander, oben die Gegnerseite (Command, Strike), unten eigene Schiffe:
- * freie Wahl unter allen gegnerischen Schiffen, auch quer über die Lanes; ein Schuss auf ein gedecktes Schiff, den das
- * Schiff davor abfängt (gepunktet der Feuerbefehl, rot der Schuss); und ein zweiter Schuss auf ein Schiff, das der
- * erste schon zerstört hat — er verpufft. Rot markiert sind die getroffenen Slots, grün der gedeckte.
+ * Feuerbefehle im Kampf, vier Fälle im Raster, je oben die Gegnerseite (Command, Strike), unten eigene Schiffe. Oben
+ * Spaltenfeuer: Es trifft das vordere Schiff seiner Spalte und, sobald das gefallen ist, das dahinter; ein Schiff, das
+ * die Spalte verlässt, weicht ihm aus. Unten Schiffsfeuer: Es folgt seinem Schiff in einen anderen Slot und verpufft,
+ * solange das Schiff gedeckt ist. Gepunktet ist der Feuerbefehl (Rahmen um die Spalte bzw. Ring um das Schiff), rot der
+ * Schuss, blass mit Kreuz statt Spitze einer, der verpufft; rot markiert sind die getroffenen Slots, grün der gedeckte,
+ * die Ziffern zählen die Schüsse in ihrer Reihenfolge.
  */
 export function fireOrdersFigure(): SVGSVGElement {
-  const svg = svgRoot(640, 162);
+  const svg = svgRoot(640, 334);
   svg.append(arrowheadDefs());
   const slotWidth = 58;
   const step = 64;
   const slotHeight = 30;
-  const rows: Record<FigureRow, number> = { command: 24, strike: 60, own: 126 };
+  const rows: Record<FigureRow, number> = { command: 32, strike: 66, own: 126 };
   const same = (a: Spot, b: Spot) => a[0] === b[0] && a[1] === b[1];
-  /** Zeichnet Titel, Slots und Schiffe eines Falls und gibt zurück, wo seine Slots liegen (`edge` -1 oben, 1 unten, 0 Mitte). */
-  const block = (index: number, title: string, ships: readonly Spot[], hit: readonly Spot[], covered?: Spot) => {
-    const ox = index * 222;
-    const at = ([row, slotIndex]: Spot, edge = 0): [number, number] => [ox + slotIndex * step + slotWidth / 2, rows[row] + ((1 + edge) * slotHeight) / 2];
-    svg.append(text(ox, 12, title, "class-label"));
+  /**
+   * Zeichnet Titel, Slots und Schiffe eines Falls, mittig in seiner Hälfte der Zeile, und gibt zurück, wo seine Slots
+   * liegen (`edge` -1 oben, 1 unten, 0 Mitte).
+   */
+  const panel = (index: number, title: string, note: string, ships: readonly Spot[], hit: readonly Spot[], covered?: Spot) => {
+    const [cx, oy] = [160 + (index % 2) * 320, Math.floor(index / 2) * 176];
+    const ox = cx - step - slotWidth / 2;
+    const at = ([row, slotIndex]: Spot, edge = 0): Point => [ox + slotIndex * step + slotWidth / 2, oy + rows[row] + ((1 + edge) * slotHeight) / 2];
+    svg.append(text(cx, oy + 11, title, "class-label", "middle"), text(cx, oy + 24, note, "note", "middle"));
     for (const row of ["command", "strike", "own"] as const) {
       for (let slotIndex = 0; slotIndex < 3; slotIndex++) {
         const spot: Spot = [row, slotIndex];
         const highlight = hit.some((other) => same(other, spot)) ? "exposed" : covered && same(covered, spot) ? "covered" : undefined;
-        svg.append(slot(ox + slotIndex * step, rows[row], slotWidth, slotHeight, row === "own" ? "player" : "enemy", highlight));
+        svg.append(slot(ox + slotIndex * step, oy + rows[row], slotWidth, slotHeight, row === "own" ? "player" : "enemy", highlight));
       }
     }
     for (const spot of ships) svg.append(ship(...at(spot), spot[0] === "own" ? "player" : "enemy"));
     return at;
   };
+  const shift = ([x, y]: Point, dx: number, dy = 0): Point => [x + dx, y + dy];
+  /** Spaltenfeuer: der Rahmen um beide Slots der Spalte, zwischen der Mitte ihrer Oberkante `top` und ihrer Unterkante `bottom`. */
+  const column = ([x, top]: Point, [, bottom]: Point) =>
+    svgElement("rect", { x: x - slotWidth / 2 - 3, y: top - 3, width: slotWidth + 6, height: bottom - top + 6, rx: 5, class: "order", fill: "none" });
+  /** Schiffsfeuer: der Ring um das verfolgte Schiff. */
+  const ring = ([x, y]: Point) => svgElement("circle", { cx: x, cy: y + 2, r: 16, class: "order", fill: "none" });
+  /** Ein Schuss, der verpufft: blass, mit einem durchgezogenen Kreuz statt der Spitze, `stop` vor dem Punkt `to`. */
+  const fizzle = ([fromX, fromY]: Point, [toX, toY]: Point, stop = 0) => {
+    const ratio = 1 - stop / Math.hypot(toX - fromX, toY - fromY);
+    const [x, y] = [fromX + (toX - fromX) * ratio, fromY + (toY - fromY) * ratio];
+    return [
+      svgElement("line", { x1: fromX, y1: fromY, x2: x, y2: y, class: "shot blocked" }),
+      svgElement("path", {
+        d: `M${x - 5},${y - 5}L${x + 5},${y + 5}M${x + 5},${y - 5}L${x - 5},${y + 5}`,
+        class: "shot blocked cross",
+      }),
+    ];
+  };
+  /** Ein in diesem Kampf zerstörtes Schiff: matt und durchgestrichen. */
+  const wreck = ([x, y]: Point) => [
+    ship(x, y, "enemy", true),
+    ...[-9, 9].map((dx) => svgElement("line", { x1: x + dx, y1: y - 9, x2: x - dx, y2: y + 9, class: "wreck" })),
+  ];
+  /** Das Manöver eines gegnerischen Schiffs innerhalb der Lane, als flacher Bogen über den Slots, dünner als im Zug-Bild. */
+  const move = ([fromX, y]: Point, [toX]: Point) =>
+    svgElement("path", {
+      d: `M${fromX + 8},${y - 6} Q${(fromX + toX) / 2},${y - 22} ${toX - 14},${y - 6}`,
+      class: "move thin",
+      "marker-end": "url(#rules-arrowhead)",
+    });
 
-  const free = block(
+  // Spaltenfeuer, zwei Schüsse in dieselbe Spalte: Der erste zerstört das Schiff vorn, der zweite geht auf das dahinter.
+  const through = panel(
     0,
-    labels.anyShip,
+    labels.columnFire,
+    labels.columnThrough,
     [
       ["command", 1],
-      ["strike", 0],
-      ["strike", 2],
       ["own", 0],
       ["own", 2],
     ],
     [
+      ["strike", 1],
       ["command", 1],
-      ["strike", 0],
     ],
   );
-  svg.append(arrow(free(["own", 0], -1), free(["command", 1], 1), "shot"), arrow(free(["own", 2], -1), free(["strike", 0], 1), "shot"));
+  svg.append(
+    column(through(["command", 1], -1), through(["strike", 1], 1)),
+    ...wreck(through(["strike", 1])),
+    arrow(through(["own", 0], -1), shift(through(["strike", 1], 1), -10), "shot"),
+    arrow(through(["own", 2], -1), shift(through(["command", 1], 1), 8), "shot"),
+  );
+  for (const [label, spot] of [
+    ["1", ["own", 0]],
+    ["2", ["own", 2]],
+  ] as const)
+    svg.append(text(...shift(through(spot), 16, 4), label, "note"));
 
-  const cover = block(
+  // Spaltenfeuer, das Ziel manövriert aus der Spalte: Der Schuss verpufft im leeren Slot.
+  const dodge = panel(
     1,
-    labels.coverTakes,
+    labels.columnFire,
+    labels.columnDodge,
+    [
+      ["strike", 2],
+      ["own", 1],
+    ],
+    [],
+  );
+  svg.append(
+    column(dodge(["command", 1], -1), dodge(["strike", 1], 1)),
+    move(dodge(["strike", 1]), dodge(["strike", 2])),
+    ...fizzle(dodge(["own", 1], -1), dodge(["strike", 1], 0.3)),
+  );
+
+  // Schiffsfeuer, dasselbe Manöver: Der Schuss folgt dem Schiff in den neuen Slot.
+  const follows = panel(
+    2,
+    labels.trackingFire,
+    labels.trackingFollows,
+    [
+      ["strike", 2],
+      ["own", 1],
+    ],
+    [["strike", 2]],
+  );
+  svg.append(
+    move(follows(["strike", 1]), follows(["strike", 2])),
+    ring(follows(["strike", 2])),
+    arrow(follows(["own", 1], -1), follows(["strike", 2], 1), "shot"),
+  );
+
+  // Schiffsfeuer auf ein gedecktes Schiff: Solange das Schiff davor steht, verpufft der Schuss.
+  const covered = panel(
+    3,
+    labels.trackingFire,
+    labels.trackingCovered,
     [
       ["command", 1],
       ["strike", 1],
       ["own", 0],
     ],
-    [["strike", 1]],
+    [],
     ["command", 1],
   );
-  svg.append(arrow(cover(["own", 0], -1), cover(["command", 1], 1), "order"), arrow(cover(["own", 0], -1), cover(["strike", 1], 1), "shot"));
-
-  const fizzle = block(
-    2,
-    labels.fizzles,
-    [
-      ["own", 0],
-      ["own", 2],
-    ],
-    [["strike", 1]],
-  );
-  const [wx, wy] = fizzle(["strike", 1]);
-  svg.append(ship(wx, wy, "enemy", true));
-  for (const [dx, dy] of [
-    [-9, -9],
-    [9, -9],
-  ] as const)
-    svg.append(svgElement("line", { x1: wx + dx, y1: wy + dy, x2: wx - dx, y2: wy - dy, class: "wreck" }));
-  svg.append(arrow(fizzle(["own", 0], -1), fizzle(["strike", 1], 1), "shot"));
-  // Der zweite Schuss endet auf halbem Weg in einem matten Wölkchen.
-  const [fromX, fromY] = fizzle(["own", 2], -1);
-  const [toX, toY] = fizzle(["strike", 1], 1);
-  const [endX, endY] = [fromX + (toX - fromX) * 0.55, fromY + (toY - fromY) * 0.55];
-  svg.append(
-    svgElement("line", { x1: fromX, y1: fromY, x2: endX, y2: endY, class: "shot" }),
-    svgElement("circle", { cx: endX, cy: endY, r: 6, class: "fizzle" }),
-  );
-  for (const [label, spot] of [
-    ["1", ["own", 0]],
-    ["2", ["own", 2]],
-  ] as const) {
-    const [x, y] = fizzle(spot);
-    svg.append(text(x + 16, y + 4, label, "note"));
-  }
+  // Das Kreuz bleibt knapp vor dem Ring, damit beide zu sehen sind.
+  svg.append(ring(covered(["command", 1])), ...fizzle(covered(["own", 0], -1), shift(covered(["command", 1]), 0, 2), 24));
   return svg;
 }
 

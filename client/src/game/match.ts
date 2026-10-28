@@ -44,7 +44,7 @@ export interface TurnProgress {
   power: TurnPartState | null;
   /** Pendulum: die Zielerfassung, nur in Runden, in denen sie markieren darf. */
   mark: TurnPartState | null;
-  /** Feuerbefehle: erledigt, wenn jedes Schiff, das feuern kann, ein Ziel hat; nicht möglich ohne Schütze oder ohne Gegner. */
+  /** Feuerbefehle: erledigt, wenn jedes Schiff, das feuern kann, ein Ziel hat (auch eine leere Spalte, etwa in Runde 1); nicht möglich ohne Schütze. */
   fire: TurnPartState;
   /** Wie viele dieser Schiffe schon ein Ziel haben (`assigned`) von allen, die eines bekommen können (`shooters`). */
   fireOrders: { assigned: number; shooters: number };
@@ -270,14 +270,24 @@ export class Match {
     return this.plan.fire.find((order) => isSameSlot(order.ship, slotTarget(slot))) ?? null;
   }
 
-  /** Plant den Feuerbefehl des eigenen Schiffs auf `ship` auf das gegnerische Schiff auf `target`; ein alter weicht. */
-  setFire(ship: Slot, target: Slot): void {
-    this.clearFire(ship);
-    this.plan.fire.push({ ship: slotTarget(ship), target: slotTarget(target) });
+  /**
+   * Der Feuerbefehl des eigenen Schiffs auf `ship` nach einem Tipp auf den gegnerischen Slot `target`: Spaltenfeuer auf
+   * dessen Spalte; gilt es ihr schon, Schiffsfeuer auf das Schiff dort; gilt diesem schon das Schiffsfeuer oder ist der
+   * Slot der Spalte leer, null (kein Feuerbefehl mehr).
+   */
+  nextFire(ship: Slot, target: Slot): FireOrder | null {
+    const order = this.fireOrderAt(ship);
+    const column = { ship: slotTarget(ship), column: target.index };
+    if (order === null) return column;
+    if ("target" in order) return isSameSlot(order.target, slotTarget(target)) ? null : column;
+    if (order.column !== target.index) return column;
+    return target.isOccupied ? { ship: slotTarget(ship), target: slotTarget(target) } : null;
   }
 
-  clearFire(ship: Slot): void {
-    this.plan.fire = this.plan.fire.filter((order) => !isSameSlot(order.ship, slotTarget(ship)));
+  /** Setzt den Feuerbefehl des eigenen Schiffs auf `ship`; ein alter weicht, null nimmt ihn zurück. */
+  setFire(ship: Slot, order: FireOrder | null): void {
+    this.plan.fire = this.plan.fire.filter((old) => !isSameSlot(old.ship, slotTarget(ship)));
+    if (order) this.plan.fire.push(order);
   }
 
   /** Die Drohne fliegt den eigenen Schwarmangriff: Sie feuert auf dessen Ziel, auch ohne Feuerbefehl. */
@@ -448,8 +458,7 @@ export class Match {
     const canPower = this.powerTargets.length > 0;
     const state = (planned: boolean, possible: boolean): TurnPartState => (planned ? "done" : possible ? "open" : "blocked");
     const both = this.keepsManeuverAndPower;
-    // Ohne gegnerisches Schiff (Runde 1) kann keins feuern.
-    const shooters = this.board.ships("enemy").length > 0 ? this.shooters : [];
+    const shooters = this.shooters;
     const assigned = shooters.filter((slot) => this.isArmed(slot)).length;
     return {
       flagship: this.needsFlagship ? (this.plan.flagship ? "done" : "open") : null,

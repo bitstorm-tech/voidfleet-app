@@ -70,7 +70,7 @@ const FLAGSHIP_STATS = {
   bastion: { shipClass: "battleship", hp: 20, atk: 1, shield: 0 },
   vanguard: { shipClass: "cruiser", hp: 16, atk: 3, shield: 0 },
   hive: { shipClass: "battleship", hp: 18, atk: 1, shield: 0 },
-  mirage: { shipClass: "fighter", hp: 19, atk: 3, shield: 0 },
+  mirage: { shipClass: "fighter", hp: 21, atk: 3, shield: 0 },
   pendulum: { shipClass: "battleship", hp: 20, atk: 2, shield: 0 },
 } satisfies Record<string, ShipStats>;
 

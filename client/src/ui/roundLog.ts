@@ -1,5 +1,6 @@
 // Formuliert die aufgedeckten Ereignisse einer Runde als Log-Zeilen.
 
+import { opposite } from "../../../shared/board.ts";
 import { type CommandId, isFlagship, shipById } from "../../../shared/cards.ts";
 import type { RoundEvent, ShipRef, SlotRef } from "../../../shared/protocol.ts";
 import { t } from "../i18n/index.ts";
@@ -27,16 +28,21 @@ function attackNotes(event: Extract<RoundEvent, { kind: "attack" }>): string[] {
   ].filter((note) => note !== undefined);
 }
 
-/**
- * Ein Schuss im Kampf. Galt er einem anderen Schiff (`aimedAt`), sagt die Zeile, wer ihn abgefangen hat: die Deckung
- * davor oder das Schiff mit Ablenkung.
- */
+/** Ein Schuss im Kampf; Spaltenfeuer, das durchging (`through`), sagt es dazu. */
 function describeAttack(event: Extract<RoundEvent, { kind: "attack" }>): string {
+  const describe = event.through ? t.log.through : t.log.attack;
+  return describe(shipLabel(event.attacker), shipLabel(event.target), event.amount, attackNotes(event));
+}
+
+/** Ein Schuss, der verpufft, mit dem Grund (siehe `Miss`). */
+function describeFizzle(event: Extract<RoundEvent, { kind: "fizzle" }>): string {
   const attacker = shipLabel(event.attacker);
-  const target = shipLabel(event.target);
-  const notes = attackNotes(event);
-  if (!event.aimedAt) return t.log.attack(attacker, target, event.amount, notes);
-  return (event.taunt ? t.log.drawn : t.log.covered)(attacker, shipLabel(event.aimedAt), target, event.amount, notes);
+  if ("column" in event) {
+    const column = t.log.column(opposite(event.attacker.side), event.column + 1);
+    return (event.cleared ? t.log.fizzleCleared : t.log.fizzleEmpty)(attacker, column);
+  }
+  if (event.target === null) return t.log.fizzleGone(attacker);
+  return (event.covered ? t.log.fizzleCovered : t.log.fizzle)(attacker, shipLabel(event.target));
 }
 
 export function describeEvent(event: RoundEvent): string {
@@ -124,8 +130,7 @@ export function describeEvent(event: RoundEvent): string {
     case "attack":
       return describeAttack(event);
     case "fizzle":
-      if (event.aimedAt) return t.log.fizzleCovered(shipLabel(event.attacker), shipLabel(event.aimedAt), shipLabel(event.target!));
-      return event.target ? t.log.fizzle(shipLabel(event.attacker), shipLabel(event.target)) : t.log.fizzleGone(shipLabel(event.attacker));
+      return describeFizzle(event);
     case "silenced":
       return t.log.silenced(shipLabel(event.ship));
     case "counterfire":

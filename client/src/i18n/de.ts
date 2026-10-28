@@ -99,7 +99,7 @@ export const de: Messages = {
       turn: {
         heading: "Dein Zug",
         paragraphs: [
-          "Jede Runde planst du bis zu drei Dinge und klickst dann auf „Zug beenden“: ein Schiff aus deiner Hand auf einen freien Slot deiner Seite, einen Befehl aus deiner Hand und entweder ein Manöver eines Schiffs, das schon auf dem Brett steht, in einen anderen freien Slot oder deine Admiralsfähigkeit. Alle drei sind freiwillig — du kannst auch mit leerem Zug passen. Dazu gibst du deinen Kampfschiffen ihre Feuerbefehle: das gegnerische Schiff, auf das jedes von ihnen im Kampf feuert (siehe „Kampf“). Admiral Kerr darf außerdem mit der Pendulum ein Ziel erfassen.",
+          "Jede Runde planst du bis zu drei Dinge und klickst dann auf „Zug beenden“: ein Schiff aus deiner Hand auf einen freien Slot deiner Seite, einen Befehl aus deiner Hand und entweder ein Manöver eines Schiffs, das schon auf dem Brett steht, in einen anderen freien Slot oder deine Admiralsfähigkeit. Alle drei sind freiwillig — du kannst auch mit leerem Zug passen. Dazu gibst du deinen Kampfschiffen ihre Feuerbefehle: worauf jedes von ihnen im Kampf feuert, eine gegnerische Spalte oder ein bestimmtes gegnerisches Schiff (siehe „Kampf“). Admiral Kerr darf außerdem mit der Pendulum ein Ziel erfassen.",
           "In Runde 1 stellst du deine Flotte auf: dein Flaggschiff, dazu bis zu zwei Schiffe statt einem und ein Befehl. Das Flaggschiff ist Pflicht — „Zug beenden“ geht erst, wenn es eingeplant ist. Ab Runde 2 ist es ein Schiff pro Runde. Zwei Befehle verändern den Zug selbst, solange sie eingeplant sind: Mit Schnellverlegung legst du ein Schiff mehr, mit Freier Hand bekommst du Grundmanöver und Admiralsfähigkeit zusammen. Nimmst du den Befehl zurück, fällt das zusätzliche Schiff bzw. die Fähigkeit wieder weg.",
           "Ein Befehl darf auch ein Schiff treffen, das du in derselben Runde legst — auch dein Flaggschiff —, etwa um es sofort zu überladen oder abzuschirmen. Geplante Schiffe stehen als durchscheinende Geister auf dem Brett; ein Befehl auf einen Geist wird so aufgelöst, als stünde das Schiff schon dort, und auch ein Geist kann einen Feuerbefehl bekommen.",
           "Nichts ist endgültig, bis du den Zug beendest: Alles, was du geplant hast, kannst du zurücknehmen oder ändern (siehe „Bedienung“). Dein Gegner sieht deinen Zug erst, wenn beide abgegeben haben.",
@@ -120,7 +120,7 @@ export const de: Messages = {
           `Admiral Osei, die Mauer, führt die Bastion (Schlachtschiff, ${stats("bastion")}). Wächterschild: Nach den Manövern erhält die Bastion +${guardianShield} Schild für die Runde, das Schiff im Strike-Slot direkt vor ihr +${guardianShieldFront}. Gegenfeuer: Wähle ein eigenes Schiff; jedes gegnerische Schiff außer einem Flaggschiff, das es im Kampf trifft, nimmt danach je Treffer ${counterfire} Schaden.`,
           `Admiralin Vance, der Hammer, führt die Vanguard (Kreuzer, ${stats("vanguard")}). Speerspitze: Das Kampfschiff im Strike-Slot direkt vor ihr hat +${spearhead} ATK. Fokusfeuer: Wähle ein gegnerisches Schiff, auch ein gedecktes; in dieser Runde macht jeder Treffer darauf im Kampf +${focusFire} Schaden. Es lenkt keinen Schuss — wer darauf feuert, bestimmen deine Feuerbefehle.`,
           `Admiralin Halvorsen, der Schwarm, führt die Hive (Schlachtschiff, ${stats("hive")}). Brutkammer: Am Ende jeder Runde startet die Hive eine Drohne in den nächsten freien Strike-Slot — höchstens ${maxDrones} deiner Drohnen gleichzeitig und ${hiveBudget} pro Match. Der Schwarmangriff braucht eine eigene Drohne auf dem Brett: Wähle ein gegnerisches Schiff außer dem Flaggschiff, gedeckt oder nicht; alle deine Drohnen feuern statt auf ihre eigenen Ziele darauf — durch Deckung hindurch, ohne Feuerbefehl, auch frisch gestartete —, jeder Treffer mit +${swarmStrike} Schaden.`,
-          `Admiral Moreau, das Phantom, führt die Mirage (Jäger, ${stats("mirage")}). Phasentausch: Das Grundmanöver der Mirage darf auch auf einen belegten eigenen Slot gehen — dann tauschen beide Schiffe die Plätze und feuern beide. Trugbild: Wähle einen freien eigenen Strike-Slot; dort steht für diese Runde ein Trugbild (1 HP). Es greift nie an und gibt dem Command-Slot dahinter Deckung: Schüsse auf das Schiff dort treffen das Trugbild — und ist es zerstört, verpuffen sie. Flaggschiffe durchschauen es: Gegen sie deckt es nicht. Am Rundenende löst es sich auf.`,
+          `Admiral Moreau, das Phantom, führt die Mirage (Jäger, ${stats("mirage")}). Phasentausch: Das Grundmanöver der Mirage darf auch auf einen belegten eigenen Slot gehen — dann tauschen beide Schiffe die Plätze und feuern beide. Trugbild: Wähle einen freien eigenen Strike-Slot; dort steht für diese Runde ein Trugbild (1 HP). Es greift nie an, ist für den Gegner aber ein Schiff vorn in seiner Spalte: Spaltenfeuer trifft zuerst das Trugbild, und Schiffsfeuer auf das Schiff dahinter verpufft, solange das Trugbild steht. Flaggschiffe durchschauen es: Gegen sie deckt es nicht, und ihr Spaltenfeuer geht daran vorbei auf das Schiff dahinter — nur wenn dort keins steht, treffen sie das Trugbild. Am Rundenende löst es sich auf.`,
           `Admiral Kerr, der Uhrmacher, führt die Pendulum (Schlachtschiff, ${stats("pendulum")}). Railgun: In einer Runde, in der ihre Railgun nicht feuert, darf Kerr ein gegnerisches Schiff erfassen. In der nächsten Runde trifft es die Railgun zu Kampfbeginn mit ${railgun} Schaden, wenn es ungedeckt ist; ist es gedeckt, ist der Schuss blockiert. Bewegt sich die Pendulum in einer der beiden Runden, fällt der Schuss aus. Erfasste Schiffe tragen auf beiden Seiten ein Fadenkreuz. Taktvorsprung: Wähle ein eigenes Kampfschiff; es feuert vor allen anderen, und was es zerstört, feuert nicht mehr.`,
         ],
         caption: "Die Admirale mit Flaggschiff, seiner Fähigkeit und der Admiralsfähigkeit.",
@@ -129,19 +129,20 @@ export const de: Messages = {
         heading: "Das Brett",
         paragraphs: [
           "Jede Seite hat zwei Lanes mit je 6 Slots: vorne, dem Gegner zugewandt, die Strike-Lane, dahinter die Command-Lane. In eine Lane passen höchstens 4 Schiffe, auf eine Seite höchstens 6 (Drohnen zählen bei beidem nicht mit); mindestens zwei Slots je Lane bleiben also frei.",
-          "Die Command-Lane bietet Deckung: Ein Schiff dort ist gedeckt, solange im Strike-Slot direkt davor (gleiche Slot-Nummer) ein Schiff steht. Ein Schuss auf ein gedecktes Schiff trifft stattdessen das Schiff davor. Ohne Schiff davor ist ein Command-Schiff genauso ungedeckt wie eines in der Strike-Lane.",
-          "Die Deckung wird einmal zu Beginn des Kampfs bestimmt und gilt für den ganzen Kampf: Wird das deckende Schiff von einem Schuss desselben Kampfs zerstört, bleibt das Schiff dahinter bis zur nächsten Runde gedeckt — weitere Schüsse darauf verpuffen. Schaden durch Befehle ignoriert die Deckung: Orbitalschlag, Torpedo, Wärmesucher, Bombardement und alle anderen Schadensbefehle treffen auch gedeckte Schiffe. Nur der Rammkurs braucht ein ungedecktes Schiff gegenüber.",
-          "Schiffe feuern in beiden Lanes mit voller Stärke; die Lane zählt nur für die Deckung, für Befehle auf eine bestimmte Lane (Energiestoß, Zielstörer, Abfangen, Rückruf, Rammkurs, Bombardement) und für den Signalverstärker, der die Schiffe seiner eigenen Lane verstärkt.",
+          "Die beiden Slots mit derselben Nummer bilden eine Spalte: vorne der Strike-Slot, dahinter der Command-Slot. Die Command-Lane bietet Deckung: Ein Schiff dort ist gedeckt, solange in seiner Spalte ein Schiff davor steht. Geschützfeuer erreicht ein gedecktes Schiff erst, wenn das Schiff davor gefallen ist (siehe „Kampf“). Ohne Schiff davor ist ein Command-Schiff genauso ungedeckt wie eines in der Strike-Lane.",
+          "Die Deckung zählt im Moment jedes Schusses: Ist das Schiff davor zerstört — auch durch einen früheren Schuss desselben Kampfs —, steht das Schiff dahinter für alle folgenden Schüsse ungedeckt. Schaden durch Befehle ignoriert die Deckung: Orbitalschlag, Torpedo, Wärmesucher, Bombardement und alle anderen Schadensbefehle treffen auch gedeckte Schiffe. Nur der Rammkurs braucht ein ungedecktes Schiff gegenüber.",
+          "Schiffe feuern in beiden Lanes mit voller Stärke; die Lane zählt nur für die Deckung, für die Reihenfolge der Schüsse im Kampf (erst die Strike-Lane), für Befehle auf eine bestimmte Lane (Energiestoß, Zielstörer, Abfangen, Rückruf, Rammkurs, Bombardement) und für den Signalverstärker, der die Schiffe seiner eigenen Lane verstärkt.",
         ],
-        caption: "Jede Seite: Strike vorne, Command dahinter. Ein Command-Schiff ist durch den Strike-Slot direkt davor gedeckt.",
+        caption:
+          "Jede Seite: Strike vorne, Command dahinter; Slots mit derselben Nummer bilden eine Spalte. Feuer in eine Spalte trifft zuerst das vordere Schiff: Das Command-Schiff hinter einem Strike-Schiff ist gedeckt, das ohne ist ungedeckt.",
       },
       movement: {
         heading: "Schiffe bewegen",
         paragraphs: [
-          "Einmal pro Runde — sofern du nicht stattdessen deine Admiralsfähigkeit einsetzt — darfst du eines deiner Schiffe, das schon auf dem Brett steht, in einen beliebigen freien Slot deiner Seite manövrieren, in der anderen Lane oder in derselben: Schiff antippen, dann einen leuchtenden Slot. Innerhalb der Lane bringst du so etwa eine Reparaturdrohne hinter ein Strike-Schiff in Deckung. Der Preis: Ein manövrierendes Schiff feuert in dieser Runde nicht. Es kann weiterhin beschossen werden, deckt und ist gedeckt schon von seinem neuen Platz aus, und ein Befehl auf das Schiff folgt ihm in den neuen Slot, ebenso die Feuerbefehle darauf. Nur die Mirage darf auf einen belegten eigenen Slot manövrieren: Beide Schiffe tauschen die Plätze und feuern weiter.",
-          "Auch Befehle verlegen Schiffe: Flankenmanöver wechselt ein Schiff in die andere Lane, Abfangen holt ein Command-Schiff mit +2 ATK nach vorne in die Strike-Lane, Rückruf zieht ein Strike-Schiff in die Command-Lane zurück und repariert 2 HP, Ausweichmanöver versetzt ein Schiff mit Schild 2 in einen freien Slot derselben Lane. Per Befehl verlegte Schiffe feuern weiter. Der Kurzsprung nimmt ein eigenes Schiff nach allen Bewegungen bis zum Rundenende aus dem Gefecht: Nichts trifft es — Schüsse darauf verpuffen —, aber es feuert und deckt auch nicht. Der Traktorstrahl verlegt dagegen ein gegnerisches Schiff: Nach allen Bewegungen zieht er es in den nächsten freien Slot seiner anderen Lane.",
+          "Einmal pro Runde — sofern du nicht stattdessen deine Admiralsfähigkeit einsetzt — darfst du eines deiner Schiffe, das schon auf dem Brett steht, in einen beliebigen freien Slot deiner Seite manövrieren, in der anderen Lane oder in derselben: Schiff antippen, dann einen leuchtenden Slot. Innerhalb der Lane bringst du so etwa eine Reparaturdrohne hinter ein Strike-Schiff in Deckung. Der Preis: Ein manövrierendes Schiff feuert in dieser Runde nicht. Es kann weiterhin beschossen werden, deckt und ist gedeckt schon von seinem neuen Platz aus, und ein Befehl auf das Schiff folgt ihm in den neuen Slot. Beim gegnerischen Geschützfeuer kommt es darauf an, worauf es zielt: Schiffsfeuer folgt dem Schiff, Spaltenfeuer bleibt auf seiner Spalte — wer sie verlässt, weicht ihm aus, wer in eine Spalte hineinmanövriert, läuft hinein. Nur die Mirage darf auf einen belegten eigenen Slot manövrieren: Beide Schiffe tauschen die Plätze und feuern weiter.",
+          "Auch Befehle verlegen Schiffe: Flankenmanöver wechselt ein Schiff in die andere Lane, Abfangen holt ein Command-Schiff mit +2 ATK nach vorne in die Strike-Lane, Rückruf zieht ein Strike-Schiff in die Command-Lane zurück und repariert 2 HP, Ausweichmanöver versetzt ein Schiff mit Schild 2 in einen freien Slot derselben Lane. Per Befehl verlegte Schiffe feuern weiter. Der Kurzsprung nimmt ein eigenes Schiff nach allen Bewegungen bis zum Rundenende aus dem Gefecht: Nichts trifft es — Schiffsfeuer darauf verpufft, für Spaltenfeuer ist sein Slot leer —, aber es feuert und deckt auch nicht. Der Traktorstrahl verlegt dagegen ein gegnerisches Schiff: Nach allen Bewegungen zieht er es in den nächsten freien Slot seiner anderen Lane.",
           "Das Ausweichmanöver bleibt in der Lane, die übrigen Bewegungsbefehle wechseln in die andere. Manöver und Bewegungsbefehl können nicht dasselbe Schiff verlegen und nicht im selben Slot landen. Der Slot, den ein Schiff verlässt, bleibt für den Rest der Runde blockiert — er wird erst in der nächsten Runde frei, auch für Schiffe, die du legst. Gelegte Schiffe und beide Ziele zählen zusammen zur Grenze von 4 Schiffen je Lane.",
-          "Bewegung hat ein Risiko: Sperrfeuer macht 3 Schaden an jedem gegnerischen Schiff, das in dieser Runde seinen Slot gewechselt hat, egal wie, und der Wärmesucher folgt seinem Ziel und trifft ein Schiff, das den Slot gewechselt hat, mit 5 statt 3. Ein Torpedo zielt auf einen Slot, nicht auf ein Schiff — der Durchschlag auf eine Slot-Nummer: Er trifft, wer nach allen Bewegungen dort steht — ihm auszuweichen oder hineinzulaufen gehört zum Spiel.",
+          "Bewegung hat ein Risiko: Sperrfeuer macht 3 Schaden an jedem gegnerischen Schiff, das in dieser Runde seinen Slot gewechselt hat, egal wie, und der Wärmesucher folgt seinem Ziel und trifft ein Schiff, das den Slot gewechselt hat, mit 5 statt 3. Ein Torpedo zielt auf einen Slot, nicht auf ein Schiff — der Durchschlag auf eine Spalte: Er trifft, wer nach allen Bewegungen dort steht, ähnlich wie Spaltenfeuer — ihm auszuweichen oder hineinzulaufen gehört zum Spiel.",
         ],
         caption:
           "Ein geplantes Manöver: Der Schrott-Raider zieht sich aus der Strike-Lane in die Command-Lane zurück und feuert diese Runde nicht. Ein Manöver darf auch in der Lane bleiben.",
@@ -157,15 +158,16 @@ export const de: Messages = {
       combat: {
         heading: "Kampf",
         paragraphs: [
-          "Jede Runde gibst du deinen Kampfschiffen ihre Feuerbefehle: Für jedes Schiff mit Angriff über 0 wählst du das gegnerische Schiff, auf das es feuert. Wählbar ist jedes gegnerische Schiff, das beim Planen auf dem Brett steht, auch gedeckte und das gegnerische Flaggschiff. Ein Schiff ohne Feuerbefehl feuert nicht — es gibt keine automatische Zielwahl, und jede Runde beginnt ohne Feuerbefehle. Auch Schiffe, die du in dieser Runde legst, können einen Feuerbefehl bekommen; ein Schiff, das manövriert, feuert nicht (Ausnahme ist der Phasentausch der Mirage: Beide Schiffe feuern weiter), und eines, das der EMP-Stoß gelähmt hat, kann nicht feuern.",
-          "Ein Feuerbefehl haftet an beiden Schiffen: Bewegt sich der Schütze oder sein Ziel — per Manöver, Befehl oder Traktorstrahl —, geht der Schuss dorthin, wo das Ziel jetzt steht; dem Geschützfeuer weicht man also nicht aus. Steht das Ziel zu Kampfbeginn gedeckt, fängt das Schiff davor den Schuss ab (Flaggschiffe durchschauen ein Trugbild). Ist das Schiff, das getroffen würde, schon zerstört — etwa durch einen früheren Schuss deiner eigenen Seite — oder nicht mehr auf dem Brett (vor dem Kampf zerstört, Kurzsprung), verpufft der Schuss. Nichts verhindert Overkill: Beim Planen zeigt die Vorschau, wie viel Schaden jedes gegnerische Schiff nimmt — verteile also dein Feuer.",
-          "Alle Schüsse fallen gleichzeitig: Ein Schiff, das in diesem Kampf zerstört wird, feuert trotzdem noch. Beschießen lassen sich nur Schiffe, die beim Planen auf dem Brett stehen: In Runde 1 fällt deshalb kein Schuss, und ein Schiff, das erst in dieser Runde landet, wird nur als Deckung oder mit Ablenkung getroffen. Drohnen, die während der Runde starten, feuern erst in der nächsten — außer der Schwarmangriff schickt sie los.",
+          "Jede Runde gibst du deinen Kampfschiffen ihre Feuerbefehle: Für jedes Schiff mit Angriff über 0 wählst du, worauf es feuert, und zwar auf eine von zwei Arten. Spaltenfeuer zielt auf eine Spalte der Gegnerseite, jede der sechs, auch eine leere. Schiffsfeuer zielt auf ein bestimmtes gegnerisches Schiff, das beim Planen auf dem Brett steht, auch auf gedeckte und das gegnerische Flaggschiff. Ein Schiff ohne Feuerbefehl feuert nicht — es gibt keine automatische Zielwahl, und jede Runde beginnt ohne Feuerbefehle. Auch Schiffe, die du in dieser Runde legst, können einen Feuerbefehl bekommen; ein Schiff, das manövriert, feuert nicht (Ausnahme ist der Phasentausch der Mirage: Beide Schiffe feuern weiter), und eines, das der EMP-Stoß gelähmt hat, kann nicht feuern.",
+          "Spaltenfeuer bleibt auf seiner Spalte: Der Schuss trifft das vorderste Schiff, das dort im Moment des Schusses noch steht — das Strike-Schiff oder, wenn der Strike-Slot leer oder sein Schiff in diesem Kampf schon gefallen ist, das Command-Schiff dahinter. Steht dort keins (mehr), verpufft der Schuss. Wer aus der Spalte manövriert, weicht ihm also aus, und wer hineinmanövriert oder dort gelegt wird, läuft hinein. Schiffsfeuer folgt seinem Schiff über Manöver, Befehle, Traktorstrahl und Phasentausch und trifft es, wo es gerade steht — es verpufft aber, wenn das Schiff im Moment des Schusses gedeckt, schon zerstört (der Schuss geht nie auf ein anderes Schiff über) oder nicht mehr auf dem Brett ist (vor dem Kampf zerstört, Kurzsprung).",
+          "Innerhalb einer Seite fallen die Schüsse nacheinander: erst die Strike-Lane von Slot 1 bis 6, dann die Command-Lane. Die beiden Seiten feuern gleichzeitig; ein Schiff, das in diesem Kampf zerstört wird, feuert also trotzdem — die Reihenfolge zählt nur unter den Schüssen einer Seite. Weil die Deckung im Moment jedes Schusses zählt, kann Spaltenfeuer aus deiner Strike-Lane erst die Deckung brechen, und Schiffsfeuer aus deiner Command-Lane trifft danach das Schiff dahinter. Nichts verhindert Overkill: Beim Planen zeigt die Vorschau, welches Schiff jeder Schuss trifft und wie viel Schaden jedes gegnerische Schiff nimmt — verteile also dein Feuer.",
+          "Weil sich auch eine leere Spalte beschießen lässt, fallen schon ab Runde 1 Schüsse: blind in die Spalten, in denen du die Landung des Gegners erwartest. Ein Schiff, das in dieser Runde landet, kann von Spaltenfeuer getroffen werden (und mit Ablenkung Schüsse auf sich ziehen), aber nicht von Schiffsfeuer, das ein Schiff beim Planen braucht. Drohnen, die während der Runde starten, feuern erst in der nächsten — außer der Schwarmangriff schickt sie los.",
           "Schaden trifft zuerst den Schild und erst dann den Rumpf. Der eigene Schild eines Schiffs (Eisen-Dreadnought: 2) regeneriert nicht; Zusatzschild aus Befehlen wie den Notschilden gilt nur für die Runde, außer bei der Ablativpanzerung, die bleibt, bis sie weggeschossen ist. Ein Schiff mit 0 HP ist zerstört und verlässt das Brett — nach der Effects-Phase, nach dem Kampf und nach dem Eigenschaden im Cleanup.",
           "Der Angriffswert enthält schon alles: Rundenboni aus Befehlen, den Bonus des Schrott-Raiders, die Aura des Signalverstärkers, die Speerspitze der Vanguard und den Overdrive. Support-Schiffe greifen nie an, egal mit welchem Bonus.",
-          `Die Admirale verbiegen diese Regeln: Die Railgun der Pendulum feuert vor allen anderen, der Taktvorsprung lässt ein Schiff vor dem Rest schießen, das Fokusfeuer gibt jedem Treffer auf sein Ziel +${focusFire} Schaden, der Schwarmangriff schickt alle deine Drohnen auf sein Ziel — durch Deckung und ohne Feuerbefehle —, und das Gegenfeuer schlägt zurück, wenn alle Schüsse gefallen sind. Der Befehl Ablenkung zieht die gegnerischen Schüsse auf dein gewähltes Schiff, solange es steht und für den Schützen ungedeckt ist; nur Schwarmangriff und Railgun behalten ihr Ziel.`,
+          `Die Admirale verbiegen diese Regeln: Die Railgun der Pendulum feuert vor allen anderen, der Taktvorsprung lässt ein Schiff vor dem Rest schießen, das Fokusfeuer gibt jedem Treffer auf sein Ziel +${focusFire} Schaden, der Schwarmangriff schickt alle deine Drohnen auf sein Ziel — durch Deckung und ohne Feuerbefehle —, und das Gegenfeuer schlägt zurück, wenn alle Schüsse gefallen sind. Das Trugbild von Admiral Moreau gilt als Schiff vorn in seiner Spalte, aber Flaggschiffe durchschauen es. Der Befehl Ablenkung zieht die gegnerischen Schüsse beider Arten auf dein gewähltes Schiff, solange es steht und für den Schützen ungedeckt ist; nur Schwarmangriff und Railgun behalten ihr Ziel.`,
         ],
         caption:
-          "Feuerbefehle: Jedes Kampfschiff feuert auf das gegnerische Schiff, das du wählst. Einen Schuss auf ein gedecktes Schiff fängt das Schiff davor ab, ein Schuss auf ein schon zerstörtes verpufft.",
+          "Spaltenfeuer (gepunkteter Rahmen) trifft das vordere Schiff seiner Spalte, Schiffsfeuer (gepunkteter Ring) folgt seinem Schiff. Rot der Schuss, blass mit Kreuz ein Schuss, der verpufft; die Ziffern geben die Reihenfolge der Schüsse an.",
       },
       ships: {
         heading: "Schiffe",
@@ -179,7 +181,7 @@ export const de: Messages = {
       commands: {
         heading: "Befehle",
         paragraphs: [
-          "Befehle werden einmal gespielt und in der Effects-Phase aufgelöst, vor dem Kampf. Manche brauchen beim Planen ein Ziel — ein eigenes Schiff, ein gegnerisches Schiff (Wärmesucher, Traktorstrahl), einen Slot der Gegnerseite (Torpedo) oder eine gegnerische Slot-Nummer (Durchschlag) —, die übrigen wählen ihr Ziel automatisch. Rundeneffekte wie ATK-Boni, Zusatzschild und EMP enden im Cleanup.",
+          "Befehle werden einmal gespielt und in der Effects-Phase aufgelöst, vor dem Kampf. Manche brauchen beim Planen ein Ziel — ein eigenes Schiff, ein gegnerisches Schiff (Wärmesucher, Traktorstrahl), einen Slot der Gegnerseite (Torpedo) oder eine gegnerische Spalte (Durchschlag) —, die übrigen wählen ihr Ziel automatisch. Rundeneffekte wie ATK-Boni, Zusatzschild und EMP enden im Cleanup.",
           "Befehle wirken nach Typ, in dieser Reihenfolge: Umgruppierung, Taktik, Verstärkung, Spezial, Schwächung, Angriff. Gegenmaßnahmen (Spezial) lassen den Angriffs- oder Schwächungsbefehl des Gegners in derselben Runde verpuffen, bevor er wirkt. Dein Befehlsdeck enthält jeden Befehl einmal, nur Torpedo und Sperrfeuer zweimal.",
         ],
       },
@@ -193,8 +195,8 @@ export const de: Messages = {
       controls: {
         heading: "Bedienung",
         paragraphs: [
-          "Tippe eine Karte auf deiner Hand an, dann einen leuchtenden Slot oder ein Schiff auf dem Brett; die Statuszeile oben sagt dir, was die gewählte Karte braucht. Nochmal auf die Karte tippen nimmt sie zurück. In Runde 1 steht dein Flaggschiff mit goldenem Rahmen vorn in der Schiffshand. Ohne gewählte Karte wählst du mit einem Tipp eines deiner Schiffe oder einen Geist: Alle gegnerischen Schiffe leuchten auf, und ein Tipp auf eines gibt deinem Schiff seinen Feuerbefehl oder ersetzt ihn; nochmal auf das jetzige Ziel hebt den Befehl auf. Ein Schiff, das schon auf dem Brett steht, zeigt dazu die Slots, in die es manövrieren kann; ein Manöver hebt seinen Feuerbefehl auf. Ein weiterer Tipp auf das gewählte Schiff nimmt sein Legen bzw. sein Manöver zurück; Escape, ein Rechtsklick oder ein Tipp neben das Brett beendet die Auswahl. Deine Admiralsfähigkeit ist die Karte links neben deinen Befehlen, die Zielerfassung von Admiral Kerr der Knopf darüber. Die Checkliste unter „Zug beenden“ zeigt, welche Teile deines Zugs eingeplant, noch offen oder nicht möglich sind.",
-          "Während du planst, zeigt das Brett die Runde so, als täte dein Gegner nichts: Ein Bogen steht für jeden Feuerbefehl (gestrichelt, wenn der Schuss verpuffen würde), die Hüllenbalken blinken mit dem Schaden, den ein Schiff nehmen würde, und ein Totenkopf markiert jedes Schiff, das zerstört würde. Zufall wie der Schuss der Plasma-Fregatte ist nicht eingerechnet. Das Feld oben rechts zeigt, was du über deinen Gegner weißt: ob er seinen Zug schon beendet hat, wie viele Karten er auf der Hand und noch in den Decks hat und wie viele Kopien jedes Befehls er noch nicht gespielt hat.",
+          "Tippe eine Karte auf deiner Hand an, dann einen leuchtenden Slot oder ein Schiff auf dem Brett; die Statuszeile oben sagt dir, was die gewählte Karte braucht. Nochmal auf die Karte tippen nimmt sie zurück. In Runde 1 steht dein Flaggschiff mit goldenem Rahmen vorn in der Schiffshand. Ohne gewählte Karte wählst du mit einem Tipp eines deiner Schiffe oder einen Geist, und alle Slots der Gegnerseite leuchten auf, auch leere. Der erste Tipp auf ein gegnerisches Schiff oder einen Slot gibt deinem Schiff Spaltenfeuer auf diese Spalte; ein zweiter Tipp auf ein Schiff dieser Spalte macht daraus Schiffsfeuer auf genau dieses Schiff; nochmal auf das verfolgte Schiff — oder auf einen leeren Slot der gewählten Spalte — hebt den Feuerbefehl auf. Ein Slot einer anderen Spalte beginnt wieder mit Spaltenfeuer. Ein Schiff, das schon auf dem Brett steht, zeigt dazu die Slots, in die es manövrieren kann; ein Manöver hebt seinen Feuerbefehl auf. Ein weiterer Tipp auf das gewählte Schiff nimmt sein Legen bzw. sein Manöver zurück; Escape, ein Rechtsklick oder ein Tipp neben das Brett beendet die Auswahl. Deine Admiralsfähigkeit ist die Karte links neben deinen Befehlen, die Zielerfassung von Admiral Kerr der Knopf darüber. Die Checkliste unter „Zug beenden“ zeigt, welche Teile deines Zugs eingeplant, noch offen oder nicht möglich sind.",
+          "Während du planst, zeigt das Brett die Runde so, als täte dein Gegner nichts: Je Feuerbefehl zeigt ein Bogen mit seiner Spitze auf das Schiff, das der Schuss treffen würde, bei Schiffsfeuer mit einem Ring um die Spitze; ein Schuss, der verpuffen würde, ist blass und gestrichelt, mit einem Kreuz statt der Spitze. Ist ein Schiff gewählt, zeigt die Vorschau schon, was ein Tipp auf den Slot unter dem Zeiger bewirken würde. Die Hüllenbalken blinken mit dem Schaden, den ein Schiff nehmen würde, und ein Totenkopf markiert jedes Schiff, das zerstört würde. Zufall wie der Schuss der Plasma-Fregatte ist nicht eingerechnet. Das Feld oben rechts zeigt, was du über deinen Gegner weißt: ob er seinen Zug schon beendet hat und wie viele Karten er auf der Hand und noch in den Decks hat.",
           "„Zug beenden“ schickt deinen Plan ab. Während die Runde aufgelöst wird, kannst du die Animation überspringen; der Log-Knopf oben rechts listet jedes Ereignis des Matches. Mit dem Mausrad oder gehaltenem ↑ und ↓ zoomst du ins Brett, herangezoomt verschiebst du es durch Ziehen. Der Kamera-Knopf oben rechts oder die Taste V wechselt zwischen dem Blick von der Seite und von hinten oben; hältst du ← oder → gedrückt oder ziehst mit gedrückter mittlerer Maustaste, dreht sich die Kamera stufenlos dazwischen. Drehung und Zoom bleiben fürs nächste Match erhalten. Ton, Bordfunk, Animationstempo und Sprache findest du in den Einstellungen neben diesem Dialog; die Fahne daneben gibt das Match nach Rückfrage auf, der Gegner gewinnt sofort.",
         ],
       },
@@ -211,7 +213,7 @@ export const de: Messages = {
       effects: { name: "Effects", text: "Befehle wirken, nach Typ; Schaden zuletzt. Zerstörte Schiffe verschwinden." },
       combat: {
         name: "Combat",
-        text: "Erst die Railgun, dann der Taktvorsprung, dann alle übrigen Schiffe mit Feuerbefehl gleichzeitig; die Deckung fängt Schüsse auf die Schiffe dahinter ab, Schüsse auf Zerstörte verpuffen. Zuletzt das Gegenfeuer. Zerstörte verschwinden.",
+        text: "Erst die Railgun, dann der Taktvorsprung, dann die übrigen Schiffe mit Feuerbefehl: Strike-Lane vor Command-Lane, je nach Slot. Spaltenfeuer trifft das vordere Schiff seiner Spalte, Schiffsfeuer sein Ziel, wenn es ungedeckt ist — sonst verpufft der Schuss. Zuletzt das Gegenfeuer. Zerstörte verschwinden.",
       },
       cleanup: {
         name: "Cleanup",
@@ -227,9 +229,12 @@ export const de: Messages = {
       covered: "gedeckt",
       exposed: "ungedeckt",
       laneLimit: "max. 4 Schiffe je Lane, 6 je Seite",
-      anyShip: "Jedes gegnerische Schiff",
-      coverTakes: "Deckung fängt ab",
-      fizzles: "Schon zerstört: verpufft",
+      columnFire: "Spaltenfeuer",
+      trackingFire: "Schiffsfeuer",
+      columnThrough: "trifft das vordere Schiff, nach dessen Fall das dahinter",
+      columnDodge: "verpufft, wenn das Schiff die Spalte verlässt",
+      trackingFollows: "folgt seinem Schiff in einen anderen Slot",
+      trackingCovered: "verpufft, solange sein Schiff gedeckt ist",
       round: (round) => `Runde ${round}`,
       overdrive: (bonus) => (bonus === 0 ? "kein Overdrive" : `+${bonus} ATK`),
       rounds: (from, to) => (to === null ? `ab Runde ${from}` : `Runde ${from}–${to}`),
@@ -290,12 +295,12 @@ export const de: Messages = {
     chooseEnemyShip: (command) =>
       `${command}: gegnerisches Schiff antippen — der Befehl folgt ihm, wenn es sich bewegt. Nochmal auf die Karte klicken nimmt zurück.`,
     chooseEnemyColumn: (command) =>
-      `${command}: Slot auf der Gegnerseite antippen — es zählt die Slot-Nummer, getroffen wird nach allen Bewegungen erst das vordere Schiff. Nochmal auf die Karte klicken nimmt zurück.`,
+      `${command}: Slot auf der Gegnerseite antippen — es zählt seine Spalte, getroffen wird nach allen Bewegungen erst das vordere Schiff. Nochmal auf die Karte klicken nimmt zurück.`,
     noEnemyTarget: (command) => `kein gegnerisches Schiff als Ziel für ${command}.`,
     commandDropped: (command, dropped) => `Ohne ${command} entfällt: ${dropped}.`,
     chooseDestination: (command, ship) => `${command}: leuchtenden Slot für ${ship} antippen. Nochmal auf die Karte klicken nimmt zurück.`,
-    chooseFireTarget: (ship) => `${ship}: gegnerisches Schiff als Ziel antippen — bei einem gedeckten fängt das Schiff davor den Schuss ab.`,
-    noFireTarget: (ship) => `${ship}: noch kein gegnerisches Schiff, auf das es feuern könnte.`,
+    chooseFireTarget: (ship) =>
+      `${ship}: Slot der Gegnerseite antippen für Spaltenfeuer — es trifft das vordere Schiff der Spalte; ein Schiff dort nochmal antippen, um es stattdessen zu verfolgen.`,
     maneuverInstead: "Oder einen leuchtenden eigenen Slot zum Manövrieren — dann feuert es nicht.",
     maneuverOrSwap:
       "Oder einen leuchtenden eigenen Slot zum Manövrieren (dann feuert sie nicht) bzw. ein eigenes Schiff, um mit ihm die Plätze zu tauschen (Phasentausch, beide feuern weiter).",
@@ -304,18 +309,25 @@ export const de: Messages = {
     commandHoldsFire: (ship, command) => `${ship} feuert in dieser Runde nicht (${command}).`,
     maneuverHint: "Leuchtenden Slot antippen, um es zu manövrieren.",
     changeManeuver: "Anderen leuchtenden Slot antippen ändert das Manöver.",
-    fireTarget: (target) => `Ziel: ${target} — nochmal antippen hebt den Feuerbefehl auf.`,
-    fireCovered: (cover, target) => `${cover} deckt ${target} und fängt den Schuss ab.`,
+    columnFire: (column) => `Spaltenfeuer auf Spalte ${column}.`,
+    trackFire: (target) => `Verfolgt ${target}.`,
+    tapColumnFire: (column) => `Antippen: Spaltenfeuer auf Spalte ${column}.`,
+    tapTrackFire: (target) => `Antippen: ${target} verfolgen.`,
+    tapClearsFire: "Antippen hebt den Feuerbefehl auf.",
+    fireHits: (target) => `Er trifft ${target}.`,
+    fireThrough: (target) => `Er trifft ${target} dahinter — das Schiff davor ist dann schon zerstört.`,
+    columnEmpty: "Der Schuss verpufft: In der Spalte steht kein Schiff.",
+    columnCleared: "Der Schuss verpufft: Die Schiffe der Spalte sind dann schon zerstört.",
+    fireCovered: (target) => `Der Schuss verpufft: ${target} ist dann gedeckt.`,
     fireFizzles: (target) => `Der Schuss verpufft: ${target} ist dann schon zerstört.`,
-    coverFizzles: (cover, target) => `Der Schuss verpufft: ${cover} ist dann schon zerstört, deckt ${target} aber weiter.`,
+    fireGone: "Der Schuss verpufft: Sein Ziel ist dann nicht mehr auf dem Brett.",
     swarmFire: (power) => `Sie fliegt den ${power}; ihr eigenes Ziel zählt nur, wenn dessen Ziel nicht mehr da ist.`,
     againUnplan: "Das Schiff nochmal antippen nimmt es zurück.",
     againManeuver: "Das Schiff nochmal antippen nimmt das Manöver zurück.",
     escCancels: "Esc bricht ab.",
     fireCleared: (ship) => `${ship} feuert in dieser Runde nicht — sein Feuerbefehl ist aufgehoben.`,
     fireOrders: (count) => (count === 1 ? "1 Ziel" : `${count} Ziele`),
-    fizzles: (count) =>
-      count === 1 ? "1 Schuss verpufft — sein Ziel ist dann schon zerstört." : `${count} Schüsse verpuffen — ihre Ziele sind dann schon zerstört.`,
+    fizzles: (count) => (count === 1 ? "1 Schuss verpufft (gestrichelter Bogen)." : `${count} Schüsse verpuffen (gestrichelte Bögen).`),
     maneuver: (ship) => `Manöver von ${ship}`,
     swap: (ship, partner) => `Phasentausch von ${ship} und ${partner}`,
     choosePowerTarget: (power) => `${power}: leuchtendes Ziel antippen. Nochmal auf die Fähigkeit oder Esc bricht ab.`,
@@ -403,6 +415,7 @@ export const de: Messages = {
     roundHeader: (round) => `— Runde ${round} —`,
     who: { player: "Du", enemy: "Gegner" },
     slot: (side, lane, slot) => `${side === "player" ? "eigene" : "gegnerische"} ${lane} Slot ${slot}`,
+    column: (side, column) => `${side === "player" ? "eigener" : "gegnerischer"} Spalte ${column}`,
     ship: (ship, slot) => `${ship} (${slot})`,
     deploy: (who, ship, slot) => `Deploy: ${who} — ${ship} auf ${slot}`,
     deployFlagship: (who, ship, slot) => `Deploy: ${who} — Flaggschiff ${ship} auf ${slot}`,
@@ -443,13 +456,12 @@ export const de: Messages = {
     railgun: (source, target, amount) => `Railgun: ${source} trifft ${target} mit ${amount}`,
     railgunBlocked: (source, target) => `Railgun: Der Schuss von ${source} auf ${target} ist blockiert — das Ziel ist gedeckt`,
     attack: (attacker, target, amount, notes) => `Kampf: ${attacker} feuert auf ${target} (${[amount, ...notes].join(", ")})`,
-    covered: (attacker, aimed, cover, amount, notes) =>
-      `Kampf: ${attacker} feuert auf ${aimed} — ${cover} davor fängt den Schuss ab (${[amount, ...notes].join(", ")})`,
-    drawn: (attacker, aimed, ship, amount, notes) =>
-      `Kampf: ${attacker} feuert auf ${aimed} — ${ship} zieht den Schuss auf sich (${[amount, ...notes].join(", ")})`,
+    through: (attacker, target, amount, notes) => `Kampf: ${attacker} feuert am gefallenen Vordermann vorbei auf ${target} (${[amount, ...notes].join(", ")})`,
+    fizzleEmpty: (attacker, column) => `Kampf: Der Schuss von ${attacker} verpufft — in ${column} steht kein Schiff`,
+    fizzleCleared: (attacker, column) => `Kampf: Der Schuss von ${attacker} verpufft — die Schiffe in ${column} sind schon zerstört`,
     fizzle: (attacker, target) => `Kampf: Der Schuss von ${attacker} verpufft — ${target} ist schon zerstört`,
+    fizzleCovered: (attacker, target) => `Kampf: Der Schuss von ${attacker} verpufft — ${target} ist gedeckt`,
     fizzleGone: (attacker) => `Kampf: Der Schuss von ${attacker} verpufft — sein Ziel steht nicht mehr auf dem Brett`,
-    fizzleCovered: (attacker, aimed, cover) => `Kampf: Der Schuss von ${attacker} auf ${aimed} verpufft — ${cover} davor ist schon zerstört`,
     silenced: (ship) => `Taktvorsprung: ${ship} fällt, bevor es feuern kann`,
     counterfire: (ship, source, amount) => `Gegenfeuer: ${ship} nimmt ${amount} Schaden für den Treffer auf ${source}`,
     selfDamage: (ship, amount) => `Cleanup: ${ship} nimmt ${amount} Eigenschaden`,
@@ -487,7 +499,6 @@ export const de: Messages = {
     jump: "Sprung",
     fizzle: "Verpufft",
     covered: "Gedeckt",
-    diverted: "Abgelenkt",
   },
   errors: {
     match_full: "Dieses Match ist bereits voll.",
@@ -525,7 +536,7 @@ export const de: Messages = {
     maneuver_destination_unavailable: "In diesen Slot kann das Schiff nicht manövrieren.",
     maneuver_conflict: "Ein Befehl kann das Schiff nicht verlegen, das in dieser Runde manövriert.",
     fire_ship_invalid: "Einen Feuerbefehl bekommt nur ein eigenes Kampfschiff, je Schiff einer — nicht das Schiff, das in dieser Runde manövriert.",
-    fire_target_invalid: "Ziel eines Feuerbefehls ist ein gegnerisches Schiff auf dem Brett.",
+    fire_target_invalid: "Ziel eines Feuerbefehls ist eine gegnerische Spalte oder ein gegnerisches Schiff auf dem Brett.",
   },
   lanes: { strike: "Strike", command: "Command" },
   stats: { hp: "HP", atk: "ATK", shield: "Schild" },
@@ -552,7 +563,7 @@ export const de: Messages = {
     choose_friendly: "Verbündeten wählen",
     choose_enemy: "Gegner wählen",
     choose_enemy_slot: "Gegner-Slot wählen",
-    choose_enemy_column: "Gegner-Slotnummer wählen",
+    choose_enemy_column: "Gegner-Spalte wählen",
   },
   ships: {
     horizon_cruiser: { name: "Horizon-Kreuzer", effect: "Solide Werte, zuverlässig." },
@@ -574,7 +585,7 @@ export const de: Messages = {
     decoy: {
       name: "Trugbild",
       effect:
-        "Hologramm von Admiral Moreau: steht eine Runde, greift nie an und deckt den Command-Slot dahinter — Schüsse auf das Schiff dort treffen das Trugbild. Flaggschiffe durchschauen es; zerstört hinterlässt es keinen Schrott.",
+        "Hologramm von Admiral Moreau: steht eine Runde und greift nie an. Spaltenfeuer trifft zuerst das Trugbild, Schiffsfeuer auf das Schiff dahinter verpufft, solange es steht. Flaggschiffe durchschauen es; zerstört hinterlässt es keinen Schrott.",
     },
     bastion: {
       name: "Bastion",
@@ -615,7 +626,7 @@ export const de: Messages = {
     decoy: {
       name: "Trugbild",
       effect:
-        "Wähle einen freien Strike-Slot. Dort steht diese Runde ein Trugbild (1 HP) und deckt den Slot dahinter: Schüsse auf das Schiff dort treffen das Trugbild. Flaggschiffe durchschauen es.",
+        "Wähle einen freien Strike-Slot. Dort steht diese Runde ein Trugbild (1 HP): Spaltenfeuer trifft zuerst das Trugbild, Schiffsfeuer auf das Schiff dahinter verpufft. Flaggschiffe durchschauen es.",
     },
     head_start: { name: "Taktvorsprung", effect: "Wähle ein eigenes Kampfschiff. Es feuert vor allen anderen, und was es zerstört, feuert nicht mehr." },
   },
@@ -708,7 +719,7 @@ export const de: Messages = {
     },
     piercing_shot: {
       name: "Durchschlag",
-      effect: "Wähle eine gegnerische Slot-Nummer. Nach allen Bewegungen 3 Schaden an das vorderste Schiff dort und 2 an das Schiff dahinter.",
+      effect: "Wähle eine gegnerische Spalte. Nach allen Bewegungen 3 Schaden an das vorderste Schiff dort und 2 an das Schiff dahinter.",
     },
     bombardment: { name: "Bombardement", effect: "2 Schaden an jedes Schiff der gegnerischen Command-Lane." },
     crossfire: { name: "Kreuzfeuer", effect: "3 Schaden an jedes gegnerische Schiff ohne Schiff direkt davor oder dahinter." },

@@ -48,7 +48,8 @@ export async function rehearse(view: MatchScene): Promise<void> {
   }
   ships[0]!.setMarkers(MARKERS.map((kind, index) => ({ kind, color, planned: index === 0 })));
   for (const ship of ships) ship.root.position.copyFrom(STAGE);
-  // Je Seite jede Darstellung der Bögen: Schuss, gewählter Schuss, verpuffender, gewählter verpuffender.
+  // Je Seite jede Darstellung der Bögen: Schuss, gewählter Schuss, verpuffender, gewählter verpuffender, alle mit dem
+  // Ring des Schiffsfeuers.
   const lines = (["player", "enemy"] as const).flatMap((side) =>
     [0, 1, 2, 3].map((index) => ({
       from: view.pad(side, "strike", index),
@@ -56,6 +57,7 @@ export async function rehearse(view: MatchScene): Promise<void> {
       side,
       selected: index % 2 === 1,
       fizzle: index >= 2,
+      tracking: true,
     })),
   );
   view.targetLines.show(lines);

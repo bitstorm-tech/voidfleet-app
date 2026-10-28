@@ -288,11 +288,11 @@ test("Ein Befehl auf das gelegte Schiff wirkt in derselben Runde, und es feuert 
     player.commandHand.splice(0, player.commandHand.length, commandById("emergency_shields"), commandById("intercept"));
   }
   for (const side of ["player", "enemy"] as const) match.board.place(match.board.lane(side, "strike"), 5, shipById("horizon_cruiser"));
-  const shielded = plan({ ...deploy, command: { handIndex: 0, target: strike(0), destination: null }, fire: [{ ship: strike(0), target: strike(5) }] });
+  const shielded = plan({ ...deploy, command: { handIndex: 0, target: strike(0), destination: null }, fire: [{ ship: strike(0), column: 5 }] });
   const intercepted = plan({
     ships: [{ handIndex: 0, target: command(2) }],
     command: { handIndex: 1, target: command(2), destination: 4 },
-    fire: [{ ship: command(2), target: strike(5) }],
+    fire: [{ ship: command(2), column: 5 }],
   });
   const events = playRound(match, [shielded, intercepted]);
   expect(events).toContainEqual(
@@ -386,7 +386,7 @@ test("Ein Manöver innerhalb der Ziel-Lane des Bewegungsbefehls und eine Drohne 
   expect(match.submit(0, intercept(strike(0), strike(4)))).toBe("destination_unavailable");
 });
 
-test("Ein Befehl auf das manövrierte Schiff folgt ihm; es feuert nicht, wird aber beschossen", () => {
+test("Ein Befehl auf das manövrierte Schiff folgt ihm; es feuert nicht, wird in seiner neuen Spalte aber beschossen", () => {
   const match = midGame();
   match.players[0]!.commandHand.splice(0, match.players[0]!.commandHand.length, commandById("overcharge"));
   for (const side of ["player", "enemy"] as const) match.board.place(match.board.lane(side, "strike"), 0, { ...interceptor, hp: 7 });
@@ -394,7 +394,7 @@ test("Ein Befehl auf das manövrierte Schiff folgt ihm; es feuert nicht, wird ab
     command: { handIndex: 0, target: strike(0), destination: null },
     maneuver: { ship: strike(0), destination: command(2) },
   });
-  const events = playRound(match, [overchargeAndManeuver, plan({ fire: [{ ship: strike(0), target: strike(0) }] })]);
+  const events = playRound(match, [overchargeAndManeuver, plan({ fire: [{ ship: strike(0), column: 2 }] })]);
 
   expect(events.find((event) => event.kind === "maneuver")).toEqual({
     kind: "maneuver",
@@ -523,7 +523,7 @@ test("Wessen Flaggschiff fällt, verliert; danach gibt es keine Züge mehr", () 
   const match = midGame(["vance", "vance"]);
   match.board.place(match.board.lane("player", "strike"), 0, shipById("vanguard"))!.hp = 3;
   match.board.place(match.board.lane("enemy", "strike"), 0, shipById("vanguard"));
-  const duel = plan({ fire: [{ ship: strike(0), target: strike(0) }] });
+  const duel = plan({ fire: [{ ship: strike(0), column: 0 }] });
   playRound(match, [duel, duel]);
   expect(match.view(0).result).toBe("lost");
   expect(match.view(1).result).toBe("won");
@@ -534,12 +534,12 @@ test("Wessen Flaggschiff fällt, verliert; danach gibt es keine Züge mehr", () 
 test("Fallen beide Flaggschiffe in derselben Runde, endet das Match unentschieden", () => {
   const match = midGame(["vance", "vance"]);
   for (const side of ["player", "enemy"] as const) match.board.place(match.board.lane(side, "strike"), 0, shipById("vanguard"))!.hp = 3;
-  const duel = plan({ fire: [{ ship: strike(0), target: strike(0) }] });
+  const duel = plan({ fire: [{ ship: strike(0), column: 0 }] });
   playRound(match, [duel, duel]);
   expect([match.view(0).result, match.view(1).result]).toEqual(["draw", "draw"]);
 });
 
-test("Feuerbefehle: je eigenes Kampfschiff einer, auch für ein gelegtes, nicht fürs manövrierende; Ziel ist ein gegnerisches Schiff, auch ein gedecktes", () => {
+test("Feuerbefehle: je eigenes Kampfschiff einer, auch für ein gelegtes, nicht fürs manövrierende; Ziel ist eine Spalte, auch eine leere, oder ein gegnerisches Schiff, auch ein gedecktes", () => {
   const match = midGame(["moreau", "osei"]);
   const player = match.players[0]!;
   setShipHands(match, [shipById("void_interceptor")], []);
@@ -555,17 +555,30 @@ test("Feuerbefehle: je eigenes Kampfschiff einer, auch für ein gelegtes, nicht 
     player.plan = null;
     return error;
   };
-  const at = (ship: SlotTarget, target: SlotTarget) => ({ ship, target });
+  const at = (ship: SlotTarget, column: number) => ({ ship, column });
 
-  expect(submit({ fire: [at(strike(1), strike(4)), at(command(3), command(4))] })).toBeNull();
-  expect(submit({ ships: [{ handIndex: 0, target: strike(0) }], fire: [at(strike(0), command(4))] })).toBeNull();
-  expect(submit({ fire: [at(strike(2), strike(4))] })).toBe("fire_ship_invalid");
-  expect(submit({ fire: [at(strike(0), strike(4))] })).toBe("fire_ship_invalid");
-  expect(submit({ fire: [at(strike(1), strike(4)), at(strike(1), command(4))] })).toBe("fire_ship_invalid");
-  expect(submit({ maneuver: { ship: strike(1), destination: strike(3) }, fire: [at(strike(1), strike(4))] })).toBe("fire_ship_invalid");
+  expect(submit({ fire: [at(strike(1), 4), at(command(3), 4)] })).toBeNull();
+  expect(submit({ ships: [{ handIndex: 0, target: strike(0) }], fire: [at(strike(0), 4)] })).toBeNull();
+  expect(submit({ fire: [at(strike(2), 4)] })).toBe("fire_ship_invalid");
+  expect(submit({ fire: [at(strike(0), 4)] })).toBe("fire_ship_invalid");
+  expect(submit({ fire: [at(strike(1), 4), at(strike(1), 4)] })).toBe("fire_ship_invalid");
+  expect(submit({ maneuver: { ship: strike(1), destination: strike(3) }, fire: [at(strike(1), 4)] })).toBe("fire_ship_invalid");
   // Beim Phasentausch feuern beide.
-  expect(submit({ maneuver: { ship: command(3), destination: strike(1) }, fire: [at(command(3), strike(4)), at(strike(1), strike(4))] })).toBeNull();
-  expect(submit({ fire: [at(strike(1), strike(3))] })).toBe("fire_target_invalid");
+  expect(submit({ maneuver: { ship: command(3), destination: strike(1) }, fire: [at(command(3), 4), at(strike(1), 4)] })).toBeNull();
+  // Eine leere Spalte ist erlaubt, eine außerhalb des Bretts nicht.
+  expect(submit({ fire: [at(strike(1), 3)] })).toBeNull();
+  expect(submit({ fire: [at(strike(1), 6)] })).toBe("fire_target_invalid");
+  expect(submit({ fire: [at(strike(1), -1)] })).toBe("fire_target_invalid");
+  // Schiffsfeuer: auf ein gegnerisches Schiff, auch ein gedecktes, nicht auf einen leeren Slot.
+  expect(
+    submit({
+      fire: [
+        { ship: strike(1), target: command(4) },
+        { ship: command(3), target: strike(4) },
+      ],
+    }),
+  ).toBeNull();
+  expect(submit({ fire: [{ ship: strike(1), target: strike(3) }] })).toBe("fire_target_invalid");
 });
 
 test("Solange beide Flaggschiffe stehen, geht es weiter, auch ohne andere Kampfschiffe auf Brett und Hand", () => {

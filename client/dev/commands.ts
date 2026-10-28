@@ -106,17 +106,37 @@ const SCENES: Scene[] = [
     ships: FLEET,
     events: [
       effect("player", "draw_fire", P_STRIKE_3, { type: "taunt" }),
-      { kind: "attack", attacker: E_STRIKE_2, target: P_STRIKE_3, amount: 2, after: stats("horizon_cruiser", 2), aimedAt: P_STRIKE_2, taunt: true },
+      { kind: "attack", attacker: E_STRIKE_2, target: P_STRIKE_3, amount: 2, after: stats("horizon_cruiser", 2), taunt: true },
       { kind: "attack", attacker: E_COMMAND_3, target: P_STRIKE_3, amount: 1, after: stats("horizon_cruiser", 3), taunt: true },
     ],
   },
   {
     card: "combat",
-    name: "Deckung fängt ab",
+    name: "Schiffsfeuer verpufft an der Deckung",
     ships: FLEET,
     events: [
-      { kind: "attack", attacker: P_STRIKE_2, target: E_STRIKE_3, amount: 3, after: stats("iron_dreadnought", 1, -2), aimedAt: E_COMMAND_3 },
-      { kind: "attack", attacker: E_STRIKE_2, target: P_STRIKE_3, amount: 2, after: stats("horizon_cruiser", 2), aimedAt: P_COMMAND_3 },
+      { kind: "fizzle", attacker: P_STRIKE_2, target: E_COMMAND_3, covered: true },
+      { kind: "fizzle", attacker: E_STRIKE_2, target: P_COMMAND_3, covered: true },
+    ],
+  },
+  {
+    card: "combat",
+    name: "Spaltenfeuer geht durch",
+    ships: FLEET,
+    prepare: async () => view.pad("enemy", "strike", 3).ship!.setStats(3, 0),
+    events: [
+      { kind: "attack", attacker: P_STRIKE_2, target: E_STRIKE_3, amount: 3, after: { hp: 0, shield: 0 } },
+      { kind: "attack", attacker: P_STRIKE_3, target: E_COMMAND_3, amount: 2, after: stats("titan_carrier", 2), through: true },
+      { kind: "destroyed", ship: E_STRIKE_3 },
+    ],
+  },
+  {
+    card: "combat",
+    name: "Spaltenfeuer verpufft: leere Spalte",
+    ships: FLEET,
+    events: [
+      { kind: "fizzle", attacker: P_STRIKE_3, column: 5 },
+      { kind: "fizzle", attacker: E_STRIKE_3, column: 0 },
     ],
   },
   {
@@ -128,6 +148,17 @@ const SCENES: Scene[] = [
       { kind: "attack", attacker: P_STRIKE_2, target: E_STRIKE_2, amount: 3, after: { hp: 0, shield: 0 } },
       { kind: "attack", attacker: E_STRIKE_3, target: P_STRIKE_2, amount: 2, after: stats("void_interceptor", 2) },
       { kind: "fizzle", attacker: P_STRIKE_3, target: E_STRIKE_2 },
+      { kind: "destroyed", ship: E_STRIKE_2 },
+    ],
+  },
+  {
+    card: "combat",
+    name: "Spaltenfeuer verpufft: Spalte geräumt",
+    ships: FLEET,
+    prepare: async () => view.pad("enemy", "strike", 2).ship!.setStats(3, 0),
+    events: [
+      { kind: "attack", attacker: P_STRIKE_2, target: E_STRIKE_2, amount: 3, after: { hp: 0, shield: 0 } },
+      { kind: "fizzle", attacker: P_STRIKE_3, column: 2, cleared: true },
       { kind: "destroyed", ship: E_STRIKE_2 },
     ],
   },

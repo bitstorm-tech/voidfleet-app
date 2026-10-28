@@ -73,6 +73,6 @@ export const ABILITY_VALUES = {
   counterfire: 1,
   /** Fokusfeuer: zusätzlicher Schaden je Treffer auf das Ziel. */
   focusFire: 1,
-  /** Schwarmangriff: zusätzlicher Schaden je Drohnentreffer auf das Ziel. */
-  swarmStrike: 1,
+  /** Schwarmangriff: zusätzlicher Schaden je Drohnentreffer auf das Ziel (seit Spalten- und Schiffsfeuer 2 statt 1). */
+  swarmStrike: 2,
 } as const;

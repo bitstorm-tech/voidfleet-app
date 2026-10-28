@@ -185,7 +185,7 @@ export const en = {
       turn: {
         heading: "Your turn",
         paragraphs: [
-          "Each round you plan up to three things and then click “End turn”: one ship from your hand onto a free slot of your side, one command from your hand, and either one maneuver of a ship already on the board to another free slot or your admiral ability. All three are optional — you may also pass with an empty turn. On top of that you give your combat ships their fire orders: the enemy ship each of them fires at in combat (see “Combat”). Admiral Kerr may also lock a target with the Pendulum.",
+          "Each round you plan up to three things and then click “End turn”: one ship from your hand onto a free slot of your side, one command from your hand, and either one maneuver of a ship already on the board to another free slot or your admiral ability. All three are optional — you may also pass with an empty turn. On top of that you give your combat ships their fire orders: what each of them fires at in combat, an enemy column or one particular enemy ship (see “Combat”). Admiral Kerr may also lock a target with the Pendulum.",
           "In round 1 you set up your fleet: your flagship, plus up to two ships instead of one, plus a command. The flagship is mandatory — “End turn” only works once it is planned. From round 2 on it's one ship per round. Two commands change the turn itself while they are planned: Rapid Deployment lets you deploy one extra ship, Carte Blanche gives you the maneuver and your admiral ability together. Take the command back and the extra ship or the ability drops out again.",
           "A command may target a ship you deploy in the same turn — your flagship too —, for example to overcharge it or shield it immediately. Planned ships appear on the board as translucent ghosts; a command on a ghost is resolved as if the ship already stood there, and a ghost can get a fire order too.",
           "Nothing is final until you end your turn: everything you planned can be taken back or changed (see “Controls”). Your opponent only ever sees your turn once both have submitted.",
@@ -206,7 +206,7 @@ export const en = {
           `Admiral Osei, The Wall, commands the Bastion (Battleship, ${stats("bastion")}). Guardian Shield: after the maneuvers, the Bastion gains +${guardianShield} shield for the round, the ship in the Strike slot directly in front of her +${guardianShieldFront}. Counterfire: choose one of your ships; every enemy ship except a flagship that hits it in combat takes ${counterfire} damage per hit afterwards.`,
           `Admiral Vance, The Hammer, commands the Vanguard (Cruiser, ${stats("vanguard")}). Spearhead: the combat ship in the Strike slot directly in front of her has +${spearhead} ATK. Focus Fire: choose an enemy ship, even a covered one; this round every hit on it in combat deals +${focusFire} damage. It doesn't steer any shot — your fire orders decide who fires at it.`,
           `Admiral Halvorsen, The Swarm, commands the Hive (Battleship, ${stats("hive")}). Brood Chamber: at the end of every round the Hive launches a Drone into the nearest free Strike slot — at most ${maxDrones} of your Drones at a time and ${hiveBudget} per match. Swarm Strike needs one of your Drones on the board: choose an enemy ship other than the flagship, covered or not; all your Drones fire at it instead of their own targets — through cover, without fire orders, even those launched this round —, each hit dealing +${swarmStrike} damage.`,
-          `Admiral Moreau, The Phantom, commands the Mirage (Fighter, ${stats("mirage")}). Phase Shift: the Mirage's maneuver may also target one of your occupied slots — then both ships swap places and both still fire. Decoy: choose a free Strike slot of yours; a Decoy (1 HP) stands there for this round. It never attacks and covers the Command slot behind it: shots at the ship there hit the Decoy — and once it is destroyed, they fizzle. Flagships see through it: it doesn't cover against them. At the end of the round it dissolves.`,
+          `Admiral Moreau, The Phantom, commands the Mirage (Fighter, ${stats("mirage")}). Phase Shift: the Mirage's maneuver may also target one of your occupied slots — then both ships swap places and both still fire. Decoy: choose a free Strike slot of yours; a Decoy (1 HP) stands there for this round. It never attacks, but to the enemy it is a ship at the front of its column: column fire hits the Decoy first, and tracking fire at the ship behind it fizzles as long as the Decoy stands. Flagships see through it: it doesn't cover against them, and their column fire passes it and hits the ship behind — only with no ship behind it do they hit the Decoy. At the end of the round it dissolves.`,
           `Admiral Kerr, The Clockmaker, commands the Pendulum (Battleship, ${stats("pendulum")}). Railgun: in a round in which her railgun doesn't fire, Kerr may lock onto an enemy ship. Next round the railgun hits it for ${railgun} at the start of combat if it is exposed; if it is covered, the shot is blocked. If the Pendulum moves in either round, the shot is lost. Locked ships carry a crosshair on both sides of the board. Head Start: choose one of your combat ships; it fires before everyone else, and whatever it destroys no longer fires.`,
         ],
         caption: "The admirals with their flagship, its ability and the admiral ability.",
@@ -215,19 +215,20 @@ export const en = {
         heading: "The board",
         paragraphs: [
           "Each side has two lanes with 6 slots each: the Strike lane in front, facing the enemy, and the Command lane behind it. A lane holds at most 4 ships and a side at most 6 (Drones count toward neither), so at least two slots per lane stay empty.",
-          "The Command lane offers cover: a ship there is covered as long as a ship stands in the Strike slot directly in front of it (same slot number). A shot at a covered ship hits the ship in front of it instead. Without a ship in front, a Command ship is just as exposed as one in the Strike lane.",
-          "Cover is decided once at the start of combat and lasts for the whole combat: if the covering ship is destroyed by a shot of the same combat, the ship behind it stays covered until next round — further shots at it fizzle. Damage from commands ignores cover: Orbital Strike, Torpedo, Heat Seeker, Bombardment and every other damaging command hit covered ships too. Only Collision Course needs an exposed ship opposite.",
-          "Ships in either lane fire with full strength; the lane only matters for cover, for lane-specific commands (Power Surge, Targeting Jammer, Intercept, Recall, Collision Course, Bombardment) and for the Signal Booster, which boosts the ships in its own lane.",
+          "The two slots with the same number form a column: the Strike slot in front, the Command slot behind it. The Command lane offers cover: a ship there is covered as long as a ship stands in front of it in its column. Gunfire only reaches a covered ship once the ship in front of it has fallen (see “Combat”). Without a ship in front, a Command ship is just as exposed as one in the Strike lane.",
+          "Cover counts at the moment of each shot: once the ship in front is destroyed — even by an earlier shot of the same combat —, the ship behind it is exposed to every shot that follows. Damage from commands ignores cover: Orbital Strike, Torpedo, Heat Seeker, Bombardment and every other damaging command hit covered ships too. Only Collision Course needs an exposed ship opposite.",
+          "Ships in either lane fire with full strength; the lane only matters for cover, for the order of the shots in combat (Strike lane first), for lane-specific commands (Power Surge, Targeting Jammer, Intercept, Recall, Collision Course, Bombardment) and for the Signal Booster, which boosts the ships in its own lane.",
         ],
-        caption: "Each side: Strike in front, Command behind. A Command ship is covered by the Strike slot directly in front of it.",
+        caption:
+          "Each side: Strike in front, Command behind; slots with the same number form a column. Enemy fire into a column hits the front ship first: the Command ship behind a Strike ship is covered, the one without is exposed.",
       },
       movement: {
         heading: "Moving ships",
         paragraphs: [
-          "Once per round — unless you use your admiral ability instead — you may maneuver one of your ships already on the board to any free slot of your side, in the other lane or the same one: tap the ship, then a glowing slot. Within the lane that is how you tuck a Repair Drone in behind a Strike ship, for example. The price: a maneuvering ship doesn't fire this round. It can still be shot at and still covers or is covered from its new position, and a command played on it follows it to the new slot, just like the fire orders aimed at it. Only the Mirage may maneuver onto one of your occupied slots: both ships swap places and keep firing.",
-          "Commands move ships as well: Flanking Maneuver switches a ship to the other lane, Intercept pulls a Command ship forward into the Strike lane with +2 ATK, Recall retreats a Strike ship into the Command lane and repairs 2 HP, Evasive Action shifts a ship to a free slot of the same lane with Shield 2. Ships moved by a command keep firing. Micro-Jump takes one of your ships out of the battle after all moves until the end of the round: nothing hits it — shots aimed at it fizzle —, but it neither fires nor covers. Tractor Beam moves an enemy ship instead: after all moves it pulls it into the nearest free slot of its other lane.",
+          "Once per round — unless you use your admiral ability instead — you may maneuver one of your ships already on the board to any free slot of your side, in the other lane or the same one: tap the ship, then a glowing slot. Within the lane that is how you tuck a Repair Drone in behind a Strike ship, for example. The price: a maneuvering ship doesn't fire this round. It can still be shot at and covers or is covered from its new position, and a command played on it follows it to the new slot. Enemy gunfire depends on how it was aimed: tracking fire follows the ship, column fire stays on its column — leaving the column dodges it, moving into a column walks into it. Only the Mirage may maneuver onto one of your occupied slots: both ships swap places and keep firing.",
+          "Commands move ships as well: Flanking Maneuver switches a ship to the other lane, Intercept pulls a Command ship forward into the Strike lane with +2 ATK, Recall retreats a Strike ship into the Command lane and repairs 2 HP, Evasive Action shifts a ship to a free slot of the same lane with Shield 2. Ships moved by a command keep firing. Micro-Jump takes one of your ships out of the battle after all moves until the end of the round: nothing hits it — tracking fire at it fizzles, column fire finds its slot empty —, but it neither fires nor covers. Tractor Beam moves an enemy ship instead: after all moves it pulls it into the nearest free slot of its other lane.",
           "Evasive Action stays within the lane, the other movement commands switch to the other lane. Maneuver and movement command can't move the same ship and can't land on the same slot. The slot a ship leaves stays blocked for the rest of the round — it only frees up next round, also for ships you deploy. Deployed ships and both destinations together count toward the limit of 4 ships per lane.",
-          "Moving carries a risk: Barrage deals 3 damage to every enemy ship that changed slots this round, no matter how, and Heat Seeker follows its target and hits a ship that changed slots for 5 instead of 3. A Torpedo targets a slot, not a ship — Piercing Shot a slot number: it hits whoever stands there after all moves, so dodging it — or walking into it — is part of the game.",
+          "Moving carries a risk: Barrage deals 3 damage to every enemy ship that changed slots this round, no matter how, and Heat Seeker follows its target and hits a ship that changed slots for 5 instead of 3. A Torpedo targets a slot, not a ship — Piercing Shot a column: it hits whoever stands there after all moves, much like column fire, so dodging it — or walking into it — is part of the game.",
         ],
         caption:
           "A planned maneuver: the Scrap Raider will retreat from the Strike lane into the Command lane and hold fire this round. A maneuver may also stay within the lane.",
@@ -243,15 +244,16 @@ export const en = {
       combat: {
         heading: "Combat",
         paragraphs: [
-          "Each round you give your combat ships their fire orders: for every ship with attack above 0 you pick the enemy ship it fires at. Any enemy ship that is on the board while you plan can be picked, covered ones and the enemy flagship included. A ship without a fire order doesn't fire — there is no automatic targeting, and every round starts without fire orders. Ships you deploy this round can get a fire order too; a ship that maneuvers holds fire (the Mirage's Phase Shift is the exception: both ships keep firing), and one disabled by EMP Blast can't fire.",
-          "A fire order sticks to both ships: if the shooter or its target moves — by maneuver, command or Tractor Beam —, the shot goes to the target where it stands now, so moving doesn't dodge gunfire. If the target is covered at the start of combat, the ship in front of it takes the shot (flagships see through a Decoy). If the ship that would be hit is already destroyed — by an earlier shot of your own side, say — or has left the board (destroyed before combat, Micro-Jump), the shot fizzles. Nothing prevents overkill: while you plan, the preview shows how much damage each enemy ship takes, so spread your fire.",
-          "All shots are simultaneous: a ship destroyed in this combat still fires. Only ships that are on the board while you plan can be targeted, so round 1 has no gunfire, and a ship deployed this round can only be hit as cover or with Draw Fire. Drones launched during the round don't fire before the next one, unless Swarm Strike sends them.",
+          "Each round you give your combat ships their fire orders: for every ship with attack above 0 you pick what it fires at, and there are two ways to aim. Column fire aims at a column of the enemy side, any of the six, even an empty one. Tracking fire aims at one particular enemy ship that is on the board while you plan, covered ones and the enemy flagship included. A ship without a fire order doesn't fire — there is no automatic targeting, and every round starts without fire orders. Ships you deploy this round can get a fire order too; a ship that maneuvers holds fire (the Mirage's Phase Shift is the exception: both ships keep firing), and one disabled by EMP Blast can't fire.",
+          "Column fire stays on its column: the shot hits the frontmost ship still standing there when it is fired — the Strike ship, or the Command ship behind it if the Strike slot is empty or its ship has already fallen in this combat. If no ship stands there (any more), the shot fizzles. So a ship that maneuvers out of the column dodges it, and one that moves in or is deployed there walks into it. Tracking fire follows its ship through maneuvers, commands, Tractor Beam and Phase Shift and hits it wherever it stands — but it fizzles if the ship is covered at the moment of the shot, already destroyed (it never passes on to another ship) or no longer on the board (destroyed before combat, Micro-Jump).",
+          "Within a side the shots are fired one after another: first the Strike lane from slot 1 to 6, then the Command lane. The two sides fire at the same time, so a ship destroyed in this combat still fires — the order only matters among the shots of one side. Because cover counts at the moment of each shot, column fire from your Strike lane can break the cover first, and tracking fire from your Command lane then hits the ship behind it. Nothing prevents overkill: while you plan, the preview shows which ship each shot hits and how much damage every enemy ship takes, so spread your fire.",
+          "Because a column can be targeted even when it is empty, there is gunfire from round 1 on: blind into the columns where you expect the enemy to land. A ship deployed this round can be hit by column fire (or draw shots with Draw Fire), but not by tracking fire, which needs a ship while you plan. Drones launched during the round don't fire before the next one, unless Swarm Strike sends them.",
           "Damage goes to the shield first and only then to the hull. A ship's own shield (Iron Dreadnought: 2) doesn't regenerate; extra shield from commands like Emergency Shields lasts for the round only, except for Ablative Armor, which stays until it is shot away. A ship with 0 HP is destroyed and removed — after the Effects phase, after combat, and after self-damage in Cleanup.",
           "The attack value already includes everything: round bonuses from commands, the Scrap Raider's bonus, the Signal Booster aura, the Vanguard's Spearhead and Overdrive. Support ships never attack, no matter the bonus.",
-          `Admirals bend these rules: the Pendulum's railgun fires before anyone else, Head Start lets one ship shoot before the rest, Focus Fire adds +${focusFire} damage to every hit on its target, Swarm Strike sends all your Drones at its target — through cover and without fire orders —, and Counterfire strikes back once all shots are fired. The command Draw Fire pulls the enemy shots onto your chosen ship as long as it stands and is exposed to the shooter; only Swarm Strike and the railgun keep their targets.`,
+          `Admirals bend these rules: the Pendulum's railgun fires before anyone else, Head Start lets one ship shoot before the rest, Focus Fire adds +${focusFire} damage to every hit on its target, Swarm Strike sends all your Drones at its target — through cover and without fire orders —, and Counterfire strikes back once all shots are fired. Admiral Moreau's Decoy counts as a ship at the front of its column, but flagships see through it. The command Draw Fire pulls the enemy shots of both kinds onto your chosen ship as long as it stands and is exposed to the shooter; only Swarm Strike and the railgun keep their targets.`,
         ],
         caption:
-          "Fire orders: each combat ship fires at the enemy ship you pick. A shot at a covered ship hits the ship in front of it; a shot at a ship that is already destroyed fizzles.",
+          "Column fire (dotted frame) hits the front ship of its column, tracking fire (dotted ring) follows its ship. Red: the shot; pale with a cross: a shot that fizzles; the numbers give the order of the shots.",
       },
       ships: {
         heading: "Ships",
@@ -265,7 +267,7 @@ export const en = {
       commands: {
         heading: "Commands",
         paragraphs: [
-          "Commands are played once and resolved in the Effects phase, before combat. Some pick a target when you plan them — one of your ships, an enemy ship (Heat Seeker, Tractor Beam), a slot on the enemy side (Torpedo) or an enemy slot number (Piercing Shot) —, the others choose their target automatically. Round effects like ATK bonuses, extra shield and EMP end in Cleanup.",
+          "Commands are played once and resolved in the Effects phase, before combat. Some pick a target when you plan them — one of your ships, an enemy ship (Heat Seeker, Tractor Beam), a slot on the enemy side (Torpedo) or an enemy column (Piercing Shot) —, the others choose their target automatically. Round effects like ATK bonuses, extra shield and EMP end in Cleanup.",
           "Commands resolve by type, in this order: repositioning, tactics, buffs, special, debuffs, attacks. Countermeasures (special) makes the opponent's attack or debuff command of the same round fizzle before it acts. Your command deck holds one copy of each, except Torpedo and Barrage with two.",
         ],
       },
@@ -279,8 +281,8 @@ export const en = {
       controls: {
         heading: "Controls",
         paragraphs: [
-          "Tap a card in your hand, then a glowing slot or ship on the board; the status line at the top tells you what the selected card needs. Tapping the card again takes it back. In round 1 your flagship stands at the front of your ship hand with a golden frame. Without a card selected, tapping one of your ships — or a ghost ship — selects it: every enemy ship lights up, and tapping one gives your ship its fire order or replaces it; tapping the current target again cancels the order. A ship already on the board also shows the slots it can maneuver to; a maneuver cancels its fire order. Tapping the selected ship once more takes back its deployment or maneuver; Escape, a right-click or a tap next to the board ends the selection. Your admiral ability is the card to the left of your commands, Admiral Kerr's target lock the button above it. The checklist below “End turn” shows which parts of your turn are planned, still open or impossible.",
-          "While you plan, the board previews the round as if your opponent did nothing: an arc shows each fire order (dashed if the shot would fizzle), hull bars blink with the damage a ship would take, and a skull marks every ship that would be destroyed. Chance, like the Plasma Frigate's shot, isn't included. The panel at the top right shows what you know about your opponent: whether they have ended their turn, how many cards they hold and have left in their decks, and how many copies of each command they haven't played yet.",
+          "Tap a card in your hand, then a glowing slot or ship on the board; the status line at the top tells you what the selected card needs. Tapping the card again takes it back. In round 1 your flagship stands at the front of your ship hand with a golden frame. Without a card selected, tapping one of your ships — or a ghost ship — selects it, and every slot of the enemy side lights up, empty ones too. The first tap on an enemy ship or slot gives your ship column fire on that column; tapping a ship of that column again switches to tracking fire on exactly that ship; tapping the tracked ship once more — or an empty slot of the chosen column — cancels the fire order. A slot in another column starts over with column fire. A ship already on the board also shows the slots it can maneuver to; a maneuver cancels its fire order. Tapping the selected ship once more takes back its deployment or maneuver; Escape, a right-click or a tap next to the board ends the selection. Your admiral ability is the card to the left of your commands, Admiral Kerr's target lock the button above it. The checklist below “End turn” shows which parts of your turn are planned, still open or impossible.",
+          "While you plan, the board previews the round as if your opponent did nothing: for each fire order an arc points at the ship the shot would hit, tracking fire with a ring around the tip; a shot that would fizzle is pale and dashed, with a cross instead of the tip. With a ship selected, the preview already shows what a tap on the slot under the pointer would do. Hull bars blink with the damage a ship would take, and a skull marks every ship that would be destroyed. Chance, like the Plasma Frigate's shot, isn't included. The panel at the top right shows what you know about your opponent: whether they have ended their turn and how many cards they hold and have left in their decks.",
           "“End turn” submits your plan. While the round is resolved you can skip the animation; the log button at the top right lists every event of the match. Scroll or hold ↑/↓ to zoom the board, and drag to pan while zoomed in. The camera button at the top right or V switches between the side view and the view from behind; hold ← or → or drag with the middle mouse button to turn the camera freely in between. Angle and zoom carry over to your next match. Sound, radio chatter, animation speed and language live in the settings next to this dialog; the flag next to it surrenders the match after a confirmation, and your opponent wins immediately.",
         ],
       },
@@ -297,7 +299,7 @@ export const en = {
       effects: { name: "Effects", text: "Commands take effect, by type; damage last. Destroyed ships are removed." },
       combat: {
         name: "Combat",
-        text: "Railgun first, then Head Start, then all other ships with a fire order at once; cover takes the shots at the ships behind it, shots at destroyed ships fizzle. Counterfire strikes back last. Destroyed ships are removed.",
+        text: "Railgun first, then Head Start, then the other ships with a fire order: Strike lane before Command lane, by slot. Column fire hits the front ship of its column, tracking fire its target if exposed — otherwise the shot fizzles. Counterfire strikes back last. Destroyed ships are removed.",
       },
       cleanup: {
         name: "Cleanup",
@@ -313,10 +315,13 @@ export const en = {
       covered: "covered",
       exposed: "exposed",
       laneLimit: "max. 4 ships per lane, 6 per side",
-      /** Die drei Fälle der Feuerbefehle: freie Wahl, die Deckung fängt ab, ein Schuss auf ein zerstörtes Schiff verpufft. */
-      anyShip: "Any enemy ship",
-      coverTakes: "Cover takes the shot",
-      fizzles: "Destroyed: shot fizzles",
+      /** Die beiden Arten der Feuerbefehle mit je zwei Fällen. */
+      columnFire: "Column fire",
+      trackingFire: "Tracking fire",
+      columnThrough: "hits the front ship, once it has fallen the one behind",
+      columnDodge: "fizzles if the ship leaves the column",
+      trackingFollows: "follows its ship into another slot",
+      trackingCovered: "fizzles while its ship is covered",
       round: (round: number) => `Round ${round}`,
       overdrive: (bonus: number) => (bonus === 0 ? "no Overdrive" : `+${bonus} ATK`),
       rounds: (from: number, to: number | null) => (to === null ? `from round ${from}` : `rounds ${from}–${to}`),
@@ -377,13 +382,13 @@ export const en = {
       `${command}: tap a slot on the enemy side, even an empty one — it hits whichever ship stands there after all moves. Click the card again to take it back.`,
     chooseEnemyShip: (command: string) => `${command}: tap an enemy ship — the command follows it if it moves. Click the card again to take it back.`,
     chooseEnemyColumn: (command: string) =>
-      `${command}: tap a slot on the enemy side — it hits the slot number, front ship first, after all moves. Click the card again to take it back.`,
+      `${command}: tap a slot on the enemy side — it hits that column, front ship first, after all moves. Click the card again to take it back.`,
     noEnemyTarget: (command: string) => `no enemy ship to target with ${command}.`,
     commandDropped: (command: string, dropped: string) => `Without ${command}: ${dropped} dropped.`,
     chooseDestination: (command: string, ship: string) => `${command}: tap a glowing slot for ${ship}. Click the card again to take it back.`,
     /** Ein gewähltes eigenes Schiff: sein Feuerbefehl, sein Grundmanöver und was ein zweiter Klick zurücknimmt. */
-    chooseFireTarget: (ship: string) => `${ship}: tap an enemy ship as its target — at a covered one, the ship in front takes the shot.`,
-    noFireTarget: (ship: string) => `${ship}: no enemy ship to fire at yet.`,
+    chooseFireTarget: (ship: string) =>
+      `${ship}: tap an enemy slot for column fire — it hits the front ship of that column; tap a ship there again to track it instead.`,
     maneuverInstead: "Or tap a glowing slot of yours to maneuver — then it won't fire.",
     maneuverOrSwap:
       "Or tap a glowing slot of yours to maneuver (then it won't fire), or one of your ships to swap places with it (Phase Shift, both keep firing).",
@@ -392,18 +397,27 @@ export const en = {
     commandHoldsFire: (ship: string, command: string) => `${ship} won't fire this round (${command}).`,
     maneuverHint: "Tap a glowing slot to maneuver it.",
     changeManeuver: "Tap another glowing slot to change the maneuver.",
-    fireTarget: (target: string) => `Target: ${target} — tap it again to clear the order.`,
-    fireCovered: (cover: string, target: string) => `${cover} covers ${target} and takes the shot.`,
+    /** Der jetzige Feuerbefehl des gewählten Schiffs; unter dem Zeiger stattdessen, was ein Klick daraus macht. */
+    columnFire: (column: number) => `Column fire on column ${column}.`,
+    trackFire: (target: string) => `Tracking ${target}.`,
+    tapColumnFire: (column: number) => `Tap for column fire on column ${column}.`,
+    tapTrackFire: (target: string) => `Tap to track ${target}.`,
+    tapClearsFire: "Tap to cancel the fire order.",
+    /** Was der Schuss laut Vorschau trifft oder warum er verpufft. */
+    fireHits: (target: string) => `It hits ${target}.`,
+    fireThrough: (target: string) => `It hits ${target} behind — the ship in front is destroyed by then.`,
+    columnEmpty: "The shot fizzles: no ship stands in that column.",
+    columnCleared: "The shot fizzles: the ships of that column are destroyed by then.",
+    fireCovered: (target: string) => `The shot fizzles: ${target} is covered by then.`,
     fireFizzles: (target: string) => `The shot fizzles: ${target} is already destroyed by then.`,
-    coverFizzles: (cover: string, target: string) => `The shot fizzles: ${cover} is already destroyed by then but still covers ${target}.`,
+    fireGone: "The shot fizzles: its target is no longer on the board by then.",
     swarmFire: (power: string) => `It flies the ${power}; its own target only counts if the swarm target is gone.`,
     againUnplan: "Tap the ship again to take it back.",
     againManeuver: "Tap the ship again to cancel the maneuver.",
     escCancels: "Esc cancels.",
     fireCleared: (ship: string) => `${ship} won't fire this round — its fire order is cleared.`,
     fireOrders: (count: number) => (count === 1 ? "1 target" : `${count} targets`),
-    fizzles: (count: number) =>
-      count === 1 ? "1 shot fizzles — its target is already destroyed by then." : `${count} shots fizzle — their targets are already destroyed by then.`,
+    fizzles: (count: number) => (count === 1 ? "1 shot fizzles (dashed arc)." : `${count} shots fizzle (dashed arcs).`),
     maneuver: (ship: string) => `maneuver of ${ship}`,
     swap: (ship: string, partner: string) => `Phase Shift of ${ship} and ${partner}`,
     choosePowerTarget: (power: string) => `${power}: tap a glowing target. Tap the ability again or press Esc to cancel.`,
@@ -449,6 +463,8 @@ export const en = {
     roundHeader: (round: number) => `— Round ${round} —`,
     who: { player: "You", enemy: "Enemy" } satisfies Record<Side, string>,
     slot: (side: Side, lane: string, slot: number) => `${side === "player" ? "your" : "enemy"} ${lane} slot ${slot}`,
+    /** Eine Spalte: beide Slots mit dieser Nummer. */
+    column: (side: Side, column: number) => `${side === "player" ? "your" : "enemy"} column ${column}`,
     ship: (ship: string, slot: string) => `${ship} (${slot})`,
     deploy: (who: string, ship: string, slot: string) => `Deploy: ${who} — ${ship} on ${slot}`,
     deployFlagship: (who: string, ship: string, slot: string) => `Deploy: ${who} — flagship ${ship} on ${slot}`,
@@ -493,19 +509,19 @@ export const en = {
     /** Ein Schuss im Kampf; `notes` nennt, was ihn verstärkt, gelenkt oder beschleunigt hat (Admiralsfähigkeiten, Ablenkung). */
     attack: (attacker: string, target: string, amount: number, notes: readonly string[]) =>
       `Combat: ${attacker} fires at ${target} (${[amount, ...notes].join(", ")})`,
-    /** Der Schuss galt `aimed`, aber das Schiff davor (`cover`) fing ihn als Deckung ab. */
-    covered: (attacker: string, aimed: string, cover: string, amount: number, notes: readonly string[]) =>
-      `Combat: ${attacker} fires at ${aimed} — ${cover} in front takes the shot (${[amount, ...notes].join(", ")})`,
-    /** Der Schuss galt `aimed`, aber `ship` zog ihn mit der Ablenkung auf sich. */
-    drawn: (attacker: string, aimed: string, ship: string, amount: number, notes: readonly string[]) =>
-      `Combat: ${attacker} fires at ${aimed} — ${ship} draws the shot (${[amount, ...notes].join(", ")})`,
-    /** Der Schuss verpufft: Sein Ziel `target` ist schon zerstört. */
+    /** Spaltenfeuer, das durchging: Das vordere Schiff der Spalte ist in diesem Kampf gefallen. */
+    through: (attacker: string, target: string, amount: number, notes: readonly string[]) =>
+      `Combat: ${attacker} fires past the fallen front ship at ${target} (${[amount, ...notes].join(", ")})`,
+    /** Spaltenfeuer verpufft: In der Spalte stand kein Schiff … */
+    fizzleEmpty: (attacker: string, column: string) => `Combat: the shot of ${attacker} fizzles — no ship in ${column}`,
+    /** … bzw. die Schiffe dort sind in dieser Runde schon gefallen. */
+    fizzleCleared: (attacker: string, column: string) => `Combat: the shot of ${attacker} fizzles — the ships in ${column} are already destroyed`,
+    /** Schiffsfeuer verpufft: Sein Ziel `target` ist schon zerstört … */
     fizzle: (attacker: string, target: string) => `Combat: the shot of ${attacker} fizzles — ${target} is already destroyed`,
-    /** Der Schuss verpufft: Sein Ziel steht nicht mehr auf dem Brett (vor dem Kampf zerstört, Kurzsprung). */
+    /** … gedeckt … */
+    fizzleCovered: (attacker: string, target: string) => `Combat: the shot of ${attacker} fizzles — ${target} is covered`,
+    /** … oder steht nicht mehr auf dem Brett (vor dem Kampf zerstört, Kurzsprung). */
     fizzleGone: (attacker: string) => `Combat: the shot of ${attacker} fizzles — its target is no longer on the board`,
-    /** Die Deckung vor dem Ziel des Feuerbefehls ist schon zerstört und fängt den Schuss trotzdem ab. */
-    fizzleCovered: (attacker: string, aimed: string, cover: string) =>
-      `Combat: the shot of ${attacker} at ${aimed} fizzles — ${cover} in front of it is already destroyed`,
     silenced: (ship: string) => `Head Start: ${ship} is destroyed before it can fire`,
     counterfire: (ship: string, source: string, amount: number) => `Counterfire: ${ship} takes ${amount} for hitting ${source}`,
     selfDamage: (ship: string, amount: number) => `Cleanup: ${ship} takes ${amount} self-damage`,
@@ -541,11 +557,10 @@ export const en = {
     taunt: "Draws fire",
     jammed: "Radio silence",
     jump: "Jump",
-    /** Ein Schuss im Kampf verpufft: am schon zerstörten Ziel oder, wenn es nicht mehr auf dem Brett steht, im Leeren. */
+    /** Ein Schuss im Kampf verpufft: am schon zerstörten Ziel, in der leeren Spalte oder, wenn sein Ziel nicht mehr auf dem Brett steht, im Leeren. */
     fizzle: "Fizzled",
-    /** Am Schiff, auf das ein Schuss gezielt war: Die Deckung davor fing ihn ab bzw. die Ablenkung zog ihn weg. */
+    /** Am Ziel von Schiffsfeuer, das an der Deckung davor verpufft. */
     covered: "Covered",
-    diverted: "Diverted",
   },
   errors: {
     match_full: "This match is already full.",
@@ -583,7 +598,7 @@ export const en = {
     maneuver_destination_unavailable: "The ship can't maneuver to this slot.",
     maneuver_conflict: "A command can't move the ship that maneuvers this round.",
     fire_ship_invalid: "Only your combat ships can get a fire order, one each — not the ship that maneuvers this round.",
-    fire_target_invalid: "A fire order needs an enemy ship on the board as its target.",
+    fire_target_invalid: "A fire order needs an enemy column or an enemy ship on the board as its target.",
   } satisfies Record<ErrorCode, string>,
   lanes: { strike: "Strike", command: "Command" } satisfies Record<LaneType, string>,
   stats: { hp: "HP", atk: "ATK", shield: "Shield" },
@@ -631,7 +646,7 @@ export const en = {
     decoy: {
       name: "Decoy",
       effect:
-        "Admiral Moreau's hologram: stands for one round, never attacks and covers the Command slot behind it — shots at the ship there hit the Decoy. Flagships see through it; destroyed, it leaves no scrap.",
+        "Admiral Moreau's hologram: stands for one round and never attacks. Column fire hits it first, tracking fire at the ship behind it fizzles while it stands. Flagships see through it; destroyed, it leaves no scrap.",
     },
     bastion: {
       name: "Bastion",
@@ -669,7 +684,7 @@ export const en = {
     decoy: {
       name: "Decoy",
       effect:
-        "Choose a free Strike slot. A Decoy (1 HP) stands there this round and covers the slot behind it: shots at that ship hit the Decoy. Flagships see through it.",
+        "Choose a free Strike slot. A Decoy (1 HP) stands there this round: column fire hits it first, tracking fire at the ship behind it fizzles. Flagships see through it.",
     },
     head_start: { name: "Head Start", effect: "Choose one of your combat ships. It fires before everyone else, and whatever it destroys no longer fires." },
   } satisfies Record<PowerId, CardText>,
@@ -740,7 +755,7 @@ export const en = {
     coup_de_grace: { name: "Coup de Grâce", effect: "Deal 4 damage to the enemy ship with the lowest HP, even if covered (not Drones or Decoys)." },
     piercing_shot: {
       name: "Piercing Shot",
-      effect: "Choose an enemy slot number. After all moves, deal 3 damage to the front ship there and 2 to the ship behind it.",
+      effect: "Choose an enemy column. After all moves, deal 3 damage to the front ship there and 2 to the ship behind it.",
     },
     bombardment: { name: "Bombardment", effect: "Deal 2 damage to every ship in the enemy Command lane." },
     crossfire: { name: "Crossfire", effect: "Deal 3 damage to every enemy ship with no ship directly in front of or behind it." },

@@ -4,26 +4,30 @@
 // Pendulum und Feuerbefehlen; nur der Zufallsschuss der Plasma Frigate bleibt außen vor. Die eigenen Schüsse und was
 // sie anrichten, stimmen also genau; was der Gegner in dieser Runde vorhat, zeigt die Vorschau nicht.
 
-import { Board, isSameSlot, type Side, type Slot } from "../../../shared/board.ts";
-import type { ShipRef, ShipStats, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
+import { Board, isSameSlot, opposite, type Side, type Slot } from "../../../shared/board.ts";
+import type { Miss, ShipRef, ShipStats, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
 import { type Commander, resolveTurns, type Turn } from "../../../shared/resolution.ts";
 import type { Match } from "./match.ts";
 
-/** Ein Schuss im Kampf, mit den Slots nach allen Bewegungen. */
-export interface PreviewShot {
+/**
+ * Ein Schuss im Kampf, mit den Slots nach allen Bewegungen: Er trifft ein Schiff (`hit`; `through`: Spaltenfeuer, das
+ * durchging, weil das vordere Schiff der Spalte vorher gefallen ist) oder verpufft (`miss`, mit dem Grund).
+ */
+export type PreviewShot = {
   attacker: SlotRef;
   /** Bei eigenen Schüssen der Slot des Schützen beim Planen, an dem sein Feuerbefehl hängt; bei der Railgun null. */
   shooter: SlotTarget | null;
-  /** Das Schiff, das der Schuss trifft (auch die Deckung, die ihn abfängt); bei einem verpuffenden das, das er treffen sollte. */
-  target: ShipRef;
-  /** Das Ziel des Feuerbefehls, wenn die Deckung davor den Schuss abfängt (auch eine schon zerstörte: Er verpufft an ihr). */
-  aimedAt: ShipRef | null;
-  /** Der Schuss verpufft: Sein Ziel ist dann schon zerstört. */
-  fizzle: boolean;
-}
+  /**
+   * Wohin der Bogen fällt: auf das getroffene Schiff; verpufft der Schuss, auf das verfolgte Schiff bzw. bei Spaltenfeuer
+   * auf das vorderste Schiff, das in der Spalte gefallen ist, sonst auf ihren Strike-Slot.
+   */
+  target: SlotRef;
+  /** Schiffsfeuer: Der Schuss verfolgt sein Ziel. */
+  tracking: boolean;
+} & ({ hit: ShipRef; through: boolean } | { miss: Miss });
 
 export interface RoundPreview {
-  /** Wer im Kampf auf wen feuert: die eigenen Schüsse samt verpuffenden und die Railguns, wenn sie treffen. */
+  /** Wer im Kampf worauf feuert: die eigenen Schüsse samt verpuffenden und die Railguns, wenn sie treffen. */
   shots: PreviewShot[];
   /** Wo Schiffe fallen, mit dem Slot zu diesem Zeitpunkt; eingeplante Schiffe eingeschlossen. */
   losses: SlotRef[];
@@ -67,45 +71,47 @@ export function previewRound(match: Match, plan: TurnPlan = match.plan): RoundPr
   });
   const after = (ref: SlotRef) => moves.find((move) => key(move.from) === key(ref))?.to ?? ref;
   const before = (ref: SlotRef) => moves.find((move) => key(move.to) === key(ref))?.from ?? ref;
-  /**
-   * Das Ziel eines Schusses, der ins Leere geht: Das Schiff seines Feuerbefehls ist schon vor dem Kampf gefallen, dort,
-   * wo es zuletzt stand. (Drohnen im Schwarmangriff verpuffen nur an ihrem Ziel, das dann noch steht.)
-   */
-  const gone = (shooter: SlotRef): ShipRef => {
-    const order = plan.fire.find((order) => isSameSlot(order.ship, shooter))!;
-    const aimed = match.board.lane("enemy", order.target.lane).slots[order.target.slotIndex]!;
-    return { ...after(slotRef(aimed)), cardId: aimed.card!.id };
+  /** Das Ziel des Schiffsfeuers eines eigenen Schützen (Slot beim Planen); null bei Spaltenfeuer oder ohne Feuerbefehl. */
+  const tracked = (shooter: SlotRef): SlotTarget | null => {
+    const order = plan.fire.find((order) => isSameSlot(order.ship, shooter));
+    return order && "target" in order ? order.target : null;
+  };
+  const losses = events.flatMap((event) => (event.kind === "destroyed" ? [at(event.ship)] : []));
+  const fell = new Set(losses.map(key));
+  /** Wo verpuffendes Spaltenfeuer verlischt: am vordersten Schiff, das in der Spalte gefallen ist, sonst im Strike-Slot. */
+  const columnEnd = (side: Side, column: number): SlotRef => {
+    const front: SlotRef = { side, lane: "strike", slotIndex: column };
+    const back: SlotRef = { side, lane: "command", slotIndex: column };
+    return !fell.has(key(front)) && fell.has(key(back)) ? back : front;
   };
 
-  const preview: RoundPreview = { shots: [], losses: [], drones: [], outcomes: new Map() };
+  const preview: RoundPreview = { shots: [], losses, drones: [], outcomes: new Map() };
   for (const event of events) {
     if (event.kind === "attack") {
-      preview.shots.push({
-        attacker: at(event.attacker),
-        shooter: before(event.attacker),
-        target: event.target,
-        aimedAt: event.aimedAt ?? null,
-        fizzle: false,
-      });
+      const shooter = before(event.attacker);
+      const tracking = tracked(shooter) !== null && !event.swarm && !event.taunt;
+      preview.shots.push({ attacker: at(event.attacker), shooter, target: event.target, tracking, hit: event.target, through: event.through ?? false });
     }
     if (event.kind === "fizzle") {
       const shooter = before(event.attacker);
-      preview.shots.push({ attacker: at(event.attacker), shooter, target: event.target ?? gone(shooter), aimedAt: event.aimedAt ?? null, fizzle: true });
+      // Schiffsfeuer auf ein Schiff, das schon vor dem Kampf gefallen ist, geht dorthin, wo es zuletzt stand. (Drohnen im
+      // Schwarmangriff verpuffen nur an ihrem Ziel, das dann noch steht.)
+      const target =
+        "column" in event ? columnEnd(opposite(event.attacker.side), event.column) : (event.target ?? after({ side: "enemy", ...tracked(shooter)! }));
+      preview.shots.push({ attacker: at(event.attacker), shooter, target, tracking: "target" in event && tracked(shooter) !== null, miss: event });
     }
     if (event.kind === "railgun" && !event.blocked)
-      preview.shots.push({ attacker: event.source, shooter: null, target: event.target, aimedAt: null, fizzle: false });
-    if (event.kind === "destroyed") preview.losses.push(at(event.ship));
+      preview.shots.push({ attacker: event.source, shooter: null, target: event.target, tracking: false, hit: event.target, through: false });
     if (event.kind === "spawn" && event.source.cardId !== "hive") preview.drones.push(event.ship);
     if (event.kind === "effect" && event.effect.type === "spawn") preview.drones.push(event.ship);
   }
 
   // Wer fällt, steht mit seinem Slot nach allen Bewegungen in `losses`; dort kann die Hive am Rundenende schon die
   // nächste Drohne starten.
-  const lost = new Set(preview.losses.map(key));
   for (const slot of [...match.board.ships("player"), ...match.board.ships("enemy")]) {
     const to = after(slotRef(slot));
     const { hp, shield } = board.lane(to.side, to.lane).slots[to.slotIndex]!;
-    preview.outcomes.set(slot, lost.has(key(to)) ? null : { hp, shield });
+    preview.outcomes.set(slot, fell.has(key(to)) ? null : { hp, shield });
   }
   return preview;
 }

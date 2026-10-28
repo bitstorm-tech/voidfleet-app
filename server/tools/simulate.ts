@@ -3,9 +3,9 @@
 // Aufruf aus server/: `bun tools/simulate.ts [partien je Paarung]` (Standard 2000).
 
 import { ADMIRAL_IDS, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts";
-import { opposite, type Side, slotTarget } from "../../shared/board.ts";
-import { type CommandId, isFlagship, shipById } from "../../shared/cards.ts";
-import type { ErrorCode, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
+import { type Board, opposite, type Side, slotTarget } from "../../shared/board.ts";
+import { type CommandId, isFlagship, isToken, shipById } from "../../shared/cards.ts";
+import type { ErrorCode, RoundEvent, SlotRef, TurnPlan } from "../../shared/protocol.ts";
 import { planBotDraft, planBotTurn } from "../src/bot.ts";
 import { Match, type Seat } from "../src/match.ts";
 
@@ -28,8 +28,50 @@ let kills = 0;
 let roundsWithoutKill = 0;
 let combatDamage = 0;
 let commandDamage = 0;
-/** Schüsse im Kampf (ohne Railgun): alle, verpufft (`fizzle`), von der Deckung abgefangen (`aimedAt` ohne `taunt`), von Ablenkung gezogen (`taunt`). */
-const shots = { all: 0, fizzled: 0, covered: 0, taunted: 0 };
+/**
+ * Schüsse im Kampf (ohne Railgun): alle, verpufft (`fizzle`), durchgegangen auf das Schiff hinter einem gefallenen
+ * (`through`), von Ablenkung gezogen (`taunt`).
+ */
+const shots = { all: 0, fizzled: 0, through: 0, taunted: 0 };
+type Mode = "ship" | "column";
+/**
+ * Feuerbefehle je Modus: alle, je Admiral und je Lane des Ziels beim Planen (Schiffsfeuer: das Ziel; Spaltenfeuer: das
+ * vorderste Schiff der Spalte, `empty`, wenn sie leer war).
+ */
+const orders = {
+  all: { ship: 0, column: 0 },
+  admiral: new Map(ADMIRAL_IDS.map((id) => [id, { ship: 0, column: 0 }])),
+  lane: { strike: { ship: 0, column: 0 }, command: { ship: 0, column: 0 }, empty: { ship: 0, column: 0 } },
+};
+/**
+ * Was aus den Schüssen je Modus wurde: Treffer (Spaltenfeuer davon durchgegangen), von Ablenkung gezogen, verpufft
+ * (Spaltenfeuer: ins Leere bzw. nach einem Abschuss in der Spalte; Schiffsfeuer: gedeckt, schon zerstört, nicht mehr
+ * auf dem Brett). `swarm`: Drohnen im Schwarmangriff ohne eigenen
+ * Feuerbefehl, `swarmFizzled` davon verpufft. `moved`: Schiffsfeuer auf ein Ziel, das in dieser Runde vor dem Kampf den
+ * Slot gewechselt hat (Grundmanöver, Phasentausch, Befehl), `movedHit` davon Treffer.
+ */
+const outcomes = {
+  column: { shots: 0, hit: 0, through: 0, taunted: 0, void: 0, cleared: 0 },
+  ship: { shots: 0, hit: 0, taunted: 0, covered: 0, destroyed: 0, gone: 0, moved: 0, movedHit: 0 },
+  /**
+   * Woher die Deckung kam, an der Schiffsfeuer verpuffte: Sie stand schon beim Planen und fiel nicht, das Ziel zog in
+   * Deckung, vor ihm landete ein neues Schiff (Deploy, Trugbild, Drohne) bzw. zog eines davor.
+   */
+  cover: { held: 0, retreated: 0, arrived: 0, moved: 0 },
+  swarm: 0,
+  swarmFizzled: 0,
+};
+/**
+ * Grundmanöver (ohne Phasentausch): alle, davon in eine andere Spalte (Ausweichen), davon mit gegnerischen Schüssen auf
+ * die alte Spalte, davon mit Schüssen ins Leere dort, die Zahl dieser Schüsse und wie oft das Schiff in der neuen Spalte
+ * trotzdem getroffen wurde.
+ */
+const maneuvers = { all: 0, evasions: 0, targeted: 0, dodged: 0, voided: 0, struck: 0 };
+/**
+ * Flaggschiff-Duell: Runden, in denen beide Seiten nur noch ihr Flaggschiff haben (Tokens nicht gezählt), je Partie mit
+ * Duell, dazu Feuerbefehle je Modus, Schüsse, verpuffte Schüsse und Grundmanöver darin.
+ */
+const duel = { lengths: [] as number[], orders: { ship: 0, column: 0 }, shots: 0, fizzled: 0, maneuvers: 0 };
 let commands = 0;
 let commandsWithoutEffect = 0;
 const emptyCommandHand = [0, 0];
@@ -96,6 +138,158 @@ function newCardEffect(
   }
 }
 
+/** Zählt ein Grundmanöver und, wechselt es die Spalte, was die gegnerischen Schüsse daraus machen (`events` der Runde). */
+function evasion(event: Extract<RoundEvent, { kind: "maneuver" }>, events: readonly RoundEvent[]): void {
+  maneuvers.all += 1;
+  const { ship, to } = event;
+  if (to.slotIndex === ship.slotIndex) return;
+  maneuvers.evasions += 1;
+  const aimed = events.some(
+    (other) =>
+      (other.kind === "fizzle" && other.attacker.side !== ship.side && "column" in other && other.column === ship.slotIndex) ||
+      (other.kind === "attack" && other.attacker.side !== ship.side && !other.swarm && !other.taunt && other.target.slotIndex === ship.slotIndex),
+  );
+  if (aimed) maneuvers.targeted += 1;
+  const voided = events.filter(
+    (other) => other.kind === "fizzle" && "column" in other && !other.cleared && other.attacker.side !== ship.side && other.column === ship.slotIndex,
+  ).length;
+  maneuvers.voided += voided;
+  if (voided > 0) maneuvers.dodged += 1;
+  const struck = events.some(
+    (other) => other.kind === "attack" && other.target.side === ship.side && other.target.lane === to.lane && other.target.slotIndex === to.slotIndex,
+  );
+  if (struck) maneuvers.struck += 1;
+}
+
+/**
+ * Ordnet die Schüsse einer Runde den Feuerbefehlen zu und zählt Modus und Ausgang (`orders`, `outcomes`). Vor der Auflösung
+ * aufgerufen, mit den Zügen beider Seiten; die zurückgegebene Funktion nimmt die Ereignisse der Runde. Die Schiffe werden
+ * dafür bis zum Kampf über die Ereignisse verfolgt: Deploy, Manöver, Phasentausch, Verlegung per Befehl, Kurzsprung und
+ * was neu aufs Brett kommt.
+ */
+function trackFire(board: Board, turns: readonly { side: Side; admiral: AdmiralId; plan: TurnPlan }[]): (events: readonly RoundEvent[]) => void {
+  const key = ({ side, lane, slotIndex }: SlotRef) => `${side} ${lane} ${slotIndex}`;
+  /** Wer wo steht, je Kennung (`Slot.uid`, für neue Schiffe negativ). */
+  const at = new Map(board.lanes.flatMap((lane) => lane.occupiedSlots.map((slot) => [key({ side: lane.side, ...slotTarget(slot) }), slot.uid] as const)));
+  let fresh = 0;
+  const fire = turns.flatMap(({ side, admiral, plan }) =>
+    plan.fire.map((order) => {
+      const enemy = opposite(side);
+      const mode: Mode = "target" in order ? "ship" : "column";
+      const front = board.lane(enemy, "strike").slots["target" in order ? order.target.slotIndex : order.column]!;
+      const lane =
+        "target" in order
+          ? order.target.lane
+          : front.isOccupied
+            ? "strike"
+            : board.lane(enemy, "command").slots[order.column]!.isOccupied
+              ? "command"
+              : "empty";
+      orders.all[mode] += 1;
+      orders.admiral.get(admiral)![mode] += 1;
+      orders.lane[lane][mode] += 1;
+      return {
+        side,
+        mode,
+        shooter: { side, ...order.ship },
+        target: "target" in order ? { side: enemy, ...order.target } : null,
+        shooterId: 0,
+        targetId: 0,
+      };
+    }),
+  );
+  return (events) => {
+    const moved = new Set<number>();
+    const jumping = new Map<string, number>();
+    let bound = false;
+    const move = (from: SlotRef, to: SlotRef) => {
+      const id = at.get(key(from))!;
+      at.delete(key(from));
+      at.set(key(to), id);
+      moved.add(id);
+    };
+    for (const event of events) {
+      // Die Feuerbefehle greifen, sobald alle Schiffe stehen.
+      if (!bound && event.kind !== "deploy" && event.kind !== "pass") {
+        bound = true;
+        for (const order of fire) {
+          order.shooterId = at.get(key(order.shooter)) ?? 0;
+          order.targetId = order.target ? (at.get(key(order.target)) ?? 0) : 0;
+        }
+      }
+      switch (event.kind) {
+        case "deploy":
+          at.set(key({ side: event.side, ...event.target }), --fresh);
+          break;
+        case "decoy":
+          at.set(key(event.ship), --fresh);
+          break;
+        case "spawn":
+          at.set(key(event.ship), --fresh);
+          break;
+        case "maneuver":
+          move(event.ship, { side: event.side, ...event.to });
+          break;
+        case "swap": {
+          const [a, b] = [at.get(key(event.a))!, at.get(key(event.b))!];
+          at.set(key(event.a), b);
+          at.set(key(event.b), a);
+          moved.add(a).add(b);
+          break;
+        }
+        case "effect":
+          if (event.effect.type === "spawn") at.set(key(event.ship), --fresh);
+          if (event.effect.type === "move") move(event.ship, { side: event.ship.side, ...event.effect.to });
+          if (event.effect.type === "jump") {
+            jumping.set(key(event.ship), at.get(key(event.ship))!);
+            at.delete(key(event.ship));
+          }
+          break;
+        case "return":
+          at.set(key(event.ship), jumping.get(key(event.ship))!);
+          break;
+        case "destroyed":
+          at.delete(key(event.ship));
+          break;
+        case "attack":
+        case "fizzle": {
+          const shooter = at.get(key(event.attacker));
+          const order = fire.find((candidate) => candidate.side === event.attacker.side && candidate.shooterId === shooter);
+          if (!order) {
+            outcomes.swarm += 1;
+            if (event.kind === "fizzle") outcomes.swarmFizzled += 1;
+            break;
+          }
+          if (order.mode === "column") {
+            const column = outcomes.column;
+            column.shots += 1;
+            if (event.kind === "attack") {
+              column[event.taunt ? "taunted" : "hit"] += 1;
+              if (event.through) column.through += 1;
+            } else column["cleared" in event && event.cleared ? "cleared" : "void"] += 1;
+            break;
+          }
+          const ship = outcomes.ship;
+          ship.shots += 1;
+          const followed = moved.has(order.targetId);
+          if (followed) ship.moved += 1;
+          if (event.kind === "attack") {
+            ship[event.taunt ? "taunted" : "hit"] += 1;
+            if (followed && !event.taunt) ship.movedHit += 1;
+          } else if ("target" in event) {
+            if (event.covered) {
+              ship.covered += 1;
+              const front = at.get(key({ ...event.target!, lane: "strike" }))!;
+              outcomes.cover[followed ? "retreated" : front < 0 ? "arrived" : moved.has(front) ? "moved" : "held"] += 1;
+            } else ship[event.target ? "destroyed" : "gone"] += 1;
+          }
+          break;
+        }
+      }
+    }
+  };
+}
+
 /** Ersatzzug, falls die Zugprüfung einen Bot-Zug ablehnt: nur das Flaggschiff in Runde 1, sonst passen. */
 function fallback(round: number): TurnPlan {
   return { ships: [], command: null, maneuver: null, flagship: round === 1 ? { lane: "command", slotIndex: 2 } : null, power: null, mark: null, fire: [] };
@@ -110,18 +304,26 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
   const admiralOf = (of: Side) => admirals[side(0) === of ? 0 : 1];
   let firstKill: number | null = null;
   let flagshipFall: number | null = null;
+  let duelRounds = 0;
   while (match.winner === null && match.round <= ROUND_LIMIT) {
-    for (const player of match.players) {
+    const dueling = [side(0), side(1)].every(
+      (of) => match.board.flagship(of) !== null && match.board.ships(of).every((slot) => isFlagship(slot.card!) || isToken(slot.card!)),
+    );
+    const turns = match.players.map((player) => {
       const offer = player.draftOffer;
       if (offer) match.draft(player.seat, planBotDraft(match.botView(player.seat), offer));
       if (player.commandHand.length === 0) emptyCommandHand[player.seat]! += 1;
       for (const { id } of player.commandHand) card(id).held += 1;
-      const error = match.submit(player.seat, planBotTurn(match.board, match.botView(player.seat), match.round));
+      let plan = planBotTurn(match.board, match.botView(player.seat), match.round);
+      const error = match.submit(player.seat, plan);
       if (error) {
         errors.set(error, (errors.get(error) ?? 0) + 1);
-        match.submit(player.seat, fallback(match.round));
+        plan = fallback(match.round);
+        match.submit(player.seat, plan);
       }
-    }
+      return { side: player.side, admiral: admirals[player.seat]!, plan };
+    });
+    const fired = trackFire(match.board, turns);
     const round = match.round;
     // Wo die Flaggschiffe vor der Runde stehen: Zieht ein Traktorstrahl den Wächter davor weg, liegt eins frei.
     const flagships = [side(0), side(1)]
@@ -129,6 +331,14 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
       .filter((slot) => slot !== null)
       .map((slot) => ({ side: slot.lane.side, ...slotTarget(slot) }));
     const events = match.resolveRound();
+    fired(events);
+    if (dueling) {
+      duelRounds += 1;
+      for (const { plan } of turns) for (const order of plan.fire) duel.orders["target" in order ? "ship" : "column"] += 1;
+      duel.shots += events.filter((event) => event.kind === "attack" || event.kind === "fizzle").length;
+      duel.fizzled += events.filter((event) => event.kind === "fizzle").length;
+      duel.maneuvers += events.filter((event) => event.kind === "maneuver" || event.kind === "swap").length;
+    }
     const destroyed = events.filter((event) => event.kind === "destroyed").length;
     kills += destroyed;
     if (destroyed === 0) roundsWithoutKill += 1;
@@ -137,8 +347,9 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
     for (const event of events) {
       if (event.kind === "attack" || event.kind === "fizzle") shots.all += 1;
       if (event.kind === "fizzle") shots.fizzled += 1;
-      if (event.kind === "attack" && event.aimedAt && !event.taunt) shots.covered += 1;
+      if (event.kind === "attack" && event.through) shots.through += 1;
       if (event.kind === "attack" && event.taunt) shots.taunted += 1;
+      if (event.kind === "maneuver") evasion(event, events);
       if (event.kind === "destroyed" && isFlagship(shipById(event.ship.cardId))) flagshipFall ??= round;
       if (event.kind === "attack") combatDamage += event.amount;
       if (event.kind === "effect" && event.effect.type === "damage") commandDamage += event.effect.amount;
@@ -177,6 +388,7 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
       }
     }
   }
+  if (duelRounds > 0) duel.lengths.push(duelRounds);
   if (firstKill !== null) firstKills.push(firstKill);
   if (flagshipFall !== null) flagshipFalls.push(flagshipFall);
   for (const admiral of admirals) usage.get(admiral)!.games += 1;
@@ -212,6 +424,7 @@ function score(admiral: AdmiralId, opponent: AdmiralId): number {
 }
 
 const name = (id: AdmiralId) => `${id} (${ADMIRALS[id].flagship})`;
+const pairings = ADMIRAL_IDS.flatMap((row) => ADMIRAL_IDS.filter((column) => column !== row).map((column) => score(row, column)));
 console.log(`${GAMES} Partien je Paarung Bot gegen Bot, Sitze abwechselnd, ${games.length} insgesamt`);
 console.log("Siegquote der Zeile gegen die Spalte (Unentschieden und Patts halb):");
 console.log(`${"".padEnd(20)}${ADMIRAL_IDS.map((id) => id.padStart(11)).join("")}     gesamt`);
@@ -221,7 +434,9 @@ for (const row of ADMIRAL_IDS) {
   const total = others.reduce((sum, column) => sum + score(row, column), 0) / others.length;
   console.log(`${name(row).padEnd(20)}${cells.join("")}   ${(100 * total).toFixed(1).padStart(6)} %`);
 }
+console.log(`Paarungen: ${(100 * Math.min(...pairings)).toFixed(1)} bis ${(100 * Math.max(...pairings)).toFixed(1)} %`);
 console.log(`Runden: Ø ${average(rounds)}, Median ${quantile(0.5)}, p10 ${quantile(0.1)}, p90 ${quantile(0.9)}, max ${sorted.at(-1)}`);
+console.log(`Bis Runde 6 entschieden: ${percent(games.filter((game) => game.winner !== null && game.rounds <= 6).length, games.length)}`);
 console.log(
   `Unentschieden: ${games.filter((game) => game.winner === "draw").length}, Patts (Runde ${ROUND_LIMIT} erreicht): ${games.filter((game) => game.winner === null).length}`,
 );
@@ -233,9 +448,51 @@ for (const id of ADMIRAL_IDS) {
 }
 console.log(`Abschüsse pro Runde: ${(kills / totalRounds).toFixed(2)}, Runden ohne Abschuss: ${percent(roundsWithoutKill, totalRounds)}`);
 console.log(`Erster Abschuss: Ø Runde ${average(firstKills)}; erstes Flaggschiff fällt: Ø Runde ${average(flagshipFalls)}`);
+const { column, ship } = outcomes;
 console.log(
-  `Schüsse im Kampf: ${(shots.all / totalRounds).toFixed(2)} je Runde, davon verpufft ${percent(shots.fizzled, shots.all)}, ` +
-    `von Deckung abgefangen ${percent(shots.covered, shots.all)}, von Ablenkung gezogen ${percent(shots.taunted, shots.all)}`,
+  `Schüsse im Kampf: ${(shots.all / totalRounds).toFixed(2)} je Runde, davon verpufft ${percent(shots.fizzled, shots.all)} ` +
+    `(Spalte ins Leere ${percent(column.void, shots.all)}, Spalte nach Abschuss ${percent(column.cleared, shots.all)}, ` +
+    `Schiff gedeckt ${percent(ship.covered, shots.all)}, Schiff schon zerstört ${percent(ship.destroyed, shots.all)}, ` +
+    `Schiff weg ${percent(ship.gone, shots.all)}, Schwarmangriff ${percent(outcomes.swarmFizzled, shots.all)}), ` +
+    `durchgegangen ${percent(shots.through, shots.all)}, von Ablenkung gezogen ${percent(shots.taunted, shots.all)}`,
+);
+const shipShare = ({ ship, column }: { ship: number; column: number }) => `${percent(ship, ship + column)} von ${ship + column}`;
+console.log(
+  `Feuerbefehle: ${((orders.all.ship + orders.all.column) / totalRounds).toFixed(2)} je Runde, Schiffsfeuer ${shipShare(orders.all)}; ` +
+    `je Admiral ${ADMIRAL_IDS.map((id) => `${id} ${shipShare(orders.admiral.get(id)!)}`).join(", ")}`,
+);
+console.log(
+  `  Schiffsfeuer je Lane des Ziels beim Planen (Spaltenfeuer: vorderstes Schiff der Spalte): Strike ${shipShare(orders.lane.strike)}, ` +
+    `Command ${shipShare(orders.lane.command)}; auf eine leere Spalte ${orders.lane.empty.column}`,
+);
+console.log(
+  `  Spaltenfeuer: ${column.shots} Schüsse, Treffer ${percent(column.hit, column.shots)} (durchgegangen ${percent(column.through, column.shots)}), ` +
+    `von Ablenkung gezogen ${percent(column.taunted, column.shots)}, ins Leere ${percent(column.void, column.shots)}, nach Abschuss ${percent(column.cleared, column.shots)}`,
+);
+console.log(
+  `  Schiffsfeuer: ${ship.shots} Schüsse, Treffer ${percent(ship.hit, ship.shots)}, von Ablenkung gezogen ${percent(ship.taunted, ship.shots)}, ` +
+    `gedeckt ${percent(ship.covered, ship.shots)} (Deckung stand schon und hielt ${percent(outcomes.cover.held, ship.covered)}, ` +
+    `Ziel zog in Deckung ${percent(outcomes.cover.retreated, ship.covered)}, neues Schiff davor ${percent(outcomes.cover.arrived, ship.covered)}, ` +
+    `Schiff zog davor ${percent(outcomes.cover.moved, ship.covered)}), ` +
+    `schon zerstört ${percent(ship.destroyed, ship.shots)}, weg ${percent(ship.gone, ship.shots)}`,
+);
+console.log(
+  `  Schiffsfeuer auf ein Ziel, das vor dem Kampf den Slot wechselte: ${ship.moved}, davon getroffen ${percent(ship.movedHit, ship.moved)}; ` +
+    `Schwarmangriff ohne Feuerbefehl: ${outcomes.swarm} Schüsse`,
+);
+const duelRounds = duel.lengths.reduce((sum, value) => sum + value, 0);
+console.log(
+  `Flaggschiff-Duell (beide nur noch mit Flaggschiff): in ${percent(duel.lengths.length, games.length)} der Partien, ` +
+    `Ø ${average(duel.lengths)} Runden, max ${Math.max(0, ...duel.lengths)}; darin Schiffsfeuer ${shipShare(duel.orders)} Befehlen, ` +
+    `verpufft ${percent(duel.fizzled, duel.shots)} der Schüsse, Grundmanöver ${(duel.maneuvers / Math.max(1, duelRounds)).toFixed(2)} je Runde`,
+);
+console.log(
+  `Grundmanöver: ${(maneuvers.all / totalRounds).toFixed(2)} je Runde (${percent(maneuvers.all, 2 * totalRounds)} der Züge), ` +
+    `davon in eine andere Spalte ${percent(maneuvers.evasions, maneuvers.all)}; ` +
+    `auf deren alte Spalte schoss der Gegner bei ${percent(maneuvers.targeted, maneuvers.evasions)}, ` +
+    `${percent(maneuvers.dodged, maneuvers.evasions)} ließen Schüsse ins Leere laufen ` +
+    `(${(maneuvers.voided / Math.max(1, maneuvers.dodged)).toFixed(2)} je Ausweichen), ` +
+    `${percent(maneuvers.struck, maneuvers.evasions)} wurden in der neuen Spalte trotzdem getroffen`,
 );
 console.log(`Schaden durch Befehle: ${percent(commandDamage, commandDamage + combatDamage)} (Nennwerte, ohne Eigenschaden)`);
 console.log(`Befehle ohne Wirkung: ${percent(commandsWithoutEffect, commands)} (noEffect und Fehlschüsse)`);

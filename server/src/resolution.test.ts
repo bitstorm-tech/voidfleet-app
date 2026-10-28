@@ -3,7 +3,7 @@ import { ABILITY_VALUES } from "../../shared/admirals.ts";
 import { Board, type LaneType, opposite, overdriveBonus, type Side, type Slot } from "../../shared/board.ts";
 import { type CommandId, commandById, type ShipId, shipById } from "../../shared/cards.ts";
 import { canMark, railgunFires } from "../../shared/powers.ts";
-import type { RoundEvent, SlotTarget } from "../../shared/protocol.ts";
+import type { FireOrder, RoundEvent, SlotTarget } from "../../shared/protocol.ts";
 import {
   type Commander,
   type PlayedCommand,
@@ -58,13 +58,21 @@ function fizzlesBy(events: RoundEvent[], side: Side) {
   return events.flatMap((event) => (event.kind === "fizzle" && event.attacker.side === side ? [event] : []));
 }
 
-/** Feuerbefehl ohne `resolveTurns`: `shooter` feuert im Kampf auf das Schiff, das jetzt in `target` steht (`Slot.aim`). */
+/** Spaltenfeuer ohne `resolveTurns`: `shooter` feuert im Kampf auf die Spalte, in der `target` jetzt steht (`Slot.aim`). */
 function aim(shooter: Slot, target: Slot): void {
-  shooter.aim = target.uid;
+  shooter.aim = { column: target.index };
 }
 
-/** Feuerbefehl im Zug: das eigene Schiff in `ship` auf das gegnerische in `target`, beides Slots beim Planen. */
-const fire = (ship: SlotTarget, target: SlotTarget) => ({ ship, target });
+/** Schiffsfeuer ohne `resolveTurns`: `shooter` feuert im Kampf auf das Schiff in `target`, wo es dann steht. */
+function lock(shooter: Slot, target: Slot): void {
+  shooter.aim = { uid: target.uid };
+}
+
+/** Spaltenfeuer im Zug: das eigene Schiff in `ship` (Slot beim Planen) auf die Spalte des gegnerischen Slots `target`. */
+const fire = (ship: SlotTarget, target: SlotTarget): FireOrder => ({ ship, column: target.slotIndex });
+
+/** Schiffsfeuer im Zug: das eigene Schiff in `ship` (Slot beim Planen) auf das gegnerische Schiff in `target`. */
+const fireAt = (ship: SlotTarget, target: SlotTarget): FireOrder => ({ ship, target });
 
 describe("Fähigkeiten beim Deploy", () => {
   test("der Titan Carrier setzt eine Drohne in den nächsten freien Slot seiner Lane", () => {
@@ -208,16 +216,16 @@ describe("Manöver", () => {
     expect(to.maneuvered).toBe(false);
   });
 
-  test("die Deckung nach dem Manöver gilt schon in derselben Runde", () => {
+  test("wer per Manöver vor ein Schiff zieht, steht vorn in dessen Spalte und fängt den Schuss ab", () => {
     const board = new Board();
     const drone = place(board, "player", "command", 2, "repair_drone");
     const cruiser = place(board, "player", "command", 4, "horizon_cruiser");
     aim(place(board, "enemy", "strike", 0, "void_interceptor"), drone);
     const front = board.lane("player", "strike").slots[2]!;
     resolveManeuver(cruiser, front, []);
-    // Der Jäger zielt auf die Drohne; jetzt deckt der Kreuzer sie und fängt den Schuss ab.
+    // Der Jäger zielt auf die Spalte der Drohne; jetzt steht der Kreuzer davor und fängt den Schuss ab.
     const attacks = round(board).filter((event) => event.kind === "attack");
-    expect(attacks.map((event) => [event.attacker.side, event.target.cardId, event.aimedAt?.cardId])).toEqual([["enemy", "horizon_cruiser", "repair_drone"]]);
+    expect(attacks.map((event) => [event.attacker.side, event.target.cardId])).toEqual([["enemy", "horizon_cruiser"]]);
     expect(drone.hp).toBe(hp("repair_drone"));
   });
 });
@@ -237,7 +245,7 @@ describe("Combat", () => {
     expect(events.filter((event) => event.kind === "destroyed")).toHaveLength(2);
   });
 
-  test("ein Schuss auf ein Ziel, das ein eigener Schuss schon zerstört hat, verpufft", () => {
+  test("ein Schuss auf eine Spalte, in der kein Schiff mehr steht, verpufft", () => {
     const board = new Board();
     const shooters = [0, 1, 2].map((index) => place(board, "player", "strike", index, "void_interceptor"));
     const weak = place(board, "enemy", "strike", 0, "horizon_cruiser");
@@ -252,11 +260,7 @@ describe("Combat", () => {
       [2, 3],
     ]);
     expect(fizzlesBy(events, "player")).toEqual([
-      {
-        kind: "fizzle",
-        attacker: { side: "player", lane: "strike", slotIndex: 1, cardId: "void_interceptor" },
-        target: { side: "enemy", lane: "strike", slotIndex: 0, cardId: "horizon_cruiser" },
-      },
+      { kind: "fizzle", attacker: { side: "player", lane: "strike", slotIndex: 1, cardId: "void_interceptor" }, column: 0, cleared: true },
     ]);
     expect(weak.isOccupied).toBe(false);
     expect(other.hp).toBe(hp("horizon_cruiser") - 3);
@@ -281,11 +285,12 @@ describe("Combat", () => {
     expect(tough.hp).toBe(hp("titan_carrier") - 3);
   });
 
-  test("der Schuss folgt seinem Ziel; hat es das Brett verlassen, verpufft er", () => {
+  test("die Spalte bleibt: Zieht das Ziel weg, trifft der Schuss, was jetzt dort steht, sonst verpufft er", () => {
     const board = new Board();
     const cruiser = place(board, "player", "strike", 0, "horizon_cruiser");
     const raider = place(board, "player", "strike", 1, "scrap_raider");
     const mover = place(board, "enemy", "strike", 2, "void_interceptor");
+    const behind = place(board, "enemy", "command", 2, "signal_booster");
     const gone = place(board, "enemy", "strike", 4, "void_interceptor");
     aim(cruiser, mover);
     aim(raider, gone);
@@ -293,11 +298,14 @@ describe("Combat", () => {
     resolveManeuver(mover, to, []);
     gone.clear();
     const events = round(board);
-    expect(attacksBy(events, "player")).toMatchObject([{ attacker: { cardId: "horizon_cruiser" }, target: { slotIndex: 5, cardId: "void_interceptor" } }]);
-    expect(fizzlesBy(events, "player")).toEqual([{ kind: "fizzle", attacker: shipRef(raider), target: null }]);
+    expect(attacksBy(events, "player")).toEqual([
+      { kind: "attack", attacker: shipRef(cruiser), target: shipRef(behind), amount: 2, after: { hp: hp("signal_booster") - 2, shield: 0 } },
+    ]);
+    expect(fizzlesBy(events, "player")).toEqual([{ kind: "fizzle", attacker: shipRef(raider), column: 4 }]);
+    expect(to.hp).toBe(hp("void_interceptor"));
   });
 
-  test("die Deckung hält die Runde über: Ist das deckende Schiff schon zerstört, verpufft der Schuss auf das Schiff dahinter", () => {
+  test("Durchbruch: Fällt das vordere Schiff einer Spalte, trifft der nächste Schuss das Schiff dahinter", () => {
     const board = new Board();
     const first = place(board, "player", "strike", 0, "void_interceptor");
     const second = place(board, "player", "strike", 1, "void_interceptor");
@@ -306,12 +314,16 @@ describe("Combat", () => {
     front.hp = 3;
     aim(first, front);
     aim(second, back);
-    const fizzle = { kind: "fizzle" as const, attacker: shipRef(second), target: shipRef(front), aimedAt: shipRef(back) };
+    const expected = [
+      { attacker: shipRef(first), target: shipRef(front) },
+      { attacker: shipRef(second), target: shipRef(back), through: true },
+    ];
     const events = round(board);
-    expect(attacksBy(events, "player")).toHaveLength(1);
-    expect(fizzlesBy(events, "player")).toEqual([fizzle]);
+    expect(attacksBy(events, "player")).toMatchObject(expected);
+    expect(attacksBy(events, "player")[0]).not.toHaveProperty("through");
+    expect(fizzlesBy(events, "player")).toEqual([]);
     expect(front.isOccupied).toBe(false);
-    expect(back.hp).toBe(hp("signal_booster"));
+    expect(back.hp).toBe(hp("signal_booster") - 3);
   });
 
   test("ein im selben Kampf zerstörtes Schiff feuert noch, weil die Seiten gleichzeitig schießen", () => {
@@ -337,7 +349,7 @@ describe("Combat", () => {
     expect(sides).toEqual(["player", "enemy", "player", "enemy", "player"]);
   });
 
-  test("ein Command-Schiff ist nur gedeckt, wenn im Strike-Slot davor ein Schiff steht; die Deckung fängt den Schuss ab", () => {
+  test("ein Schuss auf eine Spalte trifft zuerst das Strike-Schiff, steht dort keins, das Command-Schiff", () => {
     const board = new Board();
     const first = place(board, "player", "strike", 0, "horizon_cruiser");
     const second = place(board, "player", "strike", 1, "horizon_cruiser");
@@ -354,7 +366,6 @@ describe("Combat", () => {
         target: shipRef(front),
         amount: 2,
         after: { hp: hp("titan_carrier") - 2, shield: 0 },
-        aimedAt: shipRef(covered),
       },
       { kind: "attack", attacker: shipRef(second), target: shipRef(exposed), amount: 2, after: { hp: hp("signal_booster") - 2, shield: 0 } },
     ]);
@@ -744,15 +755,16 @@ describe("Flaggschiffe", () => {
     expect(events).toContainEqual({ kind: "command", side: "player", cardId: "emergency_shields", target: { side: "player", ...at("strike", 1) } });
     expect(events).toContainEqual({ kind: "noEffect", side: "enemy", cardId: "barrage" });
     expect(attacksBy(events, "player").map((event) => event.attacker.cardId)).toEqual(["iron_dreadnought", "mirage"]);
+    // Der Titan Carrier feuert auf Spalte 1: Dort steht jetzt der Dreadnought und fängt den Schuss mit dem Schild ab.
+    expect(attacksBy(events, "enemy")).toMatchObject([{ target: { lane: "strike", slotIndex: 1, cardId: "iron_dreadnought" } }]);
     expect(board.lane("player", "strike").slots[1]!.state).toEqual({
       cardId: "iron_dreadnought",
       hp: hp("iron_dreadnought"),
-      shield: 2,
+      shield: 1,
       scrapBonus: 0,
       marked: false,
     });
-    // Der Feuerbefehl des Titan Carriers folgt der Mirage in die Command-Lane, wo sie ungedeckt steht.
-    expect(board.lane("player", "command").slots[4]!.state).toEqual({ cardId: "mirage", hp: 8, shield: 0, scrapBonus: 0, marked: false });
+    expect(board.lane("player", "command").slots[4]!.state).toEqual({ cardId: "mirage", hp: 9, shield: 0, scrapBonus: 0, marked: false });
   });
 
   test("Railgun: Die Markierung kommt nach den Deploys, die Railgun feuert in der nächsten Runde vor allen Schüssen", () => {
@@ -881,7 +893,7 @@ describe("Admiralsfähigkeiten", () => {
     expect(covered.hp).toBe(hp("signal_booster"));
   });
 
-  test("Schwarmangriff: Die Drohnen feuern auch ohne Feuerbefehl auf das Ziel, durch Deckung, je Treffer +1; ist es zerstört, verpufft der Rest", () => {
+  test("Schwarmangriff: Die Drohnen feuern auch ohne Feuerbefehl auf das Ziel, durch Deckung, je Treffer +2; ist es zerstört, verpufft der Rest", () => {
     const board = new Board();
     place(board, "player", "strike", 0, "drone");
     place(board, "player", "strike", 1, "drone");
@@ -893,13 +905,19 @@ describe("Admiralsfähigkeiten", () => {
       fire: [fire(at("strike", 1), at("strike", 3)), fire(at("strike", 2), at("strike", 3))],
     });
     expect(attacksBy(events, "player").map((event) => [event.attacker.cardId, event.target.cardId, event.amount, event.swarm ?? false])).toEqual([
-      ["drone", "signal_booster", 2, true],
+      ["drone", "signal_booster", 3, true],
       ["horizon_cruiser", "titan_carrier", 2, false],
     ]);
-    expect(fizzlesBy(events, "player")).toMatchObject([{ attacker: { slotIndex: 1, cardId: "drone" }, target: { cardId: "signal_booster" } }]);
+    expect(fizzlesBy(events, "player")).toEqual([
+      {
+        kind: "fizzle",
+        attacker: { side: "player", lane: "strike", slotIndex: 1, cardId: "drone" },
+        target: { side: "enemy", lane: "command", slotIndex: 3, cardId: "signal_booster" },
+      },
+    ]);
   });
 
-  test("Trugbild: erscheint nach den Deploys im gewählten Strike-Slot, deckt den Slot dahinter und fängt die Schüsse darauf ab", () => {
+  test("Trugbild: erscheint nach den Deploys im gewählten Strike-Slot und fängt die Schüsse auf seine Spalte ab", () => {
     const board = new Board();
     const hidden = place(board, "player", "command", 3, "repair_drone");
     place(board, "enemy", "strike", 0, "void_interceptor");
@@ -911,10 +929,25 @@ describe("Admiralsfähigkeiten", () => {
       { kind: "power", side: "player", power: "decoy", target: { side: "player", ...at("strike", 3) } },
       { kind: "decoy", ship: decoy },
     ]);
-    expect(attacksBy(events, "enemy")).toMatchObject([{ target: decoy, aimedAt: shipRef(hidden) }]);
+    expect(attacksBy(events, "enemy")).toMatchObject([{ target: decoy }]);
+    expect(attacksBy(events, "enemy")[0]).not.toHaveProperty("through");
     expect(events).toContainEqual({ kind: "destroyed", ship: decoy });
     expect(events.some((event) => event.kind === "vanish")).toBe(false);
     expect(hidden.hp).toBe(hp("repair_drone"));
+  });
+
+  test("Flaggschiffe schießen am Trugbild vorbei auf das Schiff dahinter; steht keins dahinter, treffen sie das Trugbild", () => {
+    const cases = [
+      ["repair_drone", { lane: "command", cardId: "repair_drone" }],
+      [null, { lane: "strike", cardId: "decoy" }],
+    ] as const;
+    for (const [behind, target] of cases) {
+      const board = new Board();
+      const decoy = place(board, "player", "strike", 3, "decoy");
+      if (behind) place(board, "player", "command", 3, behind);
+      aim(place(board, "enemy", "strike", 0, "vanguard"), decoy);
+      expect(attacksBy(round(board), "enemy")).toMatchObject([{ target: { slotIndex: 3, ...target } }]);
+    }
   });
 
   test("Trugbild: verschwindet am Rundenende und zählt als Token zu keiner Grenze", () => {
@@ -980,7 +1013,8 @@ describe("Admiralsfähigkeiten", () => {
     place(board, "enemy", "strike", 3, "scrap_raider");
     const events = resolve(
       board,
-      { power: { id: "focus_fire", target: at("strike", 3) }, fire: [fire(at("strike", 0), at("strike", 3))] },
+      // Gezielt wird auf die Spalte, in die der Raider ausweicht.
+      { power: { id: "focus_fire", target: at("strike", 3) }, fire: [fire(at("strike", 0), at("strike", 5))] },
       { maneuver: { ship: at("strike", 3), destination: at("strike", 5) } },
     );
     expect(attacksBy(events, "player")).toMatchObject([{ target: { lane: "strike", slotIndex: 5, cardId: "scrap_raider" }, amount: 3, focus: true }]);
@@ -1033,9 +1067,118 @@ describe("Feuerbefehle", () => {
       { fire: [fire(at("strike", 0), at("strike", 3)), fire(at("strike", 1), at("command", 3))] },
       { fire: [fire(at("strike", 3), at("strike", 0)), fire(at("strike", 4), at("strike", 1))] },
     );
-    expect(attacksBy(events, "player")).toHaveLength(1);
-    expect(fizzlesBy(events, "player")).toHaveLength(1);
+    expect(attacksBy(events, "player").map((event) => event.through ?? false)).toEqual([false, true]);
+    expect(fizzlesBy(events, "player")).toHaveLength(0);
     expect(attacksBy(events, "enemy")).toHaveLength(2);
+  });
+});
+
+describe("Schiffsfeuer", () => {
+  test("Der Schuss folgt seinem Ziel, wohin es auch manövriert; Spaltenfeuer trifft, was in der Spalte bleibt", () => {
+    const board = new Board();
+    const hunter = place(board, "player", "strike", 0, "horizon_cruiser");
+    const gunner = place(board, "player", "strike", 1, "horizon_cruiser");
+    const mover = place(board, "enemy", "strike", 2, "void_interceptor");
+    const behind = place(board, "enemy", "command", 2, "signal_booster");
+    lock(hunter, mover);
+    aim(gunner, mover);
+    const to = board.lane("enemy", "strike").slots[5]!;
+    resolveManeuver(mover, to, []);
+    const events = round(board);
+    expect(attacksBy(events, "player").map((event) => [event.attacker.slotIndex, event.target.cardId, event.target.slotIndex])).toEqual([
+      [0, "void_interceptor", 5],
+      [1, "signal_booster", 2],
+    ]);
+    expect(to.hp).toBe(hp("void_interceptor") - 2);
+    expect(behind.hp).toBe(hp("signal_booster") - 2);
+  });
+
+  test("Steht vor dem Ziel ein Schiff, verpufft der Schuss; die Deckung bleibt unberührt", () => {
+    const board = new Board();
+    const shooter = place(board, "player", "strike", 0, "horizon_cruiser");
+    const front = place(board, "enemy", "strike", 3, "titan_carrier");
+    const covered = place(board, "enemy", "command", 3, "signal_booster");
+    lock(shooter, covered);
+    const events = round(board);
+    expect(attacksBy(events, "player")).toEqual([]);
+    expect(fizzlesBy(events, "player")).toEqual([{ kind: "fizzle", attacker: shipRef(shooter), target: shipRef(covered), covered: true }]);
+    expect(front.hp).toBe(hp("titan_carrier"));
+    expect(covered.hp).toBe(hp("signal_booster"));
+  });
+
+  test("Die Deckung zählt im Moment des Schusses: Ist sie im selben Kampf schon gefallen, trifft er", () => {
+    // Strike-Schiffe feuern vor Command-Schiffen, jeweils in Slot-Reihenfolge.
+    const board = new Board();
+    const early = place(board, "player", "strike", 0, "horizon_cruiser");
+    const breaker = place(board, "player", "strike", 1, "void_interceptor");
+    const late = place(board, "player", "command", 0, "horizon_cruiser");
+    const front = place(board, "enemy", "strike", 3, "scrap_raider");
+    const behind = place(board, "enemy", "command", 3, "signal_booster");
+    front.hp = 3;
+    lock(early, behind);
+    aim(breaker, front);
+    lock(late, behind);
+    const events = round(board);
+    expect(fizzlesBy(events, "player")).toEqual([{ kind: "fizzle", attacker: shipRef(early), target: shipRef(behind), covered: true }]);
+    expect(attacksBy(events, "player").map((event) => [event.attacker.cardId, event.target.cardId, event.through ?? false])).toEqual([
+      ["void_interceptor", "scrap_raider", false],
+      ["horizon_cruiser", "signal_booster", false],
+    ]);
+    expect(behind.hp).toBe(hp("signal_booster") - 2);
+  });
+
+  test("Überschuss verpufft: Ist das Ziel schon zerstört, geht der Schuss nicht auf das Schiff dahinter", () => {
+    const board = new Board();
+    const first = place(board, "player", "strike", 0, "void_interceptor");
+    const second = place(board, "player", "strike", 1, "void_interceptor");
+    const front = place(board, "enemy", "strike", 2, "horizon_cruiser");
+    const behind = place(board, "enemy", "command", 2, "signal_booster");
+    front.hp = 3;
+    const aimed = shipRef(front);
+    lock(first, front);
+    lock(second, front);
+    const events = round(board);
+    expect(fizzlesBy(events, "player")).toEqual([{ kind: "fizzle", attacker: shipRef(second), target: aimed }]);
+    expect(front.isOccupied).toBe(false);
+    expect(behind.hp).toBe(hp("signal_booster"));
+  });
+
+  test("Ist das Ziel nicht mehr auf dem Brett, etwa im Kurzsprung, verpufft der Schuss", () => {
+    const board = new Board();
+    place(board, "player", "strike", 3, "vanguard");
+    place(board, "enemy", "strike", 0, "horizon_cruiser");
+    const events = resolve(board, { command: order("micro_jump", at("strike", 3)) }, { fire: [fireAt(at("strike", 0), at("strike", 3))] });
+    expect(fizzlesBy(events, "enemy")).toEqual([{ kind: "fizzle", attacker: { side: "enemy", ...at("strike", 0), cardId: "horizon_cruiser" }, target: null }]);
+  });
+
+  test("Ein Trugbild deckt gegen Schiffsfeuer, nur nicht gegen Flaggschiffe", () => {
+    const board = new Board();
+    place(board, "player", "strike", 3, "decoy");
+    const hidden = place(board, "player", "command", 3, "repair_drone");
+    const interceptor = place(board, "enemy", "strike", 0, "void_interceptor");
+    const vanguard = place(board, "enemy", "strike", 1, "vanguard");
+    lock(interceptor, hidden);
+    lock(vanguard, hidden);
+    const events = round(board);
+    expect(fizzlesBy(events, "enemy")).toEqual([{ kind: "fizzle", attacker: shipRef(interceptor), target: shipRef(hidden), covered: true }]);
+    expect(attacksBy(events, "enemy").map((event) => [event.attacker.cardId, event.target.cardId])).toEqual([["vanguard", "repair_drone"]]);
+  });
+
+  test("Phasentausch: Schiffsfeuer folgt der Mirage, Spaltenfeuer trifft den Partner, der jetzt dort steht", () => {
+    const board = new Board();
+    place(board, "player", "strike", 1, "mirage");
+    place(board, "player", "strike", 4, "iron_dreadnought");
+    place(board, "enemy", "strike", 0, "horizon_cruiser");
+    place(board, "enemy", "strike", 2, "horizon_cruiser");
+    const events = resolve(
+      board,
+      { maneuver: { ship: at("strike", 1), destination: at("strike", 4) } },
+      { fire: [fireAt(at("strike", 0), at("strike", 1)), fire(at("strike", 2), at("strike", 1))] },
+    );
+    expect(attacksBy(events, "enemy").map((event) => [event.target.cardId, event.target.slotIndex])).toEqual([
+      ["mirage", 4],
+      ["iron_dreadnought", 1],
+    ]);
   });
 });
 
@@ -1110,7 +1253,7 @@ describe("Umgruppierung", () => {
     expect(board.jumping).toEqual([]);
   });
 
-  test("Kurzsprung: Das springende Flaggschiff entgeht tödlichem Schaden, Schüsse darauf verpuffen, das Schiff dahinter verliert die Deckung", () => {
+  test("Kurzsprung: Das springende Flaggschiff entgeht tödlichem Schaden, die Schüsse auf seine Spalte treffen das Schiff dahinter", () => {
     const board = new Board();
     const vanguard = place(board, "player", "strike", 3, "vanguard");
     vanguard.hp = 1;
@@ -1124,9 +1267,12 @@ describe("Umgruppierung", () => {
     );
     expect(board.flagship("player")).toBe(vanguard);
     expect(vanguard.hp).toBe(1);
-    expect(attacksBy(events, "enemy")).toMatchObject([{ target: { lane: "command", slotIndex: 3 }, amount: 2 }]);
-    expect(fizzlesBy(events, "enemy")).toMatchObject([{ attacker: { slotIndex: 4 }, target: null }]);
-    expect(behind.hp).toBe(hp("signal_booster") - 1 - 2);
+    expect(attacksBy(events, "enemy")).toMatchObject([
+      { target: { lane: "command", slotIndex: 3 }, amount: 2 },
+      { target: { lane: "command", slotIndex: 3 }, amount: 3 },
+    ]);
+    expect(fizzlesBy(events, "enemy")).toEqual([]);
+    expect(behind.isOccupied).toBe(false);
   });
 
   test("Kurzsprung: Die Pendulum verliert ihren Schuss, die Markierung ist verbraucht", () => {
@@ -1171,7 +1317,7 @@ describe("Taktik", () => {
     ]);
   });
 
-  test("Ablenkung: Das Schiff zieht die Schüsse mit Feuerbefehl auf sich, solange es steht; danach gelten wieder die Feuerbefehle", () => {
+  test("Ablenkung: Das Schiff zieht die Schüsse mit Feuerbefehl auf sich, auch Schiffsfeuer, solange es steht; danach gelten wieder die Feuerbefehle", () => {
     const board = new Board();
     const decoy = place(board, "player", "strike", 0, "horizon_cruiser");
     decoy.hp = 3;
@@ -1182,15 +1328,13 @@ describe("Taktik", () => {
     const events = resolve(
       board,
       { command: order("draw_fire", at("strike", 0)) },
-      { fire: [fire(at("strike", 3), at("strike", 4)), fire(at("strike", 4), at("strike", 4))] },
+      { fire: [fireAt(at("strike", 3), at("strike", 4)), fire(at("strike", 4), at("strike", 4))] },
     );
     expect(effectsOf(events, "draw_fire")).toMatchObject([{ ship: { slotIndex: 0 }, effect: { type: "taunt" } }]);
     // Der Jäger in Slot 3 fällt auf die Ablenkung herein und zerstört sie; der Kreuzer trifft danach sein Ziel. Wer keinen Feuerbefehl hat, feuert nicht.
-    expect(
-      attacksBy(events, "enemy").map((event) => [event.attacker.slotIndex, event.target.slotIndex, event.aimedAt?.slotIndex, event.taunt ?? false]),
-    ).toEqual([
-      [3, 0, 4, true],
-      [4, 4, undefined, false],
+    expect(attacksBy(events, "enemy").map((event) => [event.attacker.slotIndex, event.target.slotIndex, event.taunt ?? false])).toEqual([
+      [3, 0, true],
+      [4, 4, false],
     ]);
     expect(decoy.isOccupied).toBe(false);
     expect(drone.hp).toBe(hp("repair_drone") - 2);
@@ -1295,8 +1439,8 @@ describe("Verstärkung", () => {
     place(swarming, "enemy", "strike", 2, "horizon_cruiser");
     const events = resolve(swarming, { command: order("drone_squadron"), power: { id: "swarm_strike", target: at("strike", 2) } });
     expect(attacksBy(events, "player").map((event) => [event.attacker.cardId, event.amount, event.swarm])).toEqual([
-      ["drone", 2, true],
-      ["drone", 2, true],
+      ["drone", 3, true],
+      ["drone", 3, true],
     ]);
   });
 });

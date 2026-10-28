@@ -23,6 +23,9 @@ export interface SlotState {
 /** Serialisierbarer Brettzustand, je Seite und Lane die Slots in Index-Reihenfolge. */
 export type BoardSnapshot = Record<Side, Record<LaneType, (SlotState | null)[]>>;
 
+/** Ein gebundener Feuerbefehl (`Slot.aim`, siehe `FireOrder`): Spaltenfeuer auf eine Spalte der Gegnerseite oder Schiffsfeuer auf die Kennung (`Slot.uid`) eines gegnerischen Schiffs. */
+export type Aim = { column: number } | { uid: number };
+
 export function opposite(side: Side): Side {
   return side === "player" ? "enemy" : "player";
 }
@@ -99,11 +102,11 @@ export class Slot {
   taunting = false;
   /** Gegnerische Befehle, die dieses Schiff erfasst haben (Wärmesucher, Traktorstrahl); sie folgen ihm. */
   locks: readonly CommandId[] = NO_LOCKS;
-  /** Feuerbefehl dieser Runde: die Kennung (`uid`) des gegnerischen Schiffs, auf das es im Kampf feuert; null: Es feuert nicht. */
-  aim: number | null = null;
+  /** Feuerbefehl dieser Runde, worauf es im Kampf feuert; null: Es feuert nicht. */
+  aim: Aim | null = null;
   /**
    * Kennung des Schiffs, solange es auf dem Brett steht (`Board.nextUid`), 0 im leeren Slot; zieht mit ihm um. Gehört
-   * nicht in den Snapshot: Feuerbefehle verweisen darauf nur innerhalb einer Runde.
+   * nicht in den Snapshot: Schiffsfeuer verweist darauf nur innerhalb einer Runde.
    */
   uid = 0;
 
@@ -353,13 +356,14 @@ export class Board {
   }
 
   /**
-   * Schutzregel: ein Command-Schiff ist gedeckt, solange im Strike-Slot davor ein Schiff steht. `seeThrough`: so
-   * sehen es Flaggschiffe, die Trugbilder durchschauen; ein Trugbild davor deckt dann nicht.
+   * Schutzregel: ein Command-Schiff ist gedeckt, solange im Strike-Slot davor ein Schiff steht; ein zerstörtes deckt
+   * nicht mehr, auch wenn es bis zum Cleanup auf dem Brett liegt. `seeThrough`: so sehen es Flaggschiffe, die
+   * Trugbilder durchschauen; ein Trugbild davor deckt dann nicht.
    */
   isExposed(slot: Slot, seeThrough = false): boolean {
     if (slot.lane.type === "strike") return true;
     const front = this.lane(slot.lane.side, "strike").slots[slot.index]!;
-    return !front.isOccupied || (seeThrough && front.card!.id === "decoy");
+    return !front.isOccupied || front.isDestroyed || (seeThrough && front.card!.id === "decoy");
   }
 
   /** Schiffe einer Seite, die beschossen werden können, in `ships`-Reihenfolge; mit `seeThrough` ist ein Trugbild weder Ziel noch Deckung. */

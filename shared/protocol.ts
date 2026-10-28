@@ -54,14 +54,14 @@ export interface TurnPlan {
 
 /**
  * Ein Feuerbefehl: `ship` ist ein eigenes Kampfschiff (Slot beim Planen, auch eines, das in dieser Runde landet, nicht
- * das Schiff des Grundmanövers), `target` ein gegnerisches Schiff, das beim Planen dort steht, auch ein gedecktes. Beide
- * folgen ihrem Schiff, wenn es sich bewegt. Steht das Ziel zu Kampfbeginn gedeckt, fängt das Schiff davor den Schuss ab;
- * ist es schon zerstört oder nicht mehr auf dem Brett, verpufft der Schuss.
+ * das Schiff des Grundmanövers); der Befehl folgt ihm, wenn es sich bewegt. Ziel ist entweder eine Spalte oder ein
+ * Schiff der Gegnerseite:
+ * - Spaltenfeuer (`column`, Slot-Index, auch eine leere Spalte): Die Spalte bleibt. Der Schuss trifft das vorderste
+ *   Schiff, das dort noch steht, erst Strike, dann Command; steht dort keins mehr, verpufft er.
+ * - Schiffsfeuer (`target`, Slot des Schiffs beim Planen, auch eines gedeckten): Der Schuss folgt dem Schiff und
+ *   verpufft, wenn es dann gedeckt, schon zerstört oder nicht mehr auf dem Brett ist.
  */
-export interface FireOrder {
-  ship: SlotTarget;
-  target: SlotTarget;
-}
+export type FireOrder = { ship: SlotTarget; column: number } | { ship: SlotTarget; target: SlotTarget };
 
 /** Ein Schiff an einer Stelle des Bretts; die Karte steht dabei, weil der Slot danach leer sein kann. */
 export interface ShipRef extends SlotRef {
@@ -163,6 +163,13 @@ export type CommandEffect =
 export type AbilityEffect = Extract<CommandEffect, { type: "heal" | "damage" | "shield" }> | { type: "salvage" };
 
 /**
+ * Warum ein Schuss verpufft. Spaltenfeuer (`column`): In der Spalte steht kein Schiff mehr; `cleared`: Dort ist in
+ * dieser Runde eins gefallen, sonst war sie leer. Schiffsfeuer (`target`, auch Drohnen im Schwarmangriff): Das Ziel
+ * ist schon zerstört, nicht mehr auf dem Brett (null) oder gedeckt (`covered`).
+ */
+export type Miss = { column: number; cleared?: true } | { target: ShipRef | null; covered?: true };
+
+/**
  * Was in einer Runde aufgedeckt und aufgelöst wurde, in Auflösungsreihenfolge.
  * Im Kampf feuern erst alle Schiffe (`attack`), dann wirkt der summierte Schaden (`hit`).
  */
@@ -211,8 +218,7 @@ export type RoundEvent =
   | { kind: "silenced"; ship: ShipRef }
   /**
    * Ein Schuss im Kampf; `focus`/`swarm`/`headStart`: verstärkt, gelenkt bzw. beschleunigt von der Admiralsfähigkeit.
-   * `aimedAt`: Das Schiff des Feuerbefehls, wenn der Schuss ein anderes trifft: die Deckung davor fängt ihn ab, oder
-   * (`taunt`) die Ablenkung zieht ihn auf sich.
+   * `taunt`: Die Ablenkung hat ihn auf sich gezogen.
    */
   | {
       kind: "attack";
@@ -223,14 +229,12 @@ export type RoundEvent =
       focus?: true;
       swarm?: true;
       headStart?: true;
-      aimedAt?: ShipRef;
+      /** Spaltenfeuer, das durchging: Das vordere Schiff der Spalte ist in dieser Runde gefallen. */
+      through?: true;
       taunt?: true;
     }
-  /**
-   * Ein Schuss, der verpufft: Sein Ziel ist schon zerstört (`target`) oder nicht mehr auf dem Brett (`target` null).
-   * Fängt eine schon zerstörte Deckung den Schuss ab, ist sie `target` und `aimedAt` das Schiff des Feuerbefehls dahinter.
-   */
-  | { kind: "fizzle"; attacker: ShipRef; target: ShipRef | null; aimedAt?: ShipRef; headStart?: true }
+  /** Ein Schuss, der verpufft, siehe `Miss`. */
+  | ({ kind: "fizzle"; attacker: ShipRef; headStart?: true } & Miss)
   /** Gegenfeuer nach dem Kampf: `ship` hat `source` getroffen und nimmt dafür Schaden. */
   | { kind: "counterfire"; source: ShipRef; ship: ShipRef; amount: number; after: ShipStats }
   | { kind: "selfDamage"; ship: ShipRef; amount: number; after: ShipStats }

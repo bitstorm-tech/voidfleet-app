@@ -3,8 +3,8 @@
 // gleichzeitig. Die Schüsse im Kampf laufen als Salve kurz versetzt und
 // überlappend ab, Einschläge auf dasselbe Ziel mit etwas Abstand, damit man bei
 // vollem Brett nachvollziehen kann, wer wen trifft; vor ihnen feuert die Railgun, dann der Taktvorsprung,
-// nach ihnen schlägt das Gegenfeuer zurück. Fängt die Deckung einen Schuss ab oder zieht die Ablenkung ihn auf sich,
-// zeigt eine Zielmarke, worauf er gezielt war; ein Schuss, der verpufft, verlischt ohne Einschlag.
+// nach ihnen schlägt das Gegenfeuer zurück. Ein Schuss, der verpufft, verlischt ohne Einschlag; verpufft Schiffsfeuer an
+// der Deckung, zeigt eine Zielmarke, worauf er gezielt war.
 // Angriffsbefehle unterscheiden sich im Bild: Orbitalschlag, Torpedo und
 // Sperrfeuer kommen von oben, der Wärmesucher als Rakete, das Minenfeld explodiert am Schiff, der Durchschlag geht als
 // Strahl durch beide Schiffe einer Slot-Nummer, das Bombardement schlägt mehrfach ein, das Kreuzfeuer kommt von beiden
@@ -16,7 +16,7 @@
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AdmiralId, PowerId } from "../../shared/admirals.ts";
-import type { Side } from "../../shared/board.ts";
+import { opposite, type Side } from "../../shared/board.ts";
 import { type CommandId, type ShipId, shipById } from "../../shared/cards.ts";
 import type { CommandEffect, RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget } from "../../shared/protocol.ts";
 import { say, silenceRadio } from "./audio/radio.ts";
@@ -166,8 +166,6 @@ type Shot = Extract<RoundEvent, { kind: "attack" | "fizzle" | "counterfire" }>;
 type CombatShot = Extract<Shot, { kind: "attack" | "fizzle" }>;
 
 const shooterOf = (shot: Shot): ShipRef => (shot.kind === "counterfire" ? shot.source : shot.attacker);
-/** Das getroffene Schiff, beim Verpuffen das schon zerstörte; null, wenn das Ziel nicht mehr auf dem Brett steht. */
-const targetOf = (shot: Shot): ShipRef | null => (shot.kind === "counterfire" ? shot.ship : shot.target);
 
 /** Die Leuchtspur eines Schusses im Kampf: in der Farbe des Admirals, dessen Fähigkeit ihn verstärkt, lenkt oder beschleunigt. */
 function tracer(shot: CombatShot): Color3 {
@@ -354,7 +352,8 @@ export class RoundPlayback {
    * Die Schüsse starten im Abstand `SALVO_STAGGER` und kommen dabei je Schuss ins Log; ein Schuss wartet
    * zusätzlich, bis sein Einschlag `SAME_TARGET_GAP` nach dem vorigen auf dasselbe Ziel liegt. So treffen
    * die Schüsse jedes Ziel in der gemeldeten Reihenfolge, und die Statusbalken springen nicht zurück. Ein Schuss, der
-   * vor einem zerstörten Schiff verpufft, zählt dort wie ein Einschlag: Er kommt erst nach dem Treffer, der es zerstört.
+   * verpufft, zählt dort, wo er verlischt (`landing`), wie ein Einschlag: vor einem zerstörten Schiff kommt er erst nach
+   * dem Treffer, der es zerstört.
    */
   private async salvo(shots: readonly Shot[]): Promise<void> {
     const impacts = new Map<SlotPad, number>();
@@ -362,8 +361,7 @@ export class RoundPlayback {
     await Promise.all(
       shots.map((shot) => {
         const origin = this.centerOf(this.padOf(shooterOf(shot)));
-        const ref = targetOf(shot);
-        const target = ref && this.padOf(ref);
+        const target = this.landing(shot);
         const flight = boltDuration(origin, this.shotEnd(shot, origin));
         start = Math.max(start + SALVO_STAGGER, target ? (impacts.get(target) ?? -Infinity) + SAME_TARGET_GAP - flight : -Infinity);
         if (target) impacts.set(target, start + flight);
@@ -787,32 +785,30 @@ export class RoundPlayback {
     return this.mark(pad, t.float.silenced, "debuff", 1.2);
   }
 
-  /**
-   * Ein Schuss im Kampf. Trifft er nicht das Schiff seines Feuerbefehls (`aimedAt`), zieht sich beim Abfeuern eine
-   * Zielmarke um das anvisierte Schiff zusammen, und beim Einschlag steht dort, warum: „Gedeckt“, weil das Schiff davor
-   * ihn abfängt, oder „Abgelenkt“, weil die Ablenkung (`taunt`) ihn auf sich zieht.
-   */
+  /** Ein Schuss im Kampf, der trifft; den Grund für ein anderes Ziel als den Feuerbefehl (Ablenkung) nennt das Log. */
   private async attack(event: Extract<RoundEvent, { kind: "attack" }>): Promise<void> {
     const color = tracer(event);
     const origin = this.centerOf(this.padOf(event.attacker));
-    const aimed = event.aimedAt ? this.padOf(event.aimedAt) : null;
-    if (aimed) void this.view.effects.reticle(this.centerOf(aimed), color);
     await this.shoot(origin, this.padOf(event.target), color, SHOT_SOUNDS[event.attacker.cardId]);
-    if (aimed) this.float(aimed, event.taunt ? t.float.diverted : t.float.covered, event.taunt ? "debuff" : "shield");
     return this.damage(event.target, event.amount, event.after, origin, color);
   }
 
   /**
-   * Ein Schuss, der verpufft: Mündungsfeuer wie sonst, dann verlischt der Bolzen vor dem schon zerstörten Schiff bzw.
-   * über der Brettmitte, wenn sein Ziel nicht mehr auf dem Brett steht; kein Einschlag, kein Schaden, nur „Verpufft“.
+   * Ein Schuss, der verpufft: Mündungsfeuer wie sonst, dann verlischt der Bolzen ohne Einschlag und Schaden dort, wo
+   * er landet (`landing`), mit „Verpufft“. Ist das verfolgte Ziel gedeckt, zieht sich beim Abfeuern eine Zielmarke um es
+   * zusammen, der Bolzen verlischt vor der Deckung, und am Ziel steht „Gedeckt“.
    */
   private async fizzle(event: Extract<RoundEvent, { kind: "fizzle" }>): Promise<void> {
     const color = tracer(event);
     const origin = this.centerOf(this.padOf(event.attacker));
+    const covered = "target" in event && event.covered ? this.padOf(event.target!) : null;
+    if (covered) void this.view.effects.reticle(this.centerOf(covered), color);
     const end = this.shotEnd(event, origin);
     this.muzzle(origin, color, SHOT_SOUNDS[event.attacker.cardId]);
     await this.view.effects.fizzle(origin, end, color);
-    if (event.target) this.float(this.padOf(event.target), t.float.fizzle, "debuff");
+    const pad = this.landing(event);
+    if (covered) this.float(covered, t.float.covered, "shield");
+    else if (pad) this.float(pad, t.float.fizzle, "debuff");
     else this.floatAt(end, t.float.fizzle, "debuff");
   }
 
@@ -829,13 +825,31 @@ export class RoundPlayback {
   }
 
   /**
+   * Wo ein Schuss landet: am getroffenen Schiff. Verpufft er, am schon zerstörten Ziel, vor der Deckung eines gedeckten,
+   * bei Spaltenfeuer am vordersten Schiff, das in der Spalte gefallen ist (es steht bis zu seiner Zerstörung noch auf dem
+   * Pad), sonst im leeren Strike-Slot der Spalte; null, wenn sein Ziel nicht mehr auf dem Brett steht.
+   */
+  private landing(shot: Shot): SlotPad | null {
+    if (shot.kind === "counterfire") return this.padOf(shot.ship);
+    if (shot.kind === "attack") return this.padOf(shot.target);
+    const side = opposite(shot.attacker.side);
+    if ("column" in shot) {
+      const front = this.view.pad(side, "strike", shot.column);
+      const back = this.view.pad(side, "command", shot.column);
+      return front.ship === null && back.ship !== null ? back : front;
+    }
+    if (shot.target === null) return null;
+    return shot.covered ? this.view.pad(side, "strike", shot.target.slotIndex) : this.padOf(shot.target);
+  }
+
+  /**
    * Wo der Bolzen eines Schusses aus `origin` endet: auf der Hülle des Ziels. Verpufft er, verlischt er schon vor der
-   * Hülle des zerstörten Schiffs bzw. über der Brettmitte, wenn sein Ziel nicht mehr auf dem Brett steht.
+   * Stelle, an der er landet, bzw. über der Brettmitte, wenn sein Ziel nicht mehr auf dem Brett steht.
    */
   private shotEnd(shot: Shot, origin: Vector3): Vector3 {
-    const target = targetOf(shot);
-    if (target === null) return new Vector3(0, origin.y + VOID_RISE, origin.z);
-    return this.impactFrom(this.padOf(target), origin, shot.kind === "fizzle" ? HULL_RADIUS + FIZZLE_SHORT : HULL_RADIUS);
+    const pad = this.landing(shot);
+    if (pad === null) return new Vector3(0, origin.y + VOID_RISE, origin.z);
+    return this.impactFrom(pad, origin, shot.kind === "fizzle" ? HULL_RADIUS + FIZZLE_SHORT : HULL_RADIUS);
   }
 
   /** Treffer eines Schusses aus Richtung `origin`: Einschlag auf der Hülle (`hit`, sonst zufällig), Hüllenblitz und Schadenszahl. */

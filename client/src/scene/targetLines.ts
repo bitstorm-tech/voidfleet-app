@@ -2,8 +2,8 @@
 // fällt, in der Farbe seiner Seite. Sie bleiben flacher und dünner als der Bogenpfeil der Bewegungen;
 // die eigenen stehen etwas höher und seitlich versetzt, damit Schüsse in beide Richtungen zwischen
 // denselben Schiffen nebeneinander liegen statt übereinander. Der Schuss des gewählten Schützen ist dicker und
-// heller; ein Schuss, der verpufft, weil sein Ziel dann schon zerstört ist, blass und gestrichelt, mit einem Kreuz
-// statt der Spitze, das sich zur Kamera dreht.
+// heller; ein Schuss, der verpufft, blass und gestrichelt, mit einem Kreuz statt der Spitze, das sich zur Kamera
+// dreht. Schiffsfeuer, das sein Ziel verfolgt, trägt zusätzlich einen Ring um die Spitze bzw. das Kreuz.
 
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
@@ -12,6 +12,7 @@ import { Curve3 } from "@babylonjs/core/Maths/math.path";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { CreateBox } from "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { CreateCylinder } from "@babylonjs/core/Meshes/Builders/cylinderBuilder";
+import { CreateTorus } from "@babylonjs/core/Meshes/Builders/torusBuilder";
 import { CreateTube } from "@babylonjs/core/Meshes/Builders/tubeBuilder";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import type { Scene } from "@babylonjs/core/scene";
@@ -26,6 +27,8 @@ export interface TargetLine {
   side: Side;
   /** Der Schuss verpufft: blass und gestrichelt, mit einem Kreuz statt der Spitze. */
   fizzle?: boolean;
+  /** Schiffsfeuer: Ein Ring um die Spitze zeigt, dass der Schuss sein Ziel verfolgt. */
+  tracking?: boolean;
   /** Der Schuss des gewählten Schützen: dicker und heller. */
   selected?: boolean;
 }
@@ -57,6 +60,9 @@ const GAP = 2;
 /** Das Kreuz an der Spitze eines verpuffenden Schusses. */
 const CROSS_SIZE = 0.38;
 const CROSS_WIDTH = 0.07;
+/** Der Ring um die Spitze bei Schiffsfeuer. */
+const RING_DIAMETER = 0.56;
+const RING_THICKNESS = 0.05;
 
 export class TargetLines {
   /** Je Seite und Darstellung ein Material, erst bei Bedarf angelegt. */
@@ -73,7 +79,9 @@ export class TargetLines {
 
   /** Zeigt genau diese Bögen; ein leeres Array blendet alle aus. */
   show(lines: readonly TargetLine[]): void {
-    const shown = lines.map(({ from, to, fizzle, selected }) => `${from.root.name}>${to.root.name}${fizzle ? "~" : ""}${selected ? "*" : ""}`).join(" ");
+    const shown = lines
+      .map(({ from, to, fizzle, tracking, selected }) => `${from.root.name}>${to.root.name}${fizzle ? "~" : ""}${tracking ? "@" : ""}${selected ? "*" : ""}`)
+      .join(" ");
     if (shown === this.shown) return;
     this.clear();
     this.shown = shown;
@@ -88,7 +96,7 @@ export class TargetLines {
     this.show(lines);
   }
 
-  private arc({ from, to, side, fizzle = false, selected = false }: TargetLine): Mesh[] {
+  private arc({ from, to, side, fizzle = false, tracking = false, selected = false }: TargetLine): Mesh[] {
     const up = Vector3.Up();
     const offset = new Vector3(0, 0, OFFSET[side]);
     const start = from.root.getAbsolutePosition().add(offset).addInPlace(up.scale(START_HEIGHT));
@@ -115,12 +123,18 @@ export class TargetLines {
           this.scene,
         );
     head.position = tip.add(up.scale(HEAD_LENGTH / 2));
-    for (const mesh of [tube, head]) {
+    const meshes = [tube, head];
+    if (tracking) {
+      const ring = this.ring(scale);
+      ring.position = head.position.clone();
+      meshes.push(ring);
+    }
+    for (const mesh of meshes) {
       mesh.material = this.material(side, fizzle, selected);
       mesh.isPickable = false;
       this.glow.addIncludedOnlyMesh(mesh);
     }
-    return [tube, head];
+    return meshes;
   }
 
   /** Die Bahn als Striche, zu einem Mesh verschmolzen. */
@@ -142,6 +156,16 @@ export class TargetLines {
     const cross = Mesh.MergeMeshes(bars, true)!;
     cross.billboardMode = Mesh.BILLBOARDMODE_ALL;
     return cross;
+  }
+
+  /** Ein Ring, der wie das Kreuz immer zur Kamera zeigt und so die Spitze in beiden Ansichten umschließt. */
+  private ring(scale: number): Mesh {
+    const size = Math.sqrt(scale);
+    const ring = CreateTorus("target-line-ring", { diameter: RING_DIAMETER * size, thickness: RING_THICKNESS * size, tessellation: 40 }, this.scene);
+    ring.rotation.x = Math.PI / 2;
+    ring.bakeCurrentTransformIntoVertices();
+    ring.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    return ring;
   }
 
   private material(side: Side, fizzle: boolean, selected: boolean): StandardMaterial {

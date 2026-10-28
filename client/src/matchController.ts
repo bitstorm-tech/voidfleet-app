@@ -8,9 +8,10 @@
 // ein Schiff in die andere Lane verlegen, brauchen zwei Klicks: Schiff, dann Ziel-Slot;
 // dort steht das verlegte Schiff ebenfalls als Geist, ein Bogenpfeil zeigt den Weg.
 // Ist keine Karte gewählt, wählt ein Klick ein eigenes Schiff auf dem Brett oder einen Geist (eingeplantes oder
-// bewegtes Schiff). Kann es feuern, leuchten alle gegnerischen Schiffe als Ziel, auch gedeckte: Ein Klick gibt ihm den
-// Feuerbefehl oder ersetzt ihn, ein Klick auf das jetzige Ziel hebt ihn auf, das Schiff bleibt dabei gewählt. Ohne
-// Feuerbefehl feuert kein Schiff, und jede Runde beginnt ohne. Steht das Schiff schon auf dem Brett, leuchten dazu die
+// bewegtes Schiff). Kann es feuern, leuchten alle Slots der Gegnerseite als Ziel, auch leere: Ein Klick gibt ihm
+// Spaltenfeuer auf die Spalte des Slots, ein weiterer auf ein Schiff dieser Spalte Schiffsfeuer auf genau dieses (es
+// folgt ihm), noch einer hebt den Feuerbefehl auf; das Schiff bleibt dabei gewählt. Ohne Feuerbefehl feuert kein
+// Schiff, und jede Runde beginnt ohne. Steht das Schiff schon auf dem Brett, leuchten dazu die
 // Ziel-Slots des Grundmanövers (Geist und Pfeil); dann feuert es nicht, seine Balken sind gedämpft und sein
 // Feuerbefehl fällt weg. Die Mirage darf auch auf ein eigenes Schiff: Beim Phasentausch stehen beide als Geist über
 // dem anderen, je mit Pfeil, und beide feuern. Ein Klick auf ein anderes eigenes Schiff wählt dieses; ein zweiter
@@ -26,7 +27,7 @@
 // Wärmesucher und Traktorstrahl auf ein gegnerisches Schiff; Fadenkreuze markieren das Ziel.
 // Alles ist bis zum Submit änderbar; danach wartet der Zug auf den Gegner. Solange geplant wird, zeigt die
 // Zielvorschau (`game/preview.ts`), wie die Runde mit diesem Plan liefe, wenn der Gegner nichts tut: je Schuss ein
-// Bogen (verpuffende gestrichelt), auf den Balken der Schaden.
+// Bogen (Schiffsfeuer mit Ring um die Spitze, verpuffende gestrichelt), auf den Balken der Schaden.
 // Der Spielzustand kommt vom Server und steckt in `Match`, die Szene spiegelt ihn nur.
 // „Neues Match“ wechselt nur die Verbindung; Szene und geladene Assets bleiben.
 // Die Musik folgt der Phase: ruhig beim Planen, angespannt während die Runde abläuft, still nach Spielende.
@@ -492,16 +493,16 @@ export class MatchController {
   /** Wählt das eigene Schiff; eines, mit dem sich nichts planen oder zurücknehmen lässt, verweigert den Klick. */
   private selectUnit(slot: Slot): void {
     const { match } = this;
-    const canAim = match.canFire(slot) && match.board.ships("enemy").length > 0;
-    const selectable = canAim || match.plannedPickAt(slot) !== null || this.isManeuvering(slot) || match.maneuverDestinations(slot).length > 0;
+    const selectable = match.canFire(slot) || match.plannedPickAt(slot) !== null || this.isManeuvering(slot) || match.maneuverDestinations(slot).length > 0;
     if (!selectable) return playUiSound("denied");
     this.select({ kind: "unit", slot });
     playUiSound("select");
   }
 
   /**
-   * Klick bei gewähltem Schiff: auf das Schiff selbst (auch auf seinen Geist) nimmt zurück (`takeBack`), auf ein
-   * gegnerisches Schiff gibt ihm das Ziel, auf einen Ziel-Slot das Grundmanöver, auf ein anderes eigenes Schiff wählt dieses.
+   * Klick bei gewähltem Schiff: auf das Schiff selbst (auch auf seinen Geist) nimmt zurück (`takeBack`), auf einen
+   * gegnerischen Slot ändert seinen Feuerbefehl (`stageFireOn`), auf einen Ziel-Slot plant das Grundmanöver, auf ein anderes
+   * eigenes Schiff wählt dieses.
    */
   private onUnitClick(unit: Slot, pad: SlotPad): void {
     if (this.showsUnit(pad, unit)) return this.takeBack(unit);
@@ -555,7 +556,7 @@ export class MatchController {
 
   /**
    * Einzige Gültigkeitsregel für Highlight und Klick: gewählte Schiffskarte -> freie eigene Slots, die den eingeplanten
-   * Bewegungen nicht im Weg stehen; gewähltes Schiff auf dem Brett -> jedes gegnerische Schiff, auch ein gedecktes, wenn
+   * Bewegungen nicht im Weg stehen; gewähltes Schiff auf dem Brett -> jeder Slot der Gegnerseite, auch ein leerer, wenn
    * es feuern kann, dazu seine Ziel-Slots des Grundmanövers in beiden Lanes (bei der Mirage auch eigene Schiffe);
    * gewählter Befehl -> eigene Schiffe in einer erlaubten Lane, auch das eingeplante, bei verlegenden
    * Befehlen nur mit freiem Ziel-Slot, danach die freien Slots der Ziel-Lane; Torpedo und Durchschlag -> jeder Slot
@@ -577,7 +578,7 @@ export class MatchController {
       case "ship":
         return own && this.match.canDeploy(slot, selection.pick);
       case "unit":
-        if (!own) return slot.isOccupied && this.match.canFire(selection.slot);
+        if (!own) return this.match.canFire(selection.slot);
         return this.match.maneuverDestinations(selection.slot).includes(slot);
       case "command": {
         const command = this.selectedCommand!;
@@ -621,16 +622,14 @@ export class MatchController {
     playUiSound("place");
   }
 
-  /** Der Feuerbefehl des gewählten Schiffs auf das gegnerische Schiff; auf sein jetziges Ziel hebt ihn der Klick auf. Das Schiff bleibt gewählt. */
+  /**
+   * Der Feuerbefehl des gewählten Schiffs nach einem Klick auf den gegnerischen Slot (`Match.nextFire`): erst Spaltenfeuer
+   * auf seine Spalte, dann Schiffsfeuer auf das Schiff dort, dann keiner mehr. Das Schiff bleibt gewählt.
+   */
   private stageFireOn(shooter: Slot, pad: SlotPad): void {
-    const order = this.match.fireOrderAt(shooter);
-    if (order && isSameSlot(order.target, slotTarget(pad.slot))) {
-      this.match.clearFire(shooter);
-      playUiSound("cancel");
-    } else {
-      this.match.setFire(shooter, pad.slot);
-      playUiSound("place");
-    }
+    const order = this.match.nextFire(shooter, pad.slot);
+    this.match.setFire(shooter, order);
+    playUiSound(order ? "place" : "cancel");
     this.refreshSelectionVisuals();
   }
 
@@ -810,7 +809,7 @@ export class MatchController {
     const lockTarget = selection?.kind === "mark" ? this.validHoveredPad() : mark && this.view.pad("enemy", mark.lane, mark.slotIndex);
     if (lockTarget) add(lockTarget.ship, { kind: "lock", color: KERR, planned: true });
     const shooter = this.selectedShooter;
-    for (const slot of this.canPlan && this.match.board.ships("enemy").length > 0 ? this.match.shooters : []) {
+    for (const slot of this.canPlan ? this.match.shooters : []) {
       const pad = this.padAt(slot);
       if (slot === shooter) add(pad.ship ?? pad.ghost, { kind: "aim", color: SELECT });
       else if (!this.match.isArmed(slot)) add(pad.ship ?? pad.ghost, { kind: "ready", color: PLAYER });
@@ -836,13 +835,13 @@ export class MatchController {
     const hovered = this.validHoveredPad();
     if (selection?.kind !== "unit" || hovered === null) return match.plan;
     const unit = selection.slot;
-    if (hovered.slot.lane.side === "enemy") return match.tryPlan(() => match.setFire(unit, hovered.slot));
+    if (hovered.slot.lane.side === "enemy") return match.tryPlan(() => match.setFire(unit, match.nextFire(unit, hovered.slot)));
     return match.tryPlan(() => match.setManeuver({ ship: slotTarget(unit), destination: slotTarget(hovered.slot) }));
   }
 
   /**
    * Die Zielvorschau auf dem Brett: je Schuss ein Bogen, der des gewählten Schützen hervorgehoben, verpuffende
-   * gestrichelt; auf den Balken der drohende Verlust und ein Totenkopf an jedem Schiff, das fallen würde, auch an
+   * gestrichelt, Schiffsfeuer mit Ring um die Spitze; auf den Balken der drohende Verlust und ein Totenkopf an jedem Schiff, das fallen würde, auch an
    * Geistern. Ein Schiff, das sich bewegt, steht dabei schon im Ziel-Slot; den Totenkopf trägt, wer nach den
    * Bewegungen im Slot steht — der Geist, sonst das echte Schiff.
    */
@@ -855,7 +854,8 @@ export class MatchController {
         from: this.padOf(shot.attacker),
         to: this.padOf(shot.target),
         side: shot.attacker.side,
-        fizzle: shot.fizzle,
+        fizzle: "miss" in shot,
+        tracking: shot.tracking,
         selected: selected(shot.shooter),
       })),
     );
@@ -1033,7 +1033,7 @@ export class MatchController {
     // Aufstellung: Solange mehr als ein Schiff erlaubt ist, steht dabei, wie viele noch gelegt werden dürfen.
     const deploys = match.deployLimit > 1 ? ` · ${t.status.deploysLeft(match.deploysLeft)}` : "";
     // Verpuffende Schüsse sind verschenkt; beim gewählten Schützen sagt es sein eigener Text.
-    const fizzles = this.selection?.kind === "unit" ? 0 : (this.preview?.shots.filter((shot) => shot.fizzle).length ?? 0);
+    const fizzles = this.selection?.kind === "unit" ? 0 : (this.preview?.shots.filter((shot) => "miss" in shot).length ?? 0);
     const warning = fizzles > 0 ? `${t.status.fizzles(fizzles)} ` : "";
     return `${fleet}${deploys} — ${this.notice ? `${this.notice} ` : ""}${warning}${this.buildPlanningText()}`;
   }
@@ -1106,8 +1106,6 @@ export class MatchController {
             : t.status.commandHoldsFire(name, cardText(match.plannedCommand!).name),
       );
       if (canManeuver) texts.push(maneuvering ? t.status.changeManeuver : t.status.maneuverHint);
-    } else if (match.board.ships("enemy").length === 0) {
-      texts.push(t.status.noFireTarget(name));
     } else {
       texts.push(t.status.chooseFireTarget(name));
       if (canManeuver) texts.push(ship.id === "mirage" ? t.status.maneuverOrSwap : t.status.maneuverInstead);
@@ -1118,23 +1116,34 @@ export class MatchController {
   }
 
   /**
-   * Der Schuss des gewählten Schützen laut Vorschau: sein jetziges Ziel (nicht, solange ein anderes unter dem Zeiger
-   * liegt), ob die Deckung davor ihn abfängt oder er verpufft; die Drohne im eigenen Schwarmangriff fliegt dessen Ziel an.
+   * Der Feuerbefehl des gewählten Schützen: unter dem Zeiger, was ein Klick daraus macht (`Match.nextFire`), sonst der
+   * jetzige; dazu laut Vorschau, wen der Schuss trifft oder warum er verpufft. Die Drohne im eigenen Schwarmangriff fliegt
+   * dessen Ziel an.
    */
   private shotTexts(slot: Slot): string[] {
     const { match } = this;
     const name = (ref: ShipRef) => cardText(shipById(ref.cardId)).name;
+    const enemyName = (target: SlotTarget) => cardText(this.padOf({ side: "enemy", ...target }).slot.card!).name;
     const texts: string[] = [];
-    const order = match.fireOrderAt(slot);
     const hovered = this.validHoveredPad();
-    const aiming = hovered?.slot.lane.side === "enemy" ? slotTarget(hovered.slot) : null;
-    if (order && (aiming === null || isSameSlot(aiming, order.target)))
-      texts.push(t.status.fireTarget(cardText(this.padOf({ side: "enemy", ...order.target }).slot.card!).name));
+    if (hovered?.slot.lane.side === "enemy") {
+      const next = match.nextFire(slot, hovered.slot);
+      if (next === null) texts.push(t.status.tapClearsFire);
+      else texts.push("column" in next ? t.status.tapColumnFire(next.column + 1) : t.status.tapTrackFire(enemyName(next.target)));
+    } else {
+      const order = match.fireOrderAt(slot);
+      if (order) texts.push("column" in order ? t.status.columnFire(order.column + 1) : t.status.trackFire(enemyName(order.target)));
+    }
     if (match.fliesSwarm(slot)) texts.push(t.status.swarmFire(t.powers.swarm_strike.name));
+    // Unter dem Zeiger rechnet die Vorschau schon mit dem Feuerbefehl nach dem Klick.
     const shot = this.preview?.shots.find((shot) => shot.shooter !== null && isSameSlot(shot.shooter, slotTarget(slot)));
-    if (shot?.fizzle && shot.aimedAt) texts.push(t.status.coverFizzles(name(shot.target), name(shot.aimedAt)));
-    else if (shot?.fizzle) texts.push(t.status.fireFizzles(name(shot.target)));
-    else if (shot?.aimedAt) texts.push(t.status.fireCovered(name(shot.target), name(shot.aimedAt)));
+    if (shot === undefined) return texts;
+    if ("hit" in shot) {
+      if (shot.through) texts.push(t.status.fireThrough(name(shot.hit)));
+      else if (!shot.tracking) texts.push(t.status.fireHits(name(shot.hit)));
+    } else if ("column" in shot.miss) texts.push(shot.miss.cleared ? t.status.columnCleared : t.status.columnEmpty);
+    else if (shot.miss.target === null) texts.push(t.status.fireGone);
+    else texts.push((shot.miss.covered ? t.status.fireCovered : t.status.fireFizzles)(name(shot.miss.target)));
     return texts;
   }
 

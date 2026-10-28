@@ -5,7 +5,7 @@
 // Fähigkeiten der Flaggschiffe und Admirale (`admirals.ts`, Zahlen in `ABILITY_VALUES`).
 
 import { ABILITY_VALUES, type PowerId, targetsEnemy } from "./admirals.ts";
-import { type Board, isSameSlot, nearest, opposite, otherLane, type Side, SLOT_COUNT, Slot, slotTarget } from "./board.ts";
+import { type Aim, type Board, isSameSlot, nearest, opposite, otherLane, type Side, SLOT_COUNT, Slot, slotTarget } from "./board.ts";
 import {
   COMMAND_ORDER,
   type CommandCard,
@@ -20,7 +20,7 @@ import {
   targetsEnemySlot,
 } from "./cards.ts";
 import { railgunFires } from "./powers.ts";
-import type { CommandEffect, FireOrder, RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget, TurnPlan } from "./protocol.ts";
+import type { CommandEffect, FireOrder, Miss, RoundEvent, ShipRef, ShipStats, SlotRef, SlotTarget, TurnPlan } from "./protocol.ts";
 
 const SIDES: readonly Side[] = ["player", "enemy"];
 
@@ -113,9 +113,10 @@ export function resolveTurns(board: Board, turns: readonly Turn[], random: (() =
     }
     if (arrivals.length === 0) events.push({ kind: "pass", side: commander.side });
   }
-  // Die Feuerbefehle greifen, sobald alle Schiffe stehen, und folgen Schütze und Ziel bei jeder Bewegung.
+  // Die Feuerbefehle greifen, sobald alle Schiffe stehen, und folgen dem Schützen bei jeder Bewegung, Schiffsfeuer
+  // auch seinem Ziel; die Spalte bleibt.
   for (const { commander, fire } of turns) {
-    for (const order of fire) aim(board, commander.side, order);
+    for (const order of fire) bindFire(board, commander.side, order);
   }
   for (const { commander, power } of turns) {
     if (power) resolvePower(board, commander.side, power, events);
@@ -203,11 +204,15 @@ function ownSlot(board: Board, side: Side, { lane, slotIndex }: SlotTarget): Slo
   return board.lane(side, lane).slots[slotIndex]!;
 }
 
-/** Feuerbefehl: Der Schütze merkt sich die Kennung des gegnerischen Schiffs im Ziel-Slot (`Slot.aim`). */
-function aim(board: Board, side: Side, { ship, target }: FireOrder): void {
-  const shooter = ownSlot(board, side, ship);
-  const aimed = ownSlot(board, opposite(side), target);
-  if (shooter.isOccupied && aimed.isOccupied) shooter.aim = aimed.uid;
+/** Feuerbefehl: Der Schütze merkt sich die Spalte oder die Kennung des gegnerischen Schiffs im Ziel-Slot (`Slot.aim`). */
+export function bindFire(board: Board, side: Side, order: FireOrder): void {
+  const shooter = ownSlot(board, side, order.ship);
+  if (!shooter.isOccupied) return;
+  if ("column" in order) shooter.aim = { column: order.column };
+  else {
+    const aimed = ownSlot(board, opposite(side), order.target);
+    if (aimed.isOccupied) shooter.aim = { uid: aimed.uid };
+  }
 }
 
 /** Die Ziel-Slots der Bewegungen im Zug: Grundmanöver und Bewegungsbefehl (der nie das manövrierte Schiff verlegt). */
@@ -720,13 +725,15 @@ interface Counterfire {
 /**
  * Beide Seiten feuern gleichzeitig: Wer zu Kampfbeginn schießen kann (`Slot.canAttack`, also weder per EMP gelähmt
  * noch manövriert) und einen Feuerbefehl hat (`Slot.aim`), schießt, auch wenn er im selben Kampf zerstört wird; ohne
- * Feuerbefehl feuert niemand. Der Schuss geht auf das Schiff des Feuerbefehls, wo es jetzt steht. Steht es für den
- * Schützen gedeckt (`Board.isExposed`), fängt das Schiff davor den Schuss ab; die Deckung gilt für die ganze Runde,
- * auch wenn das deckende Schiff im selben Kampf zerstört wird. Flaggschiffe durchschauen Trugbilder: Gegen sie deckt
- * keins. Ist das getroffene Schiff schon zerstört oder das Ziel nicht mehr auf dem Brett, verpufft der Schuss
- * (`fizzle`). Innerhalb einer Seite feuern die Schiffe nacheinander in Slot-Reihenfolge; die Seiten beeinflussen sich
- * dabei nicht, weil jede nur die Schiffe der anderen trifft. Gemeldet werden die Schüsse abwechselnd, damit die
- * Animation hin und her geht.
+ * Feuerbefehl feuert niemand. Innerhalb einer Seite feuern die Schiffe nacheinander in Slot-Reihenfolge, erst die
+ * Strike-Lane, dann die Command-Lane; die Seiten beeinflussen sich dabei nicht, weil jede nur die Schiffe der anderen
+ * trifft. Gemeldet werden die Schüsse abwechselnd, damit die Animation hin und her geht.
+ *
+ * Wohin ein Schuss geht (`aimedShot`): Spaltenfeuer trifft das vorderste Schiff, das in der Spalte noch steht, erst
+ * Strike, dann Command; fällt das vordere im selben Kampf, gehen die übrigen Schüsse auf das dahinter (`through`).
+ * Schiffsfeuer trifft sein Ziel, wo es jetzt steht, wenn es in diesem Moment ungedeckt ist (`Board.isExposed`); ist
+ * die Deckung davor im selben Kampf schon gefallen, trifft es also. Flaggschiffe durchschauen Trugbilder: Gegen sie
+ * deckt keins, und Spaltenfeuer geht daran vorbei, wenn dahinter ein echtes Schiff steht. Sonst verpufft der Schuss.
  *
  * Mit den Admiralen: Zuerst feuert die Railgun jeder Pendulum in `railguns` (ohne Angabe jede, deren Markierung
  * steht) auf ihr markiertes Schiff. Dann die Schiffe mit Taktvorsprung, beider Seiten gleichzeitig; wer dabei
@@ -784,25 +791,28 @@ function swarmTarget(board: Board, attacker: Slot): Slot | null {
 /** Die Schüsse einer Seite in Slot-Reihenfolge (siehe `resolveCombat`); Treffer auf ein Schiff mit Gegenfeuer landen in `counterfire`. */
 function volley(board: Board, side: Side, shooters: readonly Slot[], counterfire: Counterfire[]): RoundEvent[] {
   const enemy = opposite(side);
-  const ships = board.ships(enemy);
-  const taunt = ships.find((slot) => slot.taunting) ?? null;
+  const taunt = board.ships(enemy).find((slot) => slot.taunting) ?? null;
   const shots: RoundEvent[] = [];
   for (const attacker of shooters) {
     const seeThrough = isFlagship(attacker.card!);
     const headStart = attacker.powers.includes("head_start") ? { headStart: true as const } : {};
     const swarm = swarmTarget(board, attacker);
-    const aimed = swarm ?? ships.find((slot) => slot.uid === attacker.aim) ?? null;
     const taunted = swarm === null && taunt !== null && !taunt.isDestroyed && board.isExposed(taunt, seeThrough) ? taunt : null;
-    const cover = swarm === null && aimed !== null && !board.isExposed(aimed, seeThrough) ? board.lane(enemy, "strike").slots[aimed.index]! : null;
-    const target = taunted ?? cover ?? aimed;
-    if (target === null || target.isDestroyed) {
-      const covered = cover !== null && target === cover ? { aimedAt: shipRef(aimed!) } : {};
-      shots.push({ kind: "fizzle", attacker: shipRef(attacker), target: target && shipRef(target), ...covered, ...headStart });
+    // Schwarmangriff und Ablenkung lenken den Schuss am Feuerbefehl vorbei.
+    const pulled = swarm ?? taunted;
+    const shot: Shot =
+      pulled === null
+        ? aimedShot(board, enemy, attacker.aim!, seeThrough)
+        : pulled.isDestroyed
+          ? { miss: { target: shipRef(pulled) } }
+          : { hit: pulled, through: false };
+    if ("miss" in shot) {
+      shots.push({ kind: "fizzle", attacker: shipRef(attacker), ...shot.miss, ...headStart });
       continue;
     }
+    const { hit: target, through } = shot;
     const focused = target.powers.includes("focus_fire");
     const amount = attacker.attack + (swarm ? ABILITY_VALUES.swarmStrike : 0) + (focused ? ABILITY_VALUES.focusFire : 0);
-    const aimedAt = aimed !== null && aimed !== target ? shipRef(aimed) : null;
     target.damage(amount);
     if (target.powers.includes("counterfire") && !isFlagship(attacker.card!)) counterfire.push({ attacker, source: target });
     shots.push({
@@ -814,11 +824,35 @@ function volley(board: Board, side: Side, shooters: readonly Slot[], counterfire
       ...(focused ? { focus: true as const } : {}),
       ...(swarm ? { swarm: true as const } : {}),
       ...headStart,
-      ...(aimedAt ? { aimedAt } : {}),
+      ...(through ? { through: true as const } : {}),
       ...(taunted ? { taunt: true as const } : {}),
     });
   }
   return shots;
+}
+
+/** Ein Schuss trifft ein Schiff (`through`: Spaltenfeuer, das durchging) oder verpufft. */
+type Shot = { hit: Slot; through: boolean } | { miss: Miss };
+
+/**
+ * Wohin ein Schuss nach seinem Feuerbefehl geht (siehe `resolveCombat`). Spaltenfeuer: das vorderste Schiff, das dort
+ * noch steht, mit `seeThrough` (Flaggschiffe) ein Trugbild nur, wenn kein echtes Schiff dahinter steht. Schiffsfeuer:
+ * das Ziel, wenn es noch steht und für den Schützen ungedeckt ist.
+ */
+function aimedShot(board: Board, side: Side, aim: Aim, seeThrough: boolean): Shot {
+  if ("column" in aim) {
+    const front = board.lane(side, "strike").slots[aim.column]!;
+    const back = board.lane(side, "command").slots[aim.column]!;
+    const standing = [front, back].filter((slot) => slot.isOccupied && !slot.isDestroyed);
+    const hit = (seeThrough ? standing.find((slot) => slot.card!.id !== "decoy") : undefined) ?? standing[0];
+    if (hit) return { hit, through: hit === back && front.isDestroyed };
+    return { miss: { column: aim.column, ...(front.isOccupied || back.isOccupied ? { cleared: true as const } : {}) } };
+  }
+  const aimed = board.ships(side).find((slot) => slot.uid === aim.uid);
+  if (aimed === undefined) return { miss: { target: null } };
+  if (aimed.isDestroyed) return { miss: { target: shipRef(aimed) } };
+  if (!board.isExposed(aimed, seeThrough)) return { miss: { target: shipRef(aimed), covered: true } };
+  return { hit: aimed, through: false };
 }
 
 /** Reißverschluss: abwechselnd ein Element aus jeder Liste, bis alle leer sind. */
