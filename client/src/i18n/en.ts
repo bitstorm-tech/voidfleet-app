@@ -137,6 +137,8 @@ export const en = {
     commands: "Commands",
     none: "Nothing to choose — hand full or deck empty.",
     confirm: "Take",
+    peek: "View battlefield",
+    show: "Show supplies",
     salvage: {
       name: "Scrap Salvage",
       target: "Allied Scrap Raider",

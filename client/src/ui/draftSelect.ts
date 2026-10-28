@@ -2,7 +2,8 @@
 // drei Befehlen; ein Klick wählt je eines, ein zweiter nimmt die Wahl zurück. Hat ein eigener Scrap Raider Schrott
 // geborgen, ist einer der Befehle die Schrottverwertung; stehen mehrere Scrap Raider, wählen Knöpfe darunter, welcher
 // die +1 ATK bekommt. „Übernehmen“ schickt die Wahl (`draft`); bis der Server bestätigt, bleibt das Overlay gesperrt.
-// Die Hand darunter bleibt sichtbar.
+// Die Hand darunter bleibt sichtbar. „Schlachtfeld ansehen“ klappt das Overlay bis auf einen Knopf ein, damit man
+// das Brett für die Wahl sehen kann; ein neues Angebot klappt es wieder auf.
 
 import { type Slot, slotTarget } from "../../../shared/board.ts";
 import { commandById, shipById } from "../../../shared/cards.ts";
@@ -21,6 +22,7 @@ export class DraftSelect {
   private readonly ships: HTMLElement;
   private readonly commands: HTMLElement;
   private readonly confirm: HTMLButtonElement;
+  private readonly peek: HTMLButtonElement;
   /** Das gezeigte Angebot; ein neues setzt die Wahl zurück. */
   private shown: string | null = null;
   private offer: DraftOffer | null = null;
@@ -40,7 +42,10 @@ export class DraftSelect {
           <section class="draft-row"><h3></h3><div class="draft-cards ships"></div></section>
           <section class="draft-row"><h3></h3><div class="draft-cards commands"></div></section>
         </div>
-        <button type="button" class="draft-confirm"></button>
+        <div class="draft-actions">
+          <button type="button" class="draft-peek"></button>
+          <button type="button" class="draft-confirm"></button>
+        </div>
       </div>`,
     );
     this.overlay = container.querySelector(".draft-overlay")!;
@@ -53,6 +58,9 @@ export class DraftSelect {
     this.commands = this.overlay.querySelector(".draft-cards.commands")!;
     this.confirm = this.overlay.querySelector(".draft-confirm")!;
     this.confirm.textContent = t.draft.confirm;
+    this.peek = this.overlay.querySelector(".draft-peek")!;
+    this.peek.addEventListener("click", () => this.setPeeking(!this.overlay.classList.contains("peek")));
+    this.setPeeking(false);
     this.confirm.addEventListener("click", () => {
       if (!this.isComplete) return;
       const { ship, command, raider } = this;
@@ -75,11 +83,18 @@ export class DraftSelect {
       this.ship = null;
       this.command = null;
       this.raider = raiders.length === 1 ? raiders[0]! : null;
+      this.setPeeking(false);
     }
     this.pending = pending;
     this.raiders = raiders;
     if (this.raider && !raiders.includes(this.raider)) this.raider = null;
     if (changed) this.render();
+  }
+
+  /** Klappt das Overlay ein, sodass nur der Knopf zum Wiederaufklappen über dem Brett bleibt, oder wieder auf. */
+  private setPeeking(peeking: boolean): void {
+    this.overlay.classList.toggle("peek", peeking);
+    this.peek.textContent = peeking ? t.draft.show : t.draft.peek;
   }
 
   private get isComplete(): boolean {

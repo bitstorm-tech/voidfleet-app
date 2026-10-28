@@ -54,6 +54,8 @@ export const de: Messages = {
     commands: "Befehle",
     none: "Nichts zur Wahl — Hand voll oder Deck leer.",
     confirm: "Übernehmen",
+    peek: "Schlachtfeld ansehen",
+    show: "Nachschub zeigen",
     salvage: {
       name: "Schrottverwertung",
       target: "Eigener Schrott-Raider",

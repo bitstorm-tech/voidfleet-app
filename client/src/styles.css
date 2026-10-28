@@ -95,6 +95,7 @@ body {
 .admiral-card .choose,
 .draft-row h3,
 #ui .draft-confirm,
+#ui .draft-peek,
 #ui .dialog-close,
 #ui .surrender-actions button,
 #ui .rules-nav button,
@@ -2326,9 +2327,35 @@ body {
   color: var(--text-dim);
 }
 
-#ui .draft-confirm {
+.draft-actions {
+  display: flex;
+  gap: 16px;
   margin-top: 10px;
+}
+
+#ui .draft-confirm,
+#ui .draft-peek {
   width: 240px;
   height: 52px;
   font-size: 22px;
+}
+
+#ui .draft-peek {
+  width: auto;
+  padding: 0 20px;
+  font-size: 18px;
+}
+
+/* Eingeklappt bleibt nur der Knopf zum Wiederaufklappen über der Hand; das Brett darüber ist frei. */
+.draft-overlay.peek {
+  justify-content: flex-end;
+  padding-bottom: 12px;
+  background: none;
+  pointer-events: none;
+  animation: none;
+}
+
+.draft-overlay.peek > :not(.draft-actions),
+#ui .draft-overlay.peek .draft-confirm {
+  display: none;
 }
