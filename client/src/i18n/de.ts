@@ -348,7 +348,6 @@ export const de: Messages = {
     commands: "Befehle",
     hand: "Hand",
     deck: "Deck",
-    unplayed: "Ungespielte Befehle",
   },
   radio: {
     speaker: "Flottenfunk",

@@ -75,8 +75,6 @@ body {
 .round-label,
 .overdrive-label,
 .opponent-title,
-.opponent-panel h3,
-.opponent-commands h4,
 .radio-speaker,
 .dialog h2,
 .rules-section h3,
@@ -362,7 +360,6 @@ body {
   display: grid;
   grid-template-columns: 1fr auto auto;
   gap: 2px 12px;
-  margin-bottom: 10px;
 }
 
 .opponent-cards .column {
@@ -376,68 +373,6 @@ body {
   font-weight: 600;
   text-align: right;
   color: var(--text);
-}
-
-.opponent-panel h3 {
-  margin: 0 0 5px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: rgb(199 219 250 / 0.6);
-}
-
-/* Je Befehlstyp eine Gruppe in seiner Farbe, Typ und Namen als eine umbrechende Reihe; eine Zahl nur bei mehr als einer offenen Kopie, aufgebrauchte verblassen. */
-.opponent-commands {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.opponent-commands li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  padding: 0 0 0 7px;
-  border-left: 2px solid rgb(var(--card-rgb));
-}
-
-.opponent-commands li + li {
-  margin-top: 4px;
-}
-
-.opponent-commands h4 {
-  margin: 0 6px 0 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: rgb(var(--card-rgb));
-}
-
-.opponent-commands div {
-  display: contents;
-  font-size: 12px;
-  line-height: 1.25;
-}
-
-.opponent-commands span {
-  white-space: nowrap;
-}
-
-.opponent-commands span:not(:last-child)::after {
-  content: "\00a0·\00a0";
-  opacity: 0.4;
-}
-
-.opponent-commands b {
-  font-weight: 600;
-  color: var(--text);
-}
-
-.opponent-commands span.spent {
-  opacity: 0.35;
-  text-decoration: line-through;
 }
 
 /* --- Bordfunk: Untertitel über dem Aktionsknopf, mit zuckenden Pegelbalken neben dem Absender --- */

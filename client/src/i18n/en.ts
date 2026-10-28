@@ -433,7 +433,6 @@ export const en = {
     commands: "Commands",
     hand: "Hand",
     deck: "Deck",
-    unplayed: "Unplayed commands",
   },
   radio: {
     /** Absender im Untertitel. */
