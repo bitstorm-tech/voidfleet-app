@@ -1,6 +1,5 @@
 import arrowUrl from "../../assets/cursors/cursor_arrow.svg";
 import crosshairUrl from "../../assets/cursors/cursor_crosshair.svg";
-import classicUrl from "../../assets/cursors/cursor_default.svg";
 import deltaUrl from "../../assets/cursors/cursor_delta.svg";
 import fighterUrl from "../../assets/cursors/cursor_fighter.svg";
 import flagshipUrl from "../../assets/cursors/cursor_flagship.svg";
@@ -9,11 +8,10 @@ import holoUrl from "../../assets/cursors/cursor_holo.svg";
 import needleUrl from "../../assets/cursors/cursor_needle.svg";
 import shardUrl from "../../assets/cursors/cursor_shard.svg";
 import thrusterUrl from "../../assets/cursors/cursor_thruster.svg";
-import { onSettingsChange, settings } from "../settings.ts";
+import { onSettingsChange, settings, updateSettings } from "../settings.ts";
 
 /** Wählbare Cursor (Einstellungen): Bild und Hotspot in SVG-Einheiten. */
 export const CURSORS = {
-  classic: { url: classicUrl, hotspot: [0, 0] },
   arrow: { url: arrowUrl, hotspot: [2, 2] },
   fighter: { url: fighterUrl, hotspot: [2, 2] },
   delta: { url: deltaUrl, hotspot: [2, 2] },
@@ -42,6 +40,8 @@ const CURSOR_SIZE = 32;
 export function installCursor(): void {
   let shown: CursorId | undefined;
   let image: HTMLImageElement;
+  // Gespeicherte Wahl eines entfernten Cursors (etwa „classic“) fällt auf den Standard zurück.
+  if (!(settings.cursor in CURSORS)) updateSettings({ cursor: "arrow" });
 
   const apply = () => {
     const dpr = window.devicePixelRatio;

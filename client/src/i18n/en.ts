@@ -158,7 +158,6 @@ export const en = {
     speeds: { slow: "Slow", normal: "Normal", fast: "Fast", veryFast: "Very fast" } satisfies Record<AnimationSpeed, string>,
     cursor: "Mouse pointer",
     cursors: {
-      classic: "Classic",
       arrow: "Toon arrow",
       fighter: "Fighter",
       delta: "Delta glider",

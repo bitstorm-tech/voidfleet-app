@@ -75,7 +75,6 @@ export const de: Messages = {
     speeds: { slow: "Langsam", normal: "Normal", fast: "Schnell", veryFast: "Sehr schnell" },
     cursor: "Mauszeiger",
     cursors: {
-      classic: "Klassisch",
       arrow: "Toon-Pfeil",
       fighter: "Jäger",
       delta: "Delta-Gleiter",

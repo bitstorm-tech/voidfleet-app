@@ -44,7 +44,7 @@ const DEFAULTS: Settings = {
   movementSpeed: "normal",
   animationSpeed: "normal",
   camera: { view: 1, zoom: [0, 0, 0] },
-  cursor: "classic",
+  cursor: "arrow",
 };
 
 export const settings: Settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") };
