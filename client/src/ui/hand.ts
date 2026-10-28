@@ -123,8 +123,8 @@ export class HandView {
   }
 
   /**
-   * Die Hände teilen sich die Leiste neben dem Aktionsknopf: Jede bekommt mindestens die Hälfte, und was die andere
-   * nicht braucht. Reicht der Platz nicht, rücken die Karten der Hand zusammen und überlappen sich.
+   * Die Hände teilen sich die Leiste neben dem Aktionsknopf: Jede bekommt genau die Hälfte, damit der Knopf in der
+   * Mitte bleibt. Reicht der Platz nicht, rücken die Karten der Hand zusammen und überlappen sich.
    */
   private fit(): void {
     const room = this.bar.clientWidth - this.submitArea.offsetWidth - 2 * CENTER_MARGIN;
@@ -133,14 +133,13 @@ export class HandView {
       { row: this.shipRow, extra: 0 },
       { row: this.commandRow, extra: admiral },
     ];
-    const widths = rows.map(({ row, extra }) => rowWidth(row.children.length) + extra);
-    rows.forEach(({ row, extra }, index) => {
+    for (const { row, extra } of rows) {
       const count = row.children.length;
-      const space = Math.max(room / 2, room - widths[1 - index]!) - extra;
+      const space = room / 2 - extra;
       const gap = count > 1 && rowWidth(count) > space ? CARD_GAP - (rowWidth(count) - space) / (count - 1) : CARD_GAP;
       // Der Rand der Karte wächst mit ihrem Zoom.
       row.style.setProperty("--card-gap", `${gap / HAND_ZOOM}px`);
-    });
+    }
   }
 }
 

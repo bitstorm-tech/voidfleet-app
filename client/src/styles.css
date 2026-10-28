@@ -1130,9 +1130,14 @@ body {
   right: 28px;
   bottom: 12px;
   height: 266px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  display: grid;
+  /* Gleich breite Seiten, damit Submit und Checkliste immer in der Mitte stehen, wie ungleich die Hände auch sind. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+}
+
+.ship-hand {
+  justify-self: start;
 }
 
 /* Karten und Fähigkeitskarte der Hand sind um 30 % größer als in Regeln und Nachschub (`CARD_WIDTH` in `hand.ts`). */
@@ -1158,6 +1163,7 @@ body {
 .hand-side {
   display: flex;
   align-items: flex-end;
+  justify-self: end;
   gap: 16px;
 }
 
