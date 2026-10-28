@@ -15,8 +15,8 @@
 // Feuerbefehl fällt weg. Die Mirage darf auch auf ein eigenes Schiff: Beim Phasentausch stehen beide als Geist über
 // dem anderen, je mit Pfeil, und beide feuern. Ein Klick auf ein anderes eigenes Schiff wählt dieses; ein zweiter
 // Klick auf das gewählte (oder seinen Geist) nimmt zurück, was es in dieser Runde bringt oder bewegt — das eingeplante
-// Schiff bzw. das Manöver —, sonst endet die Auswahl wie mit Escape oder einem Klick neben das Brett. Escape ohne
-// Auswahl nimmt das Manöver zurück.
+// Schiff bzw. das Manöver —, sonst endet die Auswahl wie mit Escape, einem Rechtsklick oder einem Klick neben das
+// Brett. Escape ohne Auswahl nimmt das Manöver zurück.
 // Statt des Manövers geht die Admiralsfähigkeit (`ui/powerCard.ts`): Ihre Karte startet die Zielwahl, das Ziel
 // trägt danach ihre Marke (`scene/markers.ts`), das Trugbild steht als Geist im Slot; wer das eine plant, verliert
 // das andere, und die Statuszeile sagt es. Admiral Kerr erfasst mit dem Knopf darüber zusätzlich ein Ziel der Railgun.
@@ -174,6 +174,7 @@ export class MatchController {
     this.hud.botButton.addEventListener("click", () => this.connection.send({ type: "addBot" }));
     this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
     window.addEventListener("keydown", (event) => this.onKeyDown(event));
+    window.addEventListener("contextmenu", (event) => this.onContextMenu(event));
 
     this.connection = this.connect(false);
     this.refreshSelectionVisuals();
@@ -412,8 +413,7 @@ export class MatchController {
     this.notice = null;
     const { plan } = this.match;
     if (this.selection !== null) {
-      this.select(null);
-      playUiSound("cancel");
+      this.cancelSelection();
     } else if (plan.maneuver !== null) {
       this.cancelManeuver();
     } else if (plan.power !== null) {
@@ -423,6 +423,20 @@ export class MatchController {
       this.refreshSelectionVisuals();
       playUiSound("cancel");
     }
+  }
+
+  /** Ein Rechtsklick bricht eine angefangene Auswahl ab; das Kontextmenü des Browsers gibt es nur in Dialogen. */
+  private onContextMenu(event: MouseEvent): void {
+    if (document.querySelector("dialog[open]") !== null) return;
+    event.preventDefault();
+    if (this.selection === null || !this.canPlan) return;
+    this.notice = null;
+    this.cancelSelection();
+  }
+
+  private cancelSelection(): void {
+    this.select(null);
+    playUiSound("cancel");
   }
 
   // --- Brett ---
@@ -447,10 +461,7 @@ export class MatchController {
   private onBoardClick(pad: SlotPad | null): void {
     const selection = this.selection!;
     // Daneben: Die Auswahl bricht ab.
-    if (pad === null) {
-      this.select(null);
-      return playUiSound("cancel");
-    }
+    if (pad === null) return this.cancelSelection();
     if (selection.kind === "unit") return this.onUnitClick(selection.slot, pad);
     if (!this.isValidTarget(pad)) return playUiSound("denied");
     switch (selection.kind) {
