@@ -129,6 +129,20 @@ export const en = {
     power: "Admiral ability",
     choose: "Choose",
   },
+  draft: {
+    title: "Supplies",
+    hint: "Take one ship and one command into your hand; the rest goes back into the deck.",
+    ships: "Ships",
+    commands: "Commands",
+    none: "Nothing to choose — hand full or deck empty.",
+    confirm: "Take",
+    salvage: {
+      name: "Scrap Salvage",
+      target: "Allied Scrap Raider",
+      effect: "Your Scrap Raider salvaged scrap: one of your Scrap Raiders gets +1 ATK permanently, right away.",
+    },
+    raider: (lane: string, slot: number, atk: number) => `${lane} · Slot ${slot} · ${atk} ATK`,
+  },
   settings: {
     title: "Settings",
     musicVolume: "Music",
@@ -246,8 +260,8 @@ export const en = {
       hand: {
         heading: "Hand and decks",
         paragraphs: [
-          "You start with 4 ships — always 1 support ship and 3 combat ships — and 3 commands. At the end of every round you draw 1 ship and 1 command. Each hand holds at most 10 cards: with a full hand you draw nothing, so play your cards. Identical cards form a stack, but each still counts. Scavenge draws 1 extra ship and 1 extra command right away, Countermeasures 1 command if nothing was countered, again within the hand limit.",
-          "Your ship deck has 16 cards (each ship twice), your command deck 34 (Torpedo and Barrage twice, every other command once). When a deck is empty, you simply draw nothing from it.",
+          "You start with 4 ships — always 1 support ship and 3 combat ships — and 3 commands. After every round you get supplies: 3 ships and 3 commands from your decks, of which you take one ship and one command into your hand; the rest is shuffled back into the deck. Only then do you plan your turn. Each hand holds at most 10 cards: a full hand gets no supplies, so play your cards. If one of your Scrap Raiders salvaged scrap in the round and one is still on the board, one of the three commands is Scrap Salvage: +1 ATK permanently for one of your Scrap Raiders, right away. Identical cards form a stack, but each still counts. Scavenge draws 1 extra ship and 1 extra command right away, Countermeasures 1 command if nothing was countered, again within the hand limit.",
+          "Your ship deck has 16 cards (each ship twice), your command deck 34 (Torpedo and Barrage twice, every other command once). When a deck runs low, the supplies show only what is left.",
         ],
       },
       controls: {
@@ -277,7 +291,7 @@ export const en = {
         name: "Cleanup",
         text: "Micro-jumped ships return, self-damage from Overcharge, Repair Drones repair, round effects expire, the Decoy dissolves, the Hive launches a Drone.",
       },
-      draw: { name: "Draw", text: "Everyone draws a ship and a command (hand limit 10)." },
+      draw: { name: "Supplies", text: "Everyone picks a ship and a command out of three each (hand limit 10)." },
       check: { name: "Check", text: "Whoever has lost their flagship loses; if both fell, it's a draw." },
     },
     figures: {
@@ -337,6 +351,7 @@ export const en = {
     waitingForOpponent: (link: string) => `Waiting for the opponent — share this link: ${link}`,
     chooseAdmiral: (link: string | null) => (link ? `Choose your admiral. Invite an opponent with this link: ${link}` : "Choose your admiral."),
     opponentChoosing: "The opponent is choosing their admiral …",
+    draft: "Supplies: choose one ship and one command for your hand.",
     flagshipFirst: (flagship: string) =>
       `Round 1: deploy your flagship ${flagship} — tap its card at the front of your hand, then a glowing slot. “End turn” only works once it is planned.`,
     fleet: (count: number, max: number) => `Fleet ${count}/${max}`,
@@ -457,7 +472,7 @@ export const en = {
     guardianShield: (source: string, ship: string, amount: number) => `Guardian Shield: ${source} gives ${ship} +${amount} shield this round`,
     spawn: (source: string, ship: string) => `Deploy: ${source} launches ${ship}`,
     brood: (source: string, ship: string) => `Brood Chamber: ${source} launches ${ship}`,
-    scrap: (ship: string, delta: number) => `Salvage: ${ship} permanently +${delta} ATK`,
+    salvage: (ship: string) => `Salvage: ${ship} recovers scrap — Scrap Salvage comes with the next supplies`,
     draw: (command: string, who: string, ships: number, commands: number) =>
       `Effect: ${command} — ${who} ${ships > 0 ? `+${ships} ship, ` : ""}+${commands} command`,
     noEffect: (command: string, who: string) => `Effect: ${command} (${who}) has no effect`,
@@ -503,6 +518,7 @@ export const en = {
     heal: (amount: number) => `+${amount} HP`,
     shield: (amount: number) => `+${amount} Shield`,
     attack: (delta: number) => `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ATK`,
+    salvage: "Scrap",
     disabled: "Disabled",
     holdFire: "Holds fire",
     miss: "Miss",
@@ -527,6 +543,9 @@ export const en = {
     admiral_required: "Choose your admiral first.",
     admiral_already_chosen: "You have already chosen your admiral.",
     opponent_choosing: "The opponent is still choosing their admiral.",
+    draft_pending: "Choose your supplies first.",
+    draft_unavailable: "There are no supplies to choose right now.",
+    draft_invalid: "Choose one ship and one command from the supplies.",
     flagship_required: "Deploy your flagship in round 1.",
     flagship_not_allowed: "The flagship is only deployed in round 1.",
     power_and_maneuver: "Use either the maneuver or your admiral ability, not both.",
@@ -587,7 +606,10 @@ export const en = {
     iron_dreadnought: { name: "Iron Dreadnought", effect: "Shield 2: Absorbs the first 2 damage before the hull." },
     plasma_frigate: { name: "Plasma Frigate", effect: "On Deploy: Deal 3 damage to a random enemy ship in the same lane." },
     repair_drone: { name: "Repair Drone", effect: "End of each round: Repairs 2 HP on the damaged allied combat ship with the lowest HP." },
-    scrap_raider: { name: "Scrap Raider", effect: "When an enemy ship in the same lane is destroyed: +1 ATK permanently." },
+    scrap_raider: {
+      name: "Scrap Raider",
+      effect: "When an enemy ship in the same lane is destroyed, your next supplies include Scrap Salvage: +1 ATK permanently for a Scrap Raider.",
+    },
     signal_booster: { name: "Signal Booster", effect: "All other allied ships in the same lane have +1 ATK, as long as the Signal Booster is there." },
     titan_carrier: { name: "Titan Carrier", effect: "On Deploy: Spawn a Drone (1 HP, 1 ATK) in the same lane." },
     drone: {

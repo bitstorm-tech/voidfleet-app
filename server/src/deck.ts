@@ -36,6 +36,12 @@ export class Deck<T extends Card> {
     return result;
   }
 
+  /** Legt Karten zurück und mischt neu (der Rest des Nachschubs). */
+  putBack(cards: readonly T[]): void {
+    this.cards.push(...cards);
+    this.shuffle();
+  }
+
   get size(): number {
     return this.cards.length;
   }

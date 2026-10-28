@@ -18,7 +18,7 @@ import {
   targetsEnemySide,
 } from "../../../shared/cards.ts";
 import { canMark, markTargets, powerTargets, railgunFires } from "../../../shared/powers.ts";
-import type { FireOrder, MatchResult, OpponentView, PlayerView, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
+import type { DraftOffer, FireOrder, MatchResult, OpponentView, PlayerView, SlotRef, SlotTarget, TurnPlan } from "../../../shared/protocol.ts";
 
 /** Ein Schiff zum Legen: eine Karte der Schiffshand (Index) oder in Runde 1 das Flaggschiff. */
 export type ShipPick = number | "flagship";
@@ -67,10 +67,17 @@ export class Match {
   plan: TurnPlan = emptyPlan();
   /** Der Zug ist abgegeben und bis zur Auflösung gesperrt. */
   submitted = false;
+  /** Der Nachschub nach der letzten Runde, solange nicht gewählt; bis dahin wird nicht geplant. */
+  draft: DraftOffer | null = null;
   /** Was man vom Gegner weiß, sobald er beigetreten ist. */
   opponent: OpponentView | null = null;
   result: MatchResult | null = null;
   surrendered = false;
+
+  /** Die eigenen Scrap Raider auf dem Brett, für die Schrottverwertung des Nachschubs. */
+  get raiders(): Slot[] {
+    return this.board.ships("player").filter((slot) => slot.card!.id === "scrap_raider");
+  }
 
   /** Das eigene Flaggschiff; null, solange kein Admiral gewählt ist. */
   get flagship(): ShipCard | null {
@@ -493,6 +500,7 @@ export class Match {
       this.plan = emptyPlan();
     }
     this.submitted = view.submittedPlan !== null;
+    this.draft = view.draft;
     this.round = view.round;
     this.admiral = view.admiral;
     this.board.load(view.board);

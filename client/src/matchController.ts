@@ -46,7 +46,7 @@ import {
   targetsEnemySide,
   targetsEnemySlot,
 } from "../../shared/cards.ts";
-import type { MatchResult, OpponentView, ServerMessage, ShipRef, SlotRef, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
+import type { DraftPick, MatchResult, OpponentView, ServerMessage, ShipRef, SlotRef, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { setMusicMood } from "./audio/music.ts";
 import { say } from "./audio/radio.ts";
 import { playUiSound } from "./audio/uiSounds.ts";
@@ -65,6 +65,7 @@ import type { MoveArrow } from "./scene/moveArrow.ts";
 import { ShipView } from "./scene/ship.ts";
 import type { SlotPad } from "./scene/slotPad.ts";
 import { AdmiralSelect } from "./ui/admiralSelect.ts";
+import { DraftSelect } from "./ui/draftSelect.ts";
 import { FloatingTexts } from "./ui/floatingText.ts";
 import { installFullscreen, toggleFullscreen } from "./ui/fullscreen.ts";
 import { HandView } from "./ui/hand.ts";
@@ -106,6 +107,7 @@ export class MatchController {
   private readonly hand: HandView;
   private readonly powerCard: PowerCard;
   private readonly admiralSelect: AdmiralSelect;
+  private readonly draftSelect: DraftSelect;
   private readonly playback: RoundPlayback;
   private readonly resultScreen: ResultScreen;
   private readonly surrenderDialog: SurrenderDialog;
@@ -124,6 +126,8 @@ export class MatchController {
   private notice: string | null = null;
   /** Der gewählte Admiral, bis der Server ihn bestätigt. */
   private pendingAdmiral: AdmiralId | null = null;
+  /** Die Wahl aus dem Nachschub ist geschickt, aber noch nicht bestätigt. */
+  private pendingDraft = false;
   private hoveredPad: SlotPad | null = null;
   private ghostPads: SlotPad[] = [];
   private validTargetCount = 0;
@@ -139,6 +143,7 @@ export class MatchController {
     this.playback = new RoundPlayback(this.view, this.hud, floats);
     // Vor der Hand im DOM, damit vergrößerte Karten über der Admiralswahl liegen.
     this.admiralSelect = new AdmiralSelect(ui, (admiral) => this.chooseAdmiral(admiral));
+    this.draftSelect = new DraftSelect(ui, (pick) => this.chooseDraft(pick));
     this.resultScreen = new ResultScreen(ui, () => this.startNewMatch());
     installFullscreen(ui);
     installViewToggle(ui, this.view);
@@ -197,9 +202,13 @@ export class MatchController {
     this.connection = this.connect(true);
   }
 
-  /** Geplant wird, sobald beide ihren Admiral haben, solange der Zug dieser Runde offen und das Match nicht entschieden ist. */
+  /**
+   * Geplant wird, sobald beide ihren Admiral haben, solange der Zug dieser Runde offen und das Match nicht entschieden
+   * ist, und erst, wenn der Nachschub gewählt ist.
+   */
   private get canPlan(): boolean {
-    return this.isConnected && this.match.round > 0 && this.match.admiralsChosen && !this.match.submitted && this.match.result === null;
+    const { match } = this;
+    return this.isConnected && match.round > 0 && match.admiralsChosen && !match.submitted && match.draft === null && match.result === null;
   }
 
   // --- Server ---
@@ -212,6 +221,7 @@ export class MatchController {
         const before = { opponent: this.match.opponent, result: this.match.result };
         this.match.apply(message.view);
         if (this.match.admiral !== null) this.pendingAdmiral = null;
+        if (this.match.draft === null) this.pendingDraft = false;
         setMusicMood(this.match.result === null ? "calm" : null);
         this.selection = null;
         this.notice = null;
@@ -235,6 +245,8 @@ export class MatchController {
         this.updateHud();
         break;
       case "error":
+        this.pendingDraft = false;
+        this.updateHud();
         this.hud.appendLog([`Server: ${t.errors[message.code]}`]);
         break;
     }
@@ -251,6 +263,15 @@ export class MatchController {
     if (this.pendingAdmiral !== null || this.match.admiral !== null || !this.isConnected) return;
     this.pendingAdmiral = admiral;
     this.connection.send({ type: "chooseAdmiral", admiral });
+    playUiSound("confirm");
+    this.updateHud();
+  }
+
+  /** Die Wahl aus dem Nachschub; bis zur Bestätigung bleibt das Overlay gesperrt. */
+  private chooseDraft(pick: DraftPick): void {
+    if (this.pendingDraft || this.match.draft === null || !this.isConnected) return;
+    this.pendingDraft = true;
+    this.connection.send({ type: "draft", pick });
     playUiSound("confirm");
     this.updateHud();
   }
@@ -950,6 +971,8 @@ export class MatchController {
     const planning = !this.isResolving && this.canPlan && match.opponent !== null;
     this.hud.setChecklist(planning ? match.turnProgress : null, { planned: match.plan.ships.length, max: match.deployLimit });
     this.admiralSelect.show(this.isConnected && match.round > 0 && match.admiral === null && match.result === null, this.pendingAdmiral);
+    const drafting = this.isConnected && !this.isResolving && match.result === null;
+    this.draftSelect.show(drafting ? match.draft : null, match.raiders, this.pendingDraft);
     this.surrenderDialog.setAvailable(this.isConnected && match.opponent !== null && match.result === null);
     this.opponentPanel.show(match.opponent, match.admiral !== null);
   }
@@ -994,6 +1017,7 @@ export class MatchController {
     if (match.opponent === null) return t.status.waitingForOpponent(this.shareLink());
     if (match.opponent.admiral === null) return t.status.opponentChoosing;
     if (match.submitted) return t.status.submitted;
+    if (match.draft !== null) return t.status.draft;
     const fleet = t.status.fleet(match.board.shipCount("player"), MAX_SHIPS_PER_SIDE);
     // Aufstellung: Solange mehr als ein Schiff erlaubt ist, steht dabei, wie viele noch gelegt werden dürfen.
     const deploys = match.deployLimit > 1 ? ` · ${t.status.deploysLeft(match.deploysLeft)}` : "";

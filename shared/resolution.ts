@@ -868,8 +868,9 @@ function resolveBroodChamber(board: Board, events: RoundEvent[]): void {
 }
 
 /**
- * Entfernt die zerstörten Schiffe. Jeder überlebende Scrap Raider bekommt dauerhaft +1 ATK für jedes
- * davon, das auf der Gegenseite in der gleichnamigen Lane stand, egal wodurch es fiel.
+ * Entfernt die zerstörten Schiffe. Jeder überlebende Scrap Raider, auf dessen Gegenseite in der gleichnamigen Lane ein
+ * Schiff fiel (egal wodurch), birgt Schrott (`salvage`): Steht nach der Runde noch ein Scrap Raider auf seiner Seite,
+ * gehört zum Nachschub die Schrottverwertung (`DraftOffer.salvage`).
  */
 function removeDestroyed(board: Board, events: RoundEvent[]): void {
   const destroyed = SIDES.flatMap((side) => board.ships(side)).filter((slot) => slot.isDestroyed);
@@ -877,11 +878,10 @@ function removeDestroyed(board: Board, events: RoundEvent[]): void {
   for (const raider of SIDES.flatMap((side) => board.ships(side))) {
     if (raider.card!.id !== "scrap_raider" || raider.isDestroyed) continue;
     // Ein Trugbild ist ein Hologramm und hinterlässt keinen Schrott.
-    const kills = destroyed.filter((slot) => slot.lane.side !== raider.lane.side && slot.lane.type === raider.lane.type && slot.card!.id !== "decoy").length;
-    if (kills === 0) continue;
-    raider.scrapBonus += kills;
+    const scrap = destroyed.some((slot) => slot.lane.side !== raider.lane.side && slot.lane.type === raider.lane.type && slot.card!.id !== "decoy");
+    if (!scrap) continue;
     const ship = shipRef(raider);
-    events.push({ kind: "ability", source: ship, ship, effect: { type: "attack", delta: kills }, after: stats(raider) });
+    events.push({ kind: "ability", source: ship, ship, effect: { type: "salvage" }, after: stats(raider) });
   }
   for (const slot of destroyed) slot.clear();
 }

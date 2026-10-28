@@ -717,7 +717,7 @@ export class RoundPlayback {
 
   /**
    * Plasma Frigate: ein Schuss auf das Ziel. Repair Drone: erst ein Impuls an der Quelle, dann die Reparatur
-   * am Ziel. Scrap Raider: der Bonus leuchtet am Raider selbst auf. Bastion: Die Schildblase des Wächterschilds
+   * am Ziel. Scrap Raider: Der geborgene Schrott leuchtet am Raider selbst auf. Bastion: Die Schildblase des Wächterschilds
    * legt sich um sie und das Schiff vor ihr.
    */
   private async ability(event: Extract<RoundEvent, { kind: "ability" }>): Promise<void> {
@@ -735,9 +735,9 @@ export class RoundPlayback {
         await this.view.effects.pulse(source, SIDE_COLORS[event.source.side], 1.2, 350);
         pad.ship!.setStats(after.hp, after.shield);
         return this.mark(pad, t.float.heal(effect.amount), "heal");
-      case "attack":
+      case "salvage":
         playSound("power_up", { at: source });
-        return this.mark(pad, t.float.attack(effect.delta), "buff");
+        return this.mark(pad, t.float.salvage, "buff");
       case "shield":
         playSound("shield_up", { at: source });
         pad.ship!.setStats(after.hp, after.shield);

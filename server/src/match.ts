@@ -2,7 +2,8 @@
 // Der Server ist autoritativ: Er prüft die Züge, hält sie bis zum Aufdecken
 // geheim und löst die Runde auf, sobald beide abgegeben haben. Die Phasen der
 // Runde stehen in `shared/resolution.ts`. Vor Runde 1 wählt jeder verdeckt seinen
-// Admiral (`shared/admirals.ts`). Statt eines zweiten Menschen kann der
+// Admiral (`shared/admirals.ts`). Nach jeder Runde wählt jeder aus dem Nachschub (`DraftOffer`) ein Schiff und
+// einen Befehl, bevor er den nächsten Zug abgibt. Statt eines zweiten Menschen kann der
 // Computergegner (`bot.ts`) einen Platz einnehmen; er zieht, sobald der Mensch abgibt.
 // Intern sitzt Seat 0 auf der "player"-Seite des Bretts und Seat 1 auf der
 // "enemy"-Seite; alles, was an Seat 1 geht, wird gespiegelt.
@@ -23,9 +24,9 @@ import {
   targetsEnemySide,
 } from "../../shared/cards.ts";
 import { canMark, markTargets, type PlannedArrival, powerTargets } from "../../shared/powers.ts";
-import type { ErrorCode, MatchResult, OpponentView, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
+import type { DraftOffer, DraftPick, ErrorCode, MatchResult, OpponentView, PlayerView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { type Commander, resolveTurns, type Turn } from "../../shared/resolution.ts";
-import { type BotView, planBotTurn } from "./bot.ts";
+import { type BotView, planBotDraft, planBotTurn } from "./bot.ts";
 import { buildDefaultCommandDeck, buildDefaultShipDeck, type Deck } from "./deck.ts";
 
 export type Seat = 0 | 1;
@@ -36,6 +37,8 @@ const HAND_LIMIT = 10;
 const STARTING_SUPPORT_SHIPS = 1;
 const STARTING_COMBAT_SHIPS = 3;
 const STARTING_COMMANDS = 3;
+/** Der Nachschub nach jeder Runde zeigt je so viele Schiffe und Befehle. */
+const DRAFT_SIZE = 3;
 
 const SEAT_SIDE: Record<Seat, Side> = { 0: "player", 1: "enemy" };
 
@@ -60,6 +63,8 @@ class Player implements Commander {
   /** Vor Runde 1 gewählt (`Match.chooseAdmiral`), beim Computergegner sofort. */
   admiral: AdmiralId | null = null;
   plan: TurnPlan | null = null;
+  /** Der Nachschub nach der letzten Runde, bis er gewählt hat (`Match.draft`); die Karten fehlen solange im Deck. */
+  draft: { ships: ShipCard[]; commands: CommandCard[]; salvage: boolean } | null = null;
 
   /** Der Computergegner hat kein Token; er wird nie über einen Socket angesprochen. */
   constructor(
@@ -86,10 +91,28 @@ class Player implements Commander {
     return shipById(ADMIRALS[this.admiral!].flagship);
   }
 
-  /** 1 Schiff + 1 Befehl nachziehen. Ist die Handhälfte voll, verfällt die Karte. */
-  drawForRound(): void {
-    drawInto(this.shipHand, this.shipDeck);
-    drawInto(this.commandHand, this.commandDeck);
+  /**
+   * Zieht den Nachschub: je bis zu 3 Karten, für eine volle Handhälfte keine; mit der Schrottverwertung (`salvage`) ein
+   * Befehl weniger. Ohne Karten und Schrottverwertung gibt es nichts zu wählen.
+   */
+  offerDraft(salvage: boolean): void {
+    const offer = <T extends ShipCard | CommandCard>(hand: T[], deck: Deck<T>, count: number) => (hand.length >= HAND_LIMIT ? [] : deck.drawMany(count));
+    const ships = offer(this.shipHand, this.shipDeck, DRAFT_SIZE);
+    const commands = offer(this.commandHand, this.commandDeck, salvage ? DRAFT_SIZE - 1 : DRAFT_SIZE);
+    this.draft = ships.length > 0 || commands.length > 0 || salvage ? { ships, commands, salvage } : null;
+  }
+
+  /** Nimmt die gewählten Karten des Nachschubs auf die Hand; die übrigen gehen zurück ins Deck. */
+  takeDraft(ship: number | null, command: number | null): void {
+    const { ships, commands } = this.draft!;
+    takeFrom(ships, ship, this.shipHand, this.shipDeck);
+    takeFrom(commands, command, this.commandHand, this.commandDeck);
+    this.draft = null;
+  }
+
+  get draftOffer(): DraftOffer | null {
+    const { draft } = this;
+    return draft && { ships: draft.ships.map((card) => card.id), commands: draft.commands.map((card) => card.id), salvage: draft.salvage };
   }
 
   drawExtra(ships: number, commands: number): { ships: number; commands: number } {
@@ -138,6 +161,12 @@ const isSupport = (card: ShipCard) => card.shipClass === "support";
 
 function drawManyWhere(deck: Deck<ShipCard>, count: number, predicate: (card: ShipCard) => boolean): ShipCard[] {
   return Array.from({ length: count }, () => deck.drawWhere(predicate)!);
+}
+
+/** Die gewählte Karte (Index in `offered`) kommt auf die Hand, die übrigen zurück ins Deck. */
+function takeFrom<T extends ShipCard | CommandCard>(offered: T[], index: number | null, hand: T[], deck: Deck<T>): void {
+  if (index !== null) hand.push(...offered.splice(index, 1));
+  deck.putBack(offered);
 }
 
 /** Zieht eine Karte; true, wenn sie auf der Hand gelandet ist. */
@@ -204,6 +233,7 @@ export class Match {
     if (this.players.length < 2) return "opponent_missing";
     if (!this.started) return "opponent_choosing";
     if (player.plan !== null) return "already_submitted";
+    if (player.draft !== null) return "draft_pending";
     const error = this.validate(player, plan);
     if (error) return error;
 
@@ -212,6 +242,27 @@ export class Match {
     for (const bot of this.players) {
       if (bot.isBot && bot.plan === null) bot.plan = planBotTurn(this.board, this.botView(bot.seat), this.round);
     }
+    return null;
+  }
+
+  /**
+   * Die Wahl aus dem Nachschub: ein Schiff, wenn es welche gibt, und ein Befehl oder die Schrottverwertung auf einen
+   * eigenen Scrap Raider, wenn es eines davon gibt. Die Schrottverwertung wirkt sofort.
+   */
+  draft(seat: Seat, pick: DraftPick): ErrorCode | null {
+    const player = this.players[seat]!;
+    if (this.winner !== null) return "match_over";
+    const offer = player.draft;
+    if (offer === null) return "draft_unavailable";
+    const raider = pick.salvage && this.board.lane(player.side, pick.salvage.lane).slots[pick.salvage.slotIndex];
+    if (pick.salvage && (!offer.salvage || raider?.card?.id !== "scrap_raider")) return "draft_invalid";
+    // Ein Index ist Pflicht, sobald es etwas zu wählen gibt; die Schrottverwertung zählt zu den Befehlen.
+    const valid = (index: number | null, count: number) => (index === null ? count === 0 : index >= 0 && index < count);
+    if (!valid(pick.ship, offer.ships.length)) return "draft_invalid";
+    const command = raider ? pick.command === null : valid(pick.command, offer.commands.length) && !(offer.salvage && pick.command === null);
+    if (!command) return "draft_invalid";
+    player.takeDraft(pick.ship, pick.command);
+    if (raider) raider.scrapBonus += 1;
     return null;
   }
 
@@ -324,8 +375,8 @@ export class Match {
   }
 
   /**
-   * Deckt beide Züge auf und löst die Runde in Phasen auf (`resolveTurns`). Danach ziehen beide nach, und es
-   * wird geprüft, ob ein Flaggschiff gefallen ist; sonst beginnt die nächste Runde. Gibt die Ereignisse aus
+   * Deckt beide Züge auf und löst die Runde in Phasen auf (`resolveTurns`). Danach wird geprüft, ob ein Flaggschiff
+   * gefallen ist; sonst beginnt die nächste Runde mit dem Nachschub, den der Computergegner gleich wählt. Gibt die Ereignisse aus
    * Sicht von Seat 0 zurück.
    */
   resolveRound(): RoundEvent[] {
@@ -334,17 +385,24 @@ export class Match {
       this.players.map((player) => player.reveal()),
       this.random,
     );
-    for (const player of this.players) {
-      player.plan = null;
-      player.drawForRound();
-    }
+    for (const player of this.players) player.plan = null;
     this.winner = this.decideWinner();
     if (this.winner === null) {
       this.round += 1;
       // Gilt schon beim Planen der neuen Runde, damit der Computergegner mit denselben Werten rechnet.
       this.board.overdrive = overdriveBonus(this.round);
+      for (const player of this.players) {
+        player.offerDraft(this.salvaged(player.side, events));
+        if (player.isBot && player.draft) this.draft(player.seat, planBotDraft(this.board, this.botView(player.seat), player.draftOffer!));
+      }
     }
     return events;
+  }
+
+  /** Ein eigener Scrap Raider hat in der Runde Schrott geborgen, und auf der Seite steht danach noch einer. */
+  private salvaged(side: Side, events: RoundEvent[]): boolean {
+    const scrap = events.some((event) => event.kind === "ability" && event.effect.type === "salvage" && event.source.side === side);
+    return scrap && this.board.ships(side).some((slot) => slot.card!.id === "scrap_raider");
   }
 
   /** Wessen Flaggschiff gefallen ist, hat verloren; fallen beide in derselben Runde, ist es unentschieden. */
@@ -376,6 +434,7 @@ export class Match {
       shipDeckSize: player.shipDeck.size,
       commandDeckSize: player.commandDeck.size,
       submittedPlan: player.plan,
+      draft: player.draftOffer,
       opponent: opponent?.publicView(this.started) ?? null,
       result: this.resultFor(seat),
       surrendered: this.surrenderedBy !== null,

@@ -6,7 +6,7 @@ import { ADMIRAL_IDS, ADMIRALS, type AdmiralId } from "../../shared/admirals.ts"
 import { opposite, type Side, slotTarget } from "../../shared/board.ts";
 import { type CommandId, isFlagship, shipById } from "../../shared/cards.ts";
 import type { ErrorCode, RoundEvent, TurnPlan } from "../../shared/protocol.ts";
-import { planBotTurn } from "../src/bot.ts";
+import { planBotDraft, planBotTurn } from "../src/bot.ts";
 import { Match, type Seat } from "../src/match.ts";
 
 const GAMES = Number(process.argv[2] ?? 2000);
@@ -112,6 +112,8 @@ function play(admirals: readonly [AdmiralId, AdmiralId]): Game {
   let flagshipFall: number | null = null;
   while (match.winner === null && match.round <= ROUND_LIMIT) {
     for (const player of match.players) {
+      const offer = player.draftOffer;
+      if (offer) match.draft(player.seat, planBotDraft(match.board, match.botView(player.seat), offer));
       if (player.commandHand.length === 0) emptyCommandHand[player.seat]! += 1;
       for (const { id } of player.commandHand) card(id).held += 1;
       const error = match.submit(player.seat, planBotTurn(match.board, match.botView(player.seat), match.round));

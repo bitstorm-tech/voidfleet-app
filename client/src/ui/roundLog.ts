@@ -99,8 +99,8 @@ export function describeEvent(event: RoundEvent): string {
           return t.log.abilityDamage(source, shipLabel(event.ship), effect.amount);
         case "heal":
           return t.log.repair(source, shipLabel(event.ship), effect.amount);
-        case "attack":
-          return t.log.scrap(source, effect.delta);
+        case "salvage":
+          return t.log.salvage(source);
         case "shield":
           return t.log.guardianShield(source, shipLabel(event.ship), effect.amount);
       }

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { AdmiralId } from "../../shared/admirals.ts";
 import { commandById, SHIPS, type ShipCard, shipById } from "../../shared/cards.ts";
-import type { RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
+import type { DraftPick, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import { Match } from "./match.ts";
 
 const strike = (slotIndex: number): SlotTarget => ({ lane: "strike", slotIndex });
@@ -37,6 +37,16 @@ function playRound(match: Match, plans = [pass, pass]): RoundEvent[] {
   expect(match.submit(0, plans[0]!)).toBeNull();
   expect(match.submit(1, plans[1]!)).toBeNull();
   return match.resolveRound();
+}
+
+/** Aus dem Nachschub je die erste Karte. */
+const firstPick: DraftPick = { ship: 0, command: 0, salvage: null };
+
+/** Ein Match in Runde 2 mit je einer Bastion als Flaggschiff, damit es nach der Runde weitergeht. */
+function ongoing(): Match {
+  const match = midGame();
+  for (const side of ["player", "enemy"] as const) match.board.place(match.board.lane(side, "command"), 2, shipById("bastion"));
+  return match;
 }
 
 /** Ersetzt die Schiffshände und leert die Schiffsdecks, damit kein Nachschub kommt. */
@@ -140,6 +150,8 @@ test("In Runde 1 legt jeder sein Flaggschiff zusätzlich zu bis zu zwei Schiffen
   const deploys = match.resolveRound().filter((event) => event.kind === "deploy");
   expect(deploys.filter((event) => event.side === "player")).toMatchObject([{ cardId: "vanguard", target: command(5) }, {}, {}]);
   expect(deploys.filter((event) => event.side === "enemy")).toMatchObject([{ cardId: "pendulum", target: command(1) }, {}, {}]);
+  expect(match.players[0]!.shipHand).toHaveLength(2);
+  expect(match.draft(0, firstPick)).toBeNull();
   expect(match.players[0]!.shipHand).toHaveLength(3);
   expect(match.submit(0, twoShips(strike(0), strike(5), null))).toBe("too_many_ships");
   expect(match.submit(0, plan({ flagship: command(4) }))).toBe("flagship_not_allowed");
@@ -606,6 +618,7 @@ test("Der Gegner sieht Admiral, Handgrößen, Decks und die aufgedeckten Befehle
   expect(match.view(1).opponent).toMatchObject({ submitted: true, commandHandSize: 2, playedCommands: [] });
   expect(match.submit(1, plan({ flagship: command(2) }))).toBeNull();
   match.resolveRound();
+  expect(match.draft(0, firstPick)).toBeNull();
   expect(match.view(1).opponent).toEqual({
     admiral: "vance",
     submitted: false,
@@ -774,6 +787,91 @@ test("Ziehende Befehle ziehen über den Spieler: Plündern 1 + 1, Gegenmaßnahme
     plan({ command: { handIndex: 0, target: strike(0), destination: null } }),
   ]);
   expect(events).toContainEqual({ kind: "draw", side: "player", cardId: "countermeasures", ships: 0, commands: 1 });
-  // Gezogen beim Gegenmaßnahmen-Befehl, dann das Nachziehen der Runde.
-  expect(first.commandHand).toHaveLength(2);
+  // Gezogen beim Gegenmaßnahmen-Befehl; Nachschub gibt es keinen, ohne Flaggschiffe ist das Match vorbei.
+  expect(first.commandHand).toHaveLength(1);
+});
+
+test("Nach der Runde gibt es 3 Schiffe und 3 Befehle zur Wahl; erst nach der Wahl geht der Zug, die übrigen gehen zurück ins Deck", () => {
+  const match = ongoing();
+  const player = match.players[0]!;
+  const decks = { ships: player.shipDeck.size, commands: player.commandDeck.size };
+  const hands = { ships: player.shipHand.length, commands: player.commandHand.length };
+  expect(match.draft(0, firstPick)).toBe("draft_unavailable");
+  playRound(match);
+  const offer = match.view(0).draft!;
+  expect([offer.ships.length, offer.commands.length, offer.salvage]).toEqual([3, 3, false]);
+  expect(player.shipDeck.size).toBe(decks.ships - 3);
+  expect(match.submit(0, pass)).toBe("draft_pending");
+  expect(match.draft(0, { ship: 3, command: 0, salvage: null })).toBe("draft_invalid");
+  expect(match.draft(0, { ship: 0, command: null, salvage: null })).toBe("draft_invalid");
+  expect(match.draft(0, { ship: 0, command: 1, salvage: strike(0) })).toBe("draft_invalid");
+  expect(match.draft(0, { ship: 2, command: 1, salvage: null })).toBeNull();
+  expect(match.view(0).draft).toBeNull();
+  expect(player.shipHand.at(-1)!.id).toBe(offer.ships[2]!);
+  expect(player.commandHand.at(-1)!.id).toBe(offer.commands[1]!);
+  expect([player.shipHand.length, player.commandHand.length]).toEqual([hands.ships + 1, hands.commands + 1]);
+  expect([player.shipDeck.size, player.commandDeck.size]).toEqual([decks.ships - 1, decks.commands - 1]);
+  expect(match.draft(0, firstPick)).toBe("draft_unavailable");
+  expect(match.submit(0, pass)).toBeNull();
+});
+
+test("Eine volle Handhälfte bekommt keinen Nachschub, ein leeres Deck nur, was es noch hat", () => {
+  const match = ongoing();
+  const player = match.players[0]!;
+  while (player.commandHand.length < 10) player.commandHand.push(commandById("torpedo"));
+  while (player.shipDeck.size > 2) player.shipDeck.draw();
+  playRound(match);
+  expect(match.view(0).draft).toEqual({ ships: [expect.any(String), expect.any(String)], commands: [], salvage: false });
+  expect(match.draft(0, firstPick)).toBe("draft_invalid");
+  expect(match.draft(0, { ship: 1, command: null, salvage: null })).toBeNull();
+});
+
+test("Birgt ein Scrap Raider Schrott, ist ein Befehl die Schrottverwertung: +1 ATK sofort für einen eigenen Scrap Raider nach Wahl", () => {
+  const match = ongoing();
+  const lane = (side: "player" | "enemy", type: "strike" | "command") => match.board.lane(side, type);
+  const raider = match.board.place(lane("player", "strike"), 0, shipById("scrap_raider"))!;
+  const other = match.board.place(lane("player", "command"), 4, shipById("scrap_raider"))!;
+  match.board.place(lane("enemy", "strike"), 0, { ...interceptor, hp: 1 });
+  const events = playRound(match, [plan({ fire: [{ ship: strike(0), target: strike(0) }] }), pass]);
+  expect(events).toContainEqual(expect.objectContaining({ kind: "ability", effect: { type: "salvage" } }));
+  const offer = match.view(0).draft!;
+  expect([offer.commands.length, offer.salvage]).toEqual([2, true]);
+  expect(match.view(1).draft!.salvage).toBe(false);
+  const decks = match.players[0]!.commandDeck.size;
+  expect(match.draft(0, { ship: 0, command: null, salvage: command(2) })).toBe("draft_invalid");
+  expect(match.draft(0, { ship: 0, command: 0, salvage: command(4) })).toBe("draft_invalid");
+  // Egal welcher Raider den Schrott geborgen hat.
+  expect(match.draft(0, { ship: 0, command: null, salvage: command(4) })).toBeNull();
+  expect([raider.scrapBonus, other.scrapBonus]).toEqual([0, 1]);
+  expect(other.attack).toBe(shipById("scrap_raider").atk + 1);
+  expect(match.players[0]!.commandDeck.size).toBe(decks + 2);
+});
+
+test("Fällt der Raider nach dem Bergen noch in derselben Runde, gibt es keine Schrottverwertung", () => {
+  const match = ongoing();
+  const raider = match.board.place(match.board.lane("player", "strike"), 0, shipById("scrap_raider"))!;
+  raider.hp = 1;
+  match.board.place(match.board.lane("enemy", "strike"), 0, { ...interceptor, hp: 1 });
+  match.players[0]!.commandHand.splice(0, match.players[0]!.commandHand.length, commandById("volley_fire"));
+  const events = playRound(match, [
+    plan({ command: { handIndex: 0, target: null, destination: null } }),
+    plan({ fire: [{ ship: command(2), target: strike(0) }] }),
+  ]);
+  expect(events).toContainEqual(expect.objectContaining({ kind: "ability", effect: { type: "salvage" } }));
+  expect(events).toContainEqual({ kind: "destroyed", ship: { side: "player", lane: "strike", slotIndex: 0, cardId: "scrap_raider" } });
+  expect(match.view(0).draft!.salvage).toBe(false);
+});
+
+test("Der Computergegner wählt seinen Nachschub sofort", () => {
+  const match = new Match("test");
+  match.join("a");
+  match.addBot();
+  match.chooseAdmiral(0, "osei");
+  expect(match.submit(0, plan({ flagship: command(2) }))).toBeNull();
+  const bot = match.players[1]!;
+  const before = bot.shipHand.length;
+  match.resolveRound();
+  expect(bot.draft).toBeNull();
+  expect(match.view(0).draft).not.toBeNull();
+  expect(bot.shipHand.length).toBeGreaterThan(before - 3);
 });

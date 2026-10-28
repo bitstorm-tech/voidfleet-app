@@ -3,7 +3,7 @@ import { ADMIRAL_IDS, type AdmiralId } from "../../shared/admirals.ts";
 import { Board, type LaneType, type Side, type Slot } from "../../shared/board.ts";
 import { COMMANDS, type CommandId, commandById, deckCopies, type ShipId, shipById } from "../../shared/cards.ts";
 import type { TurnPlan } from "../../shared/protocol.ts";
-import { type BotView, planBotTurn } from "./bot.ts";
+import { type BotView, planBotDraft, planBotTurn } from "./bot.ts";
 import { Match } from "./match.ts";
 
 function place(board: Board, side: Side, lane: LaneType, slotIndex: number, id: ShipId): Slot {
@@ -55,6 +55,8 @@ test("Bot gegen Bot: über 300 Partien mit allen Admiralen gilt jeder Zug und je
         break;
       }
       for (const player of match.players) {
+        const offer = player.draftOffer;
+        if (offer) expect(match.draft(player.seat, planBotDraft(match.board, match.botView(player.seat), offer))).toBeNull();
         expect(match.submit(player.seat, planBotTurn(match.board, match.botView(player.seat), match.round))).toBeNull();
       }
       match.resolveRound();

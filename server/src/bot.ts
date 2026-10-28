@@ -47,7 +47,7 @@ import {
   targetsEnemyShip,
 } from "../../shared/cards.ts";
 import { canMark, powerTargets } from "../../shared/powers.ts";
-import type { Deploy, FireOrder, OpponentView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
+import type { Deploy, DraftOffer, DraftPick, FireOrder, OpponentView, RoundEvent, SlotTarget, TurnPlan } from "../../shared/protocol.ts";
 import {
   type Commander,
   highest,
@@ -157,6 +157,24 @@ export function planBotTurn(board: Board, bot: BotView, round: number, random: (
     power,
     mark: canMark(board, bot.side) ? situation.planMark(maneuver) : null,
     fire: situation.planFire({ power: power?.target, maneuver, command: command && { card: card!, target: command.target, destination: command.destination } }),
+  };
+}
+
+/**
+ * Die Wahl aus dem Nachschub: das stärkste Schiff (`shipValue`, Kampfschiffe vor Support), die Schrottverwertung für den
+ * Scrap Raider mit den meisten HP, sonst den Befehl, von dem er am wenigsten auf der Hand hat (bei Gleichstand den ersten).
+ */
+export function planBotDraft(board: Board, bot: BotView, offer: DraftOffer): DraftPick {
+  const ships = offer.ships.map(shipById);
+  const ship = highest(ships, shipValue);
+  const raiders = board.ships(bot.side).filter((slot) => slot.card!.id === "scrap_raider");
+  const raider = offer.salvage ? highest(raiders, hp) : null;
+  const held = (id: CommandId) => bot.commandHand.filter((card) => card.id === id).length;
+  const command = raider ? null : highest(offer.commands, (id) => -held(id));
+  return {
+    ship: ship && ships.indexOf(ship),
+    command: command && offer.commands.indexOf(command),
+    salvage: raider && slotTarget(raider),
   };
 }
 

@@ -84,6 +84,29 @@ export interface OpponentView {
 }
 
 /**
+ * Der Nachschub nach jeder Runde: bis zu 3 Schiffe und 3 Befehle aus den Decks, davon nimmt der Spieler je eines auf die
+ * Hand; die übrigen gehen zurück ins Deck. Eine volle Handhälfte bekommt kein Angebot. Hat ein eigener Scrap Raider in
+ * der Runde Schrott geborgen und steht danach noch einer auf dem Brett, ist einer der Befehle die Schrottverwertung
+ * (`salvage`, dann höchstens 2 Befehle aus dem Deck): +1 ATK dauerhaft für einen eigenen Scrap Raider nach Wahl, sofort.
+ */
+export interface DraftOffer {
+  ships: ShipId[];
+  commands: CommandId[];
+  salvage: boolean;
+}
+
+/**
+ * Die Wahl aus dem Nachschub: `ship` ist ein Index in `DraftOffer.ships` (Pflicht, wenn es Schiffe gibt); entweder
+ * `command` als Index in `DraftOffer.commands` oder `salvage` als Slot des eigenen Scrap Raiders, der +1 ATK bekommt
+ * (eines davon ist Pflicht, wenn es Befehle oder die Schrottverwertung gibt).
+ */
+export interface DraftPick {
+  ship: number | null;
+  command: number | null;
+  salvage: SlotTarget | null;
+}
+
+/**
  * Ob eine Pendulum in dieser Runde feuert, folgt aus dem Brett: Auf der Gegenseite steht ein markiertes
  * Schiff (`SlotState.marked`). Runde 1 beginnt erst, wenn beide ihren Admiral gewählt haben.
  */
@@ -101,6 +124,8 @@ export interface PlayerView {
   commandDeckSize: number;
   /** Der abgegebene Zug dieser Runde; null, solange noch geplant wird. */
   submittedPlan: TurnPlan | null;
+  /** Der Nachschub nach der letzten Runde, solange nicht gewählt; erst danach wird geplant. */
+  draft: DraftOffer | null;
   /** Der Gegner, sobald er beigetreten ist. */
   opponent: OpponentView | null;
   /** Gesetzt, sobald das Match entschieden ist; danach gibt es keine Züge mehr. */
@@ -137,8 +162,8 @@ export type CommandEffect =
   | { type: "ram"; target: ShipRef; dealt: number; taken: number; targetAfter: ShipStats }
   | { type: "jam"; power: PowerId };
 
-/** Was eine Schiffs-Fähigkeit an einem Schiff bewirkt. */
-export type AbilityEffect = Extract<CommandEffect, { type: "heal" | "damage" | "attack" | "shield" }>;
+/** Was eine Schiffs-Fähigkeit an einem Schiff bewirkt; `salvage`: Der Scrap Raider birgt Schrott (`DraftOffer.salvage`). */
+export type AbilityEffect = Extract<CommandEffect, { type: "heal" | "damage" | "shield" }> | { type: "salvage" };
 
 /**
  * Was in einer Runde aufgedeckt und aufgelöst wurde, in Auflösungsreihenfolge.
@@ -176,8 +201,8 @@ export type RoundEvent =
   | { kind: "miss"; side: Side; cardId: CommandId; target: SlotRef }
   /**
    * Fähigkeit eines Schiffs (`source`) an einem Schiff: der Schuss der Plasma Frigate beim Deploy (`damage`),
-   * die Reparatur der Repair Drone im Cleanup (`heal`), der dauerhafte ATK-Bonus des Scrap Raiders an sich
-   * selbst, sobald in seiner Lane Gegner zerstört wurden (`attack`, gleich nach den `destroyed`-Ereignissen),
+   * die Reparatur der Repair Drone im Cleanup (`heal`), der Schrott, den der Scrap Raider birgt, sobald in seiner
+   * Lane ein Gegner zerstört wurde (`salvage` an sich selbst, gleich nach den `destroyed`-Ereignissen),
    * der Wächterschild der Bastion für sie und das Schiff vor ihr nach den Manövern (`shield`).
    */
   | { kind: "ability"; source: ShipRef; ship: ShipRef; effect: AbilityEffect; after: ShipStats }
@@ -222,9 +247,15 @@ export type RoundEvent =
  * Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`.
  * `chooseAdmiral` wählt den eigenen Admiral, einmal und vor Runde 1, auch schon, solange der Gegner fehlt.
  * `addBot` setzt den Computergegner auf den freien Platz, statt auf einen Menschen zu warten; er wählt sofort.
+ * `draft` wählt aus dem Nachschub (`PlayerView.draft`), bevor der Zug der Runde abgegeben werden kann.
  * `surrender` gibt das Match auf, jederzeit, auch nach abgegebenem Zug; der Gegner gewinnt sofort.
  */
-export type ClientMessage = { type: "chooseAdmiral"; admiral: AdmiralId } | { type: "submit"; plan: TurnPlan } | { type: "addBot" } | { type: "surrender" };
+export type ClientMessage =
+  | { type: "chooseAdmiral"; admiral: AdmiralId }
+  | { type: "draft"; pick: DraftPick }
+  | { type: "submit"; plan: TurnPlan }
+  | { type: "addBot" }
+  | { type: "surrender" };
 
 /** Fehler werden als Code übertragen, der Client formuliert sie in seiner Sprache. */
 export type ErrorCode =
@@ -234,6 +265,9 @@ export type ErrorCode =
   | "admiral_required"
   | "admiral_already_chosen"
   | "opponent_choosing"
+  | "draft_pending"
+  | "draft_unavailable"
+  | "draft_invalid"
   | "flagship_required"
   | "flagship_not_allowed"
   | "power_and_maneuver"

@@ -30,7 +30,7 @@ const ANNOUNCEMENTS: Partial<Record<CommandId, { player?: RadioCue; enemy?: Radi
 };
 
 /** Eigene Fähigkeiten: Die Plasma Frigate feuert, die Repair Drone repariert, der Scrap Raider plündert, die Bastion hebt den Wächterschild. */
-const ABILITIES: Record<AbilityEffect["type"], RadioCue> = { damage: "frigate_fire", heal: "repair", attack: "scrap", shield: "shields_up" };
+const ABILITIES: Record<AbilityEffect["type"], RadioCue> = { damage: "frigate_fire", heal: "repair", salvage: "scrap", shield: "shields_up" };
 
 /** Der Spruch, mit dem ein Schritt beginnt; ein Befehl ohne Wirkung wird nicht angekündigt. */
 export function announcement(step: readonly RoundEvent[]): RadioCue | null {

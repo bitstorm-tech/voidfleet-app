@@ -5,7 +5,7 @@
 import type { ServerWebSocket } from "bun";
 import index from "../../client/index.html";
 import type { AdmiralId } from "../../shared/admirals.ts";
-import type { ClientMessage, ServerMessage, TurnPlan } from "../../shared/protocol.ts";
+import type { ClientMessage, DraftPick, ServerMessage, TurnPlan } from "../../shared/protocol.ts";
 import { Match, type Seat } from "./match.ts";
 
 interface SocketData {
@@ -54,6 +54,15 @@ function onSubmit(socket: Socket, room: Room, seat: Seat, plan: TurnPlan): void 
     for (const player of room.match.players) {
       send(room.sockets[player.seat], { type: "round", round, events: room.match.eventsFor(player.seat, events) });
     }
+  }
+  broadcastState(room);
+}
+
+function onDraft(socket: Socket, room: Room, seat: Seat, pick: DraftPick): void {
+  const error = room.match.draft(seat, pick);
+  if (error) {
+    send(socket, { type: "error", code: error });
+    return;
   }
   broadcastState(room);
 }
@@ -128,6 +137,9 @@ const server = Bun.serve({
       switch (message.type) {
         case "chooseAdmiral":
           onChooseAdmiral(socket, room, seat, message.admiral);
+          break;
+        case "draft":
+          onDraft(socket, room, seat, message.pick);
           break;
         case "submit":
           onSubmit(socket, room, seat, message.plan);

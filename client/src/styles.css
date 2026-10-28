@@ -1903,7 +1903,8 @@ body {
 
 /* --- Admiralswahl: Overlay über dem Brett, die Hand darunter bleibt frei --- */
 
-.admiral-overlay {
+.admiral-overlay,
+.draft-overlay {
   position: absolute;
   top: 60px;
   left: 0;
@@ -1921,7 +1922,8 @@ body {
   animation: result-fade 0.4s ease-out;
 }
 
-.admiral-overlay[hidden] {
+.admiral-overlay[hidden],
+.draft-overlay[hidden] {
   display: none;
 }
 
@@ -2130,4 +2132,77 @@ body {
 
 .rules-admiral .card {
   pointer-events: none;
+}
+
+/* --- Nachschub: Overlay über dem Brett mit je bis zu drei Schiffen und Befehlen, die Hand darunter bleibt sichtbar --- */
+
+.draft-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.draft-row h3 {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.draft-cards {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+/* Größer als auf der Hand, damit die Texte ohne Lupe lesbar sind; beim Überfahren hebt sich die Karte nur an. */
+.draft-cards .card {
+  zoom: 1.25;
+  transition:
+    translate 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+.draft-cards .card:hover {
+  scale: none;
+  translate: 0 -4px;
+  box-shadow: 0 0 22px rgb(var(--select) / 0.45);
+}
+
+.draft-cards .card.locked:not(.selected) {
+  opacity: 0.45;
+}
+
+/* Die Schrottverwertung mit einem Knopf je eigenem Scrap Raider darunter. */
+.draft-salvage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#ui .draft-salvage button {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+#ui .draft-salvage button.selected {
+  border-color: rgb(var(--select));
+  box-shadow: 0 0 0 1px rgb(var(--select));
+}
+
+.draft-none {
+  margin: 0;
+  padding: 40px 0;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+#ui .draft-confirm {
+  margin-top: 10px;
+  width: 240px;
+  height: 52px;
+  font-size: 18px;
 }

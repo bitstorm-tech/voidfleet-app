@@ -151,21 +151,19 @@ describe("Scrap Raider", () => {
     aim(raider, place(board, "enemy", "strike", 0, "decoy"));
     const events = round(board);
     expect(events).toContainEqual({ kind: "destroyed", ship: { side: "enemy", lane: "strike", slotIndex: 0, cardId: "decoy" } });
-    expect(raider.scrapBonus).toBe(0);
+    expect(events.some((event) => event.kind === "ability")).toBe(false);
   });
 
-  test("bekommt dauerhaft +1 ATK für jeden Gegner, der in der gleichnamigen Lane zerstört wird", () => {
+  test("birgt Schrott, sobald ein Gegner in der gleichnamigen Lane zerstört wird, einmal je Raider; der Bonus kommt erst mit dem Nachschub", () => {
     const board = new Board();
     const raider = place(board, "player", "strike", 0, "scrap_raider");
-    const bystander = place(board, "player", "command", 2, "scrap_raider");
+    place(board, "player", "command", 2, "scrap_raider");
     place(board, "enemy", "strike", 0, "repair_drone").hp = 1;
     place(board, "enemy", "strike", 1, "repair_drone").hp = 1;
     const events = round(board, [play("player", "volley_fire")]);
-    expect(raider.scrapBonus).toBe(2);
-    expect(raider.attack).toBe(shipById("scrap_raider").atk + 2);
-    expect(bystander.scrapBonus).toBe(0);
+    expect(raider.scrapBonus).toBe(0);
     expect(events.filter((event) => event.kind === "ability")).toMatchObject([
-      { source: { cardId: "scrap_raider", slotIndex: 0 }, ship: { cardId: "scrap_raider", slotIndex: 0 }, effect: { type: "attack", delta: 2 } },
+      { source: { cardId: "scrap_raider", slotIndex: 0 }, ship: { cardId: "scrap_raider", slotIndex: 0 }, effect: { type: "salvage" } },
     ]);
   });
 

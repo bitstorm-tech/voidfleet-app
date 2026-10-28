@@ -47,6 +47,20 @@ export const de: Messages = {
     power: "Admiralsfähigkeit",
     choose: "Wählen",
   },
+  draft: {
+    title: "Nachschub",
+    hint: "Nimm ein Schiff und einen Befehl auf die Hand; der Rest geht zurück ins Deck.",
+    ships: "Schiffe",
+    commands: "Befehle",
+    none: "Nichts zur Wahl — Hand voll oder Deck leer.",
+    confirm: "Übernehmen",
+    salvage: {
+      name: "Schrottverwertung",
+      target: "Eigener Schrott-Raider",
+      effect: "Dein Schrott-Raider hat Schrott geborgen: Einer deiner Schrott-Raider bekommt sofort dauerhaft +1 ATK.",
+    },
+    raider: (lane, slot, atk) => `${lane} · Slot ${slot} · ${atk} ATK`,
+  },
   settings: {
     title: "Einstellungen",
     musicVolume: "Musik",
@@ -163,8 +177,8 @@ export const de: Messages = {
       hand: {
         heading: "Hand und Decks",
         paragraphs: [
-          "Du beginnst mit 4 Schiffen — immer 1 Support- und 3 Kampfschiffe — und 3 Befehlen. Am Ende jeder Runde ziehst du 1 Schiff und 1 Befehl nach. Jede Hand fasst höchstens 10 Karten: Mit voller Hand ziehst du nichts, also spiel deine Karten. Gleiche Karten liegen als Stapel, jede zählt aber einzeln. Plündern zieht sofort 1 Schiff und 1 Befehl zusätzlich, Gegenmaßnahmen 1 Befehl, wenn nichts verpufft ist, wieder bis zum Handlimit.",
-          "Dein Schiffsdeck hat 16 Karten (jedes Schiff zweimal), dein Befehlsdeck 34 (Torpedo und Sperrfeuer zweimal, jeder andere Befehl einmal). Ist ein Deck leer, ziehst du daraus einfach nichts mehr.",
+          "Du beginnst mit 4 Schiffen — immer 1 Support- und 3 Kampfschiffe — und 3 Befehlen. Nach jeder Runde kommt Nachschub: 3 Schiffe und 3 Befehle aus deinen Decks, davon nimmst du ein Schiff und einen Befehl auf die Hand; der Rest wird zurück ins Deck gemischt. Erst danach planst du deinen Zug. Jede Hand fasst höchstens 10 Karten: Eine volle Hand bekommt keinen Nachschub, also spiel deine Karten. Hat einer deiner Schrott-Raider in der Runde Schrott geborgen und steht noch einer auf dem Brett, ist einer der drei Befehle die Schrottverwertung: sofort dauerhaft +1 ATK für einen deiner Schrott-Raider. Gleiche Karten liegen als Stapel, jede zählt aber einzeln. Plündern zieht sofort 1 Schiff und 1 Befehl zusätzlich, Gegenmaßnahmen 1 Befehl, wenn nichts verpufft ist, wieder bis zum Handlimit.",
+          "Dein Schiffsdeck hat 16 Karten (jedes Schiff zweimal), dein Befehlsdeck 34 (Torpedo und Sperrfeuer zweimal, jeder andere Befehl einmal). Geht ein Deck zur Neige, zeigt der Nachschub nur noch, was übrig ist.",
         ],
       },
       controls: {
@@ -194,7 +208,7 @@ export const de: Messages = {
         name: "Cleanup",
         text: "Schiffe im Kurzsprung kehren zurück, Eigenschaden der Überladung, Reparaturdrohnen reparieren, Rundeneffekte enden, das Trugbild löst sich auf, die Hive startet eine Drohne.",
       },
-      draw: { name: "Nachziehen", text: "Jeder zieht ein Schiff und einen Befehl (Handlimit 10)." },
+      draw: { name: "Nachschub", text: "Jeder wählt ein Schiff und einen Befehl aus je dreien (Handlimit 10)." },
       check: { name: "Prüfung", text: "Wer sein Flaggschiff verloren hat, verliert; fielen beide, ist es unentschieden." },
     },
     figures: {
@@ -253,6 +267,7 @@ export const de: Messages = {
     waitingForOpponent: (link) => `Warte auf den Gegner — Link teilen: ${link}`,
     chooseAdmiral: (link) => (link ? `Wähle deinen Admiral. Gegner einladen mit diesem Link: ${link}` : "Wähle deinen Admiral."),
     opponentChoosing: "Gegner wählt seinen Admiral …",
+    draft: "Nachschub: Wähle ein Schiff und einen Befehl für deine Hand.",
     flagshipFirst: (flagship) =>
       `Runde 1: Lege dein Flaggschiff ${flagship} — Karte vorn in der Hand antippen, dann einen leuchtenden Slot. „Zug beenden“ geht erst, wenn es eingeplant ist.`,
     fleet: (count, max) => `Flotte ${count}/${max}`,
@@ -413,7 +428,7 @@ export const de: Messages = {
     guardianShield: (source, ship, amount) => `Wächterschild: ${source} gibt ${ship} diese Runde +${amount} Schild`,
     spawn: (source, ship) => `Deploy: ${source} schickt ${ship} los`,
     brood: (source, ship) => `Brutkammer: ${source} schickt ${ship} los`,
-    scrap: (ship, delta) => `Beute: ${ship} dauerhaft +${delta} ATK`,
+    salvage: (ship) => `Beute: ${ship} birgt Schrott — die Schrottverwertung kommt mit dem nächsten Nachschub`,
     draw: (command, who, ships, commands) => `Wirkung: ${command} — ${who} ${ships > 0 ? `+${ships} Schiff, ` : ""}+${commands} Befehl`,
     noEffect: (command, who) => `Wirkung: ${command} (${who}) bleibt ohne Wirkung`,
     miss: (command, slot) => `Wirkung: ${command} verpufft auf ${slot}`,
@@ -450,6 +465,7 @@ export const de: Messages = {
     heal: (amount) => `+${amount} HP`,
     shield: (amount) => `+${amount} Schild`,
     attack: (delta) => `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ATK`,
+    salvage: "Schrott",
     disabled: "Lahmgelegt",
     holdFire: "Feuert nicht",
     miss: "Daneben",
@@ -472,6 +488,9 @@ export const de: Messages = {
     admiral_required: "Wähle zuerst deinen Admiral.",
     admiral_already_chosen: "Du hast deinen Admiral schon gewählt.",
     opponent_choosing: "Der Gegner wählt noch seinen Admiral.",
+    draft_pending: "Wähle zuerst deinen Nachschub.",
+    draft_unavailable: "Gerade gibt es keinen Nachschub zur Wahl.",
+    draft_invalid: "Wähle ein Schiff und einen Befehl aus dem Nachschub.",
     flagship_required: "Lege in Runde 1 dein Flaggschiff.",
     flagship_not_allowed: "Das Flaggschiff wird nur in Runde 1 gelegt.",
     power_and_maneuver: "Entweder das Grundmanöver oder die Admiralsfähigkeit, nicht beides.",
@@ -532,7 +551,11 @@ export const de: Messages = {
     iron_dreadnought: { name: "Eisen-Dreadnought", effect: "Schild 2: Absorbiert die ersten 2 Schaden vor dem Rumpf." },
     plasma_frigate: { name: "Plasma-Fregatte", effect: "Beim Deploy: 3 Schaden an ein zufälliges gegnerisches Schiff in derselben Lane." },
     repair_drone: { name: "Reparaturdrohne", effect: "Am Ende jeder Runde: Repariert 2 HP beim beschädigten verbündeten Kampfschiff mit den wenigsten HP." },
-    scrap_raider: { name: "Schrott-Raider", effect: "Wird ein gegnerisches Schiff in derselben Lane zerstört: dauerhaft +1 ATK." },
+    scrap_raider: {
+      name: "Schrott-Raider",
+      effect:
+        "Wird ein gegnerisches Schiff in derselben Lane zerstört, ist im nächsten Nachschub die Schrottverwertung: dauerhaft +1 ATK für einen Schrott-Raider.",
+    },
     signal_booster: {
       name: "Signalverstärker",
       effect: "Alle anderen verbündeten Schiffe in derselben Lane haben +1 ATK, solange der Signalverstärker dort steht.",
