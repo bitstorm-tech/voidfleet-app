@@ -477,6 +477,9 @@ export class ToonRenderer {
     this.outlineBuffer.clearColor = new Color4(0, 0, 0, 0);
     this.outlineBuffer.renderParticles = false;
     this.outlineBuffer.renderSprites = false;
+    // Ohne Babylons Overlay (Treffer-Blitz, Glanz und Verdunkeln der Trümmer): Es mischte seine Farbe in Normale, Tiefe und
+    // Deckungsgrad, und das Schiff wäre ganz Kontur, also schwarz.
+    this.outlineBuffer.enableOutlineRendering = false;
     this.outlineBuffer.renderListPredicate = (mesh) => mesh.material instanceof ToonMaterial && mesh.material.outlined && instances.has(mesh);
     scene.customRenderTargets.push(this.outlineBuffer);
     engine.onResizeObservable.add(() => this.outlineBuffer.resize(size()));
