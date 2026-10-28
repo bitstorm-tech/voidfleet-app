@@ -1,5 +1,28 @@
+/* Spielschriften (OFL, latin-Untermenge von Google Fonts): Exo 2 für Fließtext, Rajdhani für Titel, Knöpfe und Labels. */
+@font-face {
+  font-family: "Exo 2";
+  font-weight: 400 800;
+  font-display: block;
+  src: url("../assets/fonts/exo2.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 600;
+  font-display: block;
+  src: url("../assets/fonts/rajdhani-600.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Rajdhani";
+  font-weight: 700;
+  font-display: block;
+  src: url("../assets/fonts/rajdhani-700.woff2") format("woff2");
+}
+
 :root {
-  --font: "Open Sans", "Segoe UI", system-ui, sans-serif;
+  --font: "Exo 2", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Rajdhani", "Exo 2", sans-serif;
   --text: rgb(242 247 255);
   --text-dim: rgb(199 219 250 / 0.92);
   /* Die Farbkanäle (--player, --enemy, --select, --damage …) setzt `installPalette()`. */
@@ -48,6 +71,43 @@ body {
   pointer-events: none;
 }
 
+/* Titel, Knöpfe und Labels in der schmalen Display-Schrift, groß geschrieben und gesperrt wie in einem HUD. */
+.round-label,
+.overdrive-label,
+.opponent-title,
+.opponent-panel h3,
+.opponent-commands h4,
+.radio-speaker,
+.dialog h2,
+.rules-section h3,
+.settings-choice legend,
+.settings-volume span,
+.power-card .power-label,
+#ui .submit-button,
+.reveal-banner strong,
+.round-banner span,
+.round-banner strong,
+.result-title,
+#ui .result-badge,
+#ui .result-actions button,
+.loading-title,
+.loading-label,
+.admiral-title,
+.admiral-card h4,
+.admiral-card .choose,
+.draft-row h3,
+#ui .draft-confirm,
+#ui .dialog-close,
+#ui .surrender-actions button,
+#ui .rules-nav button,
+.rules-card .meta,
+.opponent-cards .column {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 #ui button {
   pointer-events: auto;
   font-family: var(--font);
@@ -77,13 +137,13 @@ body {
 }
 
 .round-label {
-  font-size: 22px;
+  font-size: 30px;
   color: var(--accent);
   white-space: nowrap;
 }
 
 .overdrive-label {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -99,7 +159,7 @@ body {
 }
 
 .status-label {
-  font-size: 18px;
+  font-size: 19px;
   color: var(--text-dim);
   padding-top: 3px;
 }
@@ -176,7 +236,7 @@ body {
   height: 420px;
   overflow-y: auto;
   padding: 6px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
   color: var(--text-dim);
   white-space: pre-wrap;
@@ -195,9 +255,9 @@ body {
   position: absolute;
   top: 48px;
   right: 8px;
-  width: 186px;
+  width: 244px;
   padding: 9px 11px 11px;
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--text-dim);
   background: rgb(28 32 40 / 0.82);
   border-top: 2px solid rgb(var(--enemy) / 0.8);
@@ -217,7 +277,7 @@ body {
 }
 
 .opponent-title {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -251,8 +311,8 @@ body {
 
 .opponent-admiral .portrait {
   grid-row: span 3;
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   object-fit: cover;
   border-radius: 50%;
   box-shadow:
@@ -267,18 +327,18 @@ body {
 }
 
 .opponent-admiral .identity b {
-  font-size: 12.5px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text);
 }
 
 .opponent-admiral .identity span {
-  font-size: 10.5px;
+  font-size: 12.5px;
   color: rgb(var(--admiral-rgb));
 }
 
 .opponent-admiral .ability {
-  font-size: 10.5px;
+  font-size: 12.5px;
   line-height: 1.25;
   pointer-events: auto;
 }
@@ -306,13 +366,13 @@ body {
 }
 
 .opponent-cards .column {
-  font-size: 10.5px;
+  font-size: 12.5px;
   text-align: right;
   color: rgb(199 219 250 / 0.6);
 }
 
 .opponent-cards b {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   text-align: right;
   color: var(--text);
@@ -320,14 +380,14 @@ body {
 
 .opponent-panel h3 {
   margin: 0 0 5px;
-  font-size: 10.5px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: rgb(199 219 250 / 0.6);
 }
 
-/* Je Befehlstyp eine Gruppe in seiner Farbe mit den Namen als umbrechende Reihe; eine Zahl nur bei mehr als einer offenen Kopie, aufgebrauchte verblassen. */
+/* Je Befehlstyp eine Gruppe in seiner Farbe, Typ und Namen als eine umbrechende Reihe; eine Zahl nur bei mehr als einer offenen Kopie, aufgebrauchte verblassen. */
 .opponent-commands {
   margin: 0;
   padding: 0;
@@ -335,17 +395,20 @@ body {
 }
 
 .opponent-commands li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   padding: 0 0 0 7px;
   border-left: 2px solid rgb(var(--card-rgb));
 }
 
 .opponent-commands li + li {
-  margin-top: 5px;
+  margin-top: 4px;
 }
 
 .opponent-commands h4 {
-  margin: 0;
-  font-size: 9.5px;
+  margin: 0 6px 0 0;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -353,8 +416,9 @@ body {
 }
 
 .opponent-commands div {
-  font-size: 10.5px;
-  line-height: 1.3;
+  display: contents;
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .opponent-commands span {
@@ -362,7 +426,7 @@ body {
 }
 
 .opponent-commands span:not(:last-child)::after {
-  content: " · ";
+  content: "\00a0·\00a0";
   opacity: 0.4;
 }
 
@@ -408,7 +472,7 @@ body {
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  font-size: 10.5px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -443,7 +507,7 @@ body {
 }
 
 .radio-text {
-  font-size: 17px;
+  font-size: 20px;
   color: var(--text);
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.8);
 }
@@ -467,7 +531,7 @@ body {
 
 .dialog h2 {
   margin: 0 0 20px;
-  font-size: 22px;
+  font-size: 30px;
   font-weight: 600;
   color: var(--accent);
 }
@@ -482,7 +546,7 @@ body {
 .settings-choice legend {
   margin-bottom: 10px;
   padding: 0;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-dim);
 }
 
@@ -498,7 +562,7 @@ body {
 .settings-choice span {
   display: block;
   padding: 8px 12px;
-  font-size: 14px;
+  font-size: 16px;
   text-align: center;
   white-space: nowrap;
   background: rgb(255 255 255 / 0.04);
@@ -539,7 +603,7 @@ body {
 .settings-volume span {
   display: block;
   margin-bottom: 6px;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-dim);
 }
 
@@ -560,21 +624,21 @@ body {
 .settings-install span {
   display: block;
   margin-bottom: 10px;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text-dim);
 }
 
 #ui .settings-install button {
   width: 100%;
   padding: 8px 12px;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 #ui .dialog-close {
   display: block;
   margin: 6px 0 0 auto;
   padding: 8px 24px;
-  font-size: 15px;
+  font-size: 18px;
 }
 
 /* --- Regel-Dialog: Kapitelnavigation links, scrollender Text mit Illustrationen rechts --- */
@@ -607,13 +671,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 190px;
+  width: 220px;
   padding-top: 2px;
 }
 
 #ui .rules-nav button {
   padding: 7px 10px;
-  font-size: 14px;
+  font-size: 16px;
   text-align: left;
   color: var(--text-dim);
   background: none;
@@ -636,7 +700,7 @@ body {
 .surrender-text {
   margin: 0 0 20px;
   max-width: 360px;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.5;
   color: var(--text-dim);
 }
@@ -650,7 +714,7 @@ body {
 #ui .surrender-actions button {
   margin: 0;
   padding: 8px 24px;
-  font-size: 15px;
+  font-size: 18px;
 }
 
 #ui .surrender-confirm {
@@ -678,20 +742,20 @@ body {
 
 .rules-section h3 {
   margin: 0 0 10px;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 600;
 }
 
 .rules-section h4 {
   margin: 18px 0 8px;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text);
 }
 
 .rules-section p {
   margin: 0 0 12px;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.55;
   color: var(--text-dim);
 }
@@ -714,7 +778,7 @@ body {
 
 .rules-figure figcaption {
   margin-top: 6px;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.4;
   color: rgb(199 219 250 / 0.7);
 }
@@ -868,7 +932,7 @@ body {
   flex-direction: column;
   gap: 4px;
   padding: 10px 10px 10px 12px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.4;
   color: var(--text-dim);
   background: rgb(255 255 255 / 0.04);
@@ -878,7 +942,7 @@ body {
 }
 
 .rules-phases b {
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text);
 }
 
@@ -899,7 +963,7 @@ body {
   flex-direction: column;
   gap: 2px;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-dim);
   background: rgb(var(--buff) / calc(0.06 + var(--level) * 0.14));
   border-top: 2px solid rgb(var(--buff) / calc(0.25 + var(--level) * 0.25));
@@ -907,7 +971,7 @@ body {
 }
 
 .rules-overdrive b {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text);
 }
 
@@ -924,7 +988,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text);
 }
 
@@ -936,7 +1000,7 @@ body {
 
 .rules-turn .or {
   align-self: center;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-dim);
 }
 
@@ -970,7 +1034,7 @@ body {
 
 .rules-turn .note {
   margin-left: auto;
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--text-dim);
 }
 
@@ -998,18 +1062,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.45;
   color: var(--text-dim);
 }
 
 .rules-card .description b {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text);
 }
 
 .rules-card .meta {
-  font-size: 11px;
+  font-size: 12.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: rgb(199 219 250 / 0.6);
@@ -1080,33 +1144,34 @@ body {
 }
 
 .power-card .power-label {
-  font-size: 7.5px;
+  font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
   color: rgb(var(--admiral-rgb));
 }
 
 .power-card .name {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.15;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.05;
   color: var(--text);
+  font-family: var(--font-display);
 }
 
 .power-card .target {
-  font-size: 8px;
+  font-size: 9px;
   color: rgb(191 224 255 / 0.9);
 }
 
 .power-card .effect {
   margin-top: auto;
-  font-size: 7.5px;
+  font-size: 8.5px;
   line-height: 1.3;
   color: rgb(235 242 255);
 }
 
 .power-card .hint {
-  font-size: 7px;
+  font-size: 8px;
   font-style: italic;
   color: rgb(var(--admiral-rgb));
 }
@@ -1144,7 +1209,7 @@ body {
   column-gap: 7px;
   min-height: 38px;
   padding: 4px 8px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   text-align: left;
   border: 1px solid rgb(var(--admiral-rgb) / 0.6);
   border-radius: 4px;
@@ -1189,7 +1254,7 @@ body {
 
 .lock-button em,
 .railgun-status em {
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-style: normal;
   line-height: 1.2;
   color: rgb(var(--damage));
@@ -1221,7 +1286,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.1;
   color: var(--text-dim);
 }
 
@@ -1265,7 +1333,8 @@ body {
 .submit-button {
   width: 240px;
   height: 64px;
-  font-size: 20px;
+  font-size: 24px;
+  line-height: 1.05;
 }
 
 /* --- Karten --- */
@@ -1371,6 +1440,7 @@ body {
   text-align: center;
   text-shadow: none;
   pointer-events: none;
+  font-family: var(--font-display);
 }
 
 /* Schiffskarten: Illustration als Hintergrund, oben und unten in die Kartenfarbe verlaufend. */
@@ -1388,14 +1458,16 @@ body {
 }
 
 .ship-card .name {
-  font-size: 14px;
-  line-height: 1.25;
+  font-size: 16px;
+  line-height: 1.05;
   color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 700;
 }
 
 .ship-card .class {
   margin-top: 4px;
-  font-size: 10px;
+  font-size: 11px;
   color: rgb(168 199 242 / 0.85);
 }
 
@@ -1404,13 +1476,13 @@ body {
   display: grid;
   grid-template-columns: 1fr auto;
   row-gap: 4px;
-  font-size: 12px;
+  font-size: 13px;
   color: rgb(158 184 224 / 0.9);
 }
 
 .ship-card .stats b {
-  font-size: 14px;
-  font-weight: 400;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--text);
 }
 
@@ -1475,21 +1547,22 @@ body {
 }
 
 .command-card .name {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.05;
   color: rgb(247 252 255);
+  font-family: var(--font-display);
 }
 
 .command-card .target {
-  font-size: 8px;
+  font-size: 9px;
   color: rgb(191 224 255 / 0.9);
 }
 
 /* Der Effekttext sitzt unten, damit die Illustration in der Mitte frei bleibt. */
 .command-card .effect {
   margin-top: auto;
-  font-size: 7.5px;
+  font-size: 8.5px;
   line-height: 1.35;
   color: rgb(235 242 255);
 }
@@ -1543,7 +1616,7 @@ body {
 }
 
 .reveal-banner strong {
-  font-size: 22px;
+  font-size: 30px;
   font-weight: 600;
   color: var(--banner-color);
 }
@@ -1560,7 +1633,7 @@ body {
 }
 
 .reveal-banner span {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-dim);
 }
 
@@ -1602,7 +1675,7 @@ body {
 }
 
 .round-banner span {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.3em;
   text-transform: uppercase;
@@ -1610,14 +1683,14 @@ body {
 }
 
 .round-banner strong {
-  font-size: 40px;
+  font-size: 60px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--accent);
 }
 
 .round-banner em {
-  font-size: 15px;
+  font-size: 18px;
   font-style: normal;
   font-weight: 600;
   color: rgb(var(--buff));
@@ -1653,13 +1726,14 @@ body {
 .float-text {
   position: absolute;
   translate: -50% -50%;
-  font-size: 22px;
+  font-size: 30px;
   font-weight: 700;
   white-space: nowrap;
   text-shadow:
     0 0 6px rgb(0 0 0 / 0.9),
     0 1px 2px rgb(0 0 0 / 0.9);
   animation: float-up calc(1.4s * var(--animation-time-scale)) ease-out forwards;
+  font-family: var(--font-display);
 }
 
 .float-text.damage {
@@ -1750,7 +1824,7 @@ body {
 }
 
 .result-title {
-  font-size: 72px;
+  font-size: 100px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1759,12 +1833,12 @@ body {
 }
 
 .result-subtitle {
-  font-size: 20px;
+  font-size: 24px;
   color: var(--text);
 }
 
 .result-rounds {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-dim);
 }
 
@@ -1777,7 +1851,7 @@ body {
 .result-actions button {
   width: 200px;
   height: 52px;
-  font-size: 18px;
+  font-size: 22px;
 }
 
 #ui .result-new {
@@ -1790,7 +1864,7 @@ body {
   left: 50%;
   translate: -50% 0;
   padding: 8px 28px;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1834,7 +1908,7 @@ body {
 }
 
 .loading-title {
-  font-size: 56px;
+  font-size: 84px;
   font-weight: 700;
   letter-spacing: 0.35em;
   margin-right: -0.35em;
@@ -1872,7 +1946,7 @@ body {
 }
 
 .loading-label {
-  font-size: 14px;
+  font-size: 16px;
   letter-spacing: 0.06em;
   color: var(--text-dim);
 }
@@ -1929,7 +2003,7 @@ body {
 
 .admiral-title {
   margin: 0;
-  font-size: 24px;
+  font-size: 32px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -1938,7 +2012,7 @@ body {
 .admiral-hint {
   margin: 0 0 8px;
   max-width: 980px;
-  font-size: 13.5px;
+  font-size: 16px;
   text-align: center;
   color: var(--text-dim);
 }
@@ -1954,7 +2028,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 220px;
+  width: 240px;
   min-width: 170px;
   padding: 0 0 9px;
   overflow: hidden;
@@ -1986,7 +2060,7 @@ body {
 }
 
 .admiral-card .portrait {
-  height: 92px;
+  height: 76px;
   background: center 25% / cover;
   mask-image: linear-gradient(to bottom, black 70%, transparent);
 }
@@ -2000,13 +2074,13 @@ body {
 }
 
 .admiral-card .identity b {
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 600;
   color: var(--text);
 }
 
 .admiral-card .identity span {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: rgb(var(--admiral-rgb));
 }
@@ -2020,7 +2094,7 @@ body {
   align-items: center;
   gap: 5px;
   margin: 0 0 3px;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: rgb(199 219 250 / 0.6);
@@ -2040,19 +2114,19 @@ body {
 }
 
 .admiral-card .ship b {
-  font-size: 13.5px;
+  font-size: 15px;
   color: rgb(var(--flagshipTrim));
 }
 
 .admiral-card .ship span {
-  font-size: 11px;
+  font-size: 12.5px;
   color: var(--text-dim);
 }
 
 .admiral-card p {
   margin: 0;
-  font-size: 11px;
-  line-height: 1.34;
+  font-size: 12px;
+  line-height: 1.3;
   color: var(--text-dim);
 }
 
@@ -2067,7 +2141,7 @@ body {
 .admiral-card .choose {
   margin: auto 12px 0;
   padding: 4px 0;
-  font-size: 12.5px;
+  font-size: 15px;
   font-weight: 600;
   text-align: center;
   color: rgb(var(--admiral-rgb));
@@ -2113,12 +2187,12 @@ body {
 }
 
 .rules-admiral .identity b {
-  font-size: 15px;
+  font-size: 17px;
   color: var(--text);
 }
 
 .rules-admiral .identity span {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: rgb(var(--admiral-rgb));
 }
@@ -2145,7 +2219,7 @@ body {
 
 .draft-row h3 {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2185,7 +2259,7 @@ body {
 
 #ui .draft-salvage button {
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 #ui .draft-salvage button.selected {
@@ -2196,7 +2270,7 @@ body {
 .draft-none {
   margin: 0;
   padding: 40px 0;
-  font-size: 13.5px;
+  font-size: 16px;
   color: var(--text-dim);
 }
 
@@ -2204,5 +2278,5 @@ body {
   margin-top: 10px;
   width: 240px;
   height: 52px;
-  font-size: 18px;
+  font-size: 22px;
 }
