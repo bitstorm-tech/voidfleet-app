@@ -1,5 +1,5 @@
 // Lädt beim Start alle Assets, damit im Spiel nichts mehr nachgeladen wird:
-// Schiffsmodelle samt Wracks, Kartenillustrationen, Porträts der Admirale, Hintergrund und HDR-Umgebung,
+// Schiffsmodelle samt Wracks (mit Toon-Materialien), Kartenillustrationen, Porträts der Admirale, Hintergrund,
 // Soundeffekte, Musik und Bordfunk. Danach übersetzt die Generalprobe alle Shader.
 
 import { loadMusic } from "./audio/music.ts";

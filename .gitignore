@@ -3,3 +3,7 @@ node_modules/
 dist/
 .playwright-mcp/
 __pycache__/
+# Motive der ersten Stufe von tools/generateCardArt.ts und tools/generateAppIcon.ts
+client/tools/cache/
+# Vorschau-Renders der Schiffe (client/tools/ships/preview.py)
+client/tools/ships/renders/

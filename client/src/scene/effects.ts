@@ -4,7 +4,6 @@
 
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
-import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { FresnelParameters } from "@babylonjs/core/Materials/fresnelParameters";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { RawTexture } from "@babylonjs/core/Materials/Textures/rawTexture";
@@ -58,8 +57,6 @@ const RING_SIZE = 2.6;
 const RING_DURATION = 300;
 /** Kantenlänge der berechneten Sprite-Texturen (weiche Scheibe, Ring). */
 const SPRITE_SIZE = 64;
-/** Das Blitzlicht reicht über das halbe Brett; Nachbarn und Pads werden kurz angestrahlt. */
-const LIGHT_RANGE = 16;
 
 /** Ein Schwarm Partikel, der auf einmal aus dem Einschlagpunkt spritzt. */
 interface Burst {
@@ -271,8 +268,8 @@ const BLAST: Record<BlastStyle, readonly Burst[]> = {
   ],
 };
 
-/** Ein laufender Lichtblitz; das eine Blitzlicht zeigt immer den gerade stärksten. */
-interface Flash {
+/** Ein Lichtblitz: die laufenden und das eine Blitzlicht der Szene, das immer den gerade stärksten zeigt. */
+export interface Flash {
   position: Vector3;
   intensity: number;
 }
@@ -287,22 +284,17 @@ export class BoardEffects {
   private readonly dot: RawTexture;
   /** Ring mit weichen Kanten: Druckwelle. */
   private readonly ring: RawTexture;
-  /** Ein Punktlicht für alle Explosionen; es existiert von Anfang an, damit die Shader es schon kennen. */
-  private readonly light: PointLight;
   private readonly flashes = new Set<Flash>();
   private lastHit: HitName | null = null;
 
   constructor(
     private readonly scene: Scene,
     private readonly glow: GlowLayer,
+    /** Das eine Blitzlicht der Szene (`ToonRenderer.flash`): Es zeigt jedes Bild den stärksten Blitz, Schiffe hellen sich darin auf. */
+    private readonly light: Flash,
   ) {
     this.dot = createSpriteTexture("dot", scene, (distance) => Math.max(0, 1 - distance) ** 2);
     this.ring = createSpriteTexture("ring", scene, (distance) => Math.max(0, 1 - Math.abs(distance - 0.72) / 0.22) ** 1.5);
-    this.light = new PointLight("blast", Vector3.Zero(), scene);
-    this.light.intensity = 0;
-    this.light.range = LIGHT_RANGE;
-    this.light.diffuse = new Color3(1, 0.75, 0.5);
-    this.light.specular = this.light.diffuse;
     scene.onBeforeRenderObservable.add(() => this.updateLight());
   }
 

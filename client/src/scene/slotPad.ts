@@ -27,10 +27,10 @@ export interface PadMaterials {
 }
 
 export function createPadMaterials(scene: Scene): PadMaterials {
+  // Die Szene hat keine Lichter: Die Platte zeigt den Ton, den sie früher unter Haupt-, Füll- und Umgebungslicht hatte.
   const base = new StandardMaterial("pad-base", scene);
-  base.diffuseColor = new Color3(0.07, 0.13, 0.21);
-  base.specularColor = new Color3(0.08, 0.08, 0.08);
-  base.emissiveColor = new Color3(0.09, 0.2, 0.32).scale(0.3);
+  base.disableLighting = true;
+  base.emissiveColor = new Color3(0.17, 0.33, 0.54);
   base.alpha = 0.45;
 
   const valid = new StandardMaterial("pad-valid", scene);
@@ -66,8 +66,8 @@ export class SlotPad {
     scene: Scene,
     parent: TransformNode,
     readonly slot: Slot,
-    /** Blickrichtung der Schiffe: +1 für die Spielerseite (nach rechts), -1 für den Gegner. */
-    facing: 1 | -1,
+    /** Blickrichtung der Schiffe: +1 für die Spielerseite (nach rechts), -1 für den Gegner; auch die Seite ihres Hauptlichts. */
+    private readonly facing: 1 | -1,
     materials: PadMaterials,
   ) {
     const name = `pad-${slot.lane.side}-${slot.lane.type}-${slot.index}`;
@@ -124,6 +124,7 @@ export class SlotPad {
     this.clearShip();
     this.ship = ship;
     ship.root.parent = this.shipAnchor;
+    ship.toon.facing = this.facing;
     this.updateVisuals();
   }
 
@@ -146,6 +147,7 @@ export class SlotPad {
     this.clearGhost();
     this.ghost = ghost;
     ghost.root.parent = this.shipAnchor;
+    ghost.toon.facing = this.facing;
     ghost.root.position.y = this.ship ? GHOST_LIFT : 0;
     this.updateVisuals();
   }

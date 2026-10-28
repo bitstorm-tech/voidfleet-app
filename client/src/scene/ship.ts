@@ -6,14 +6,14 @@
 // (`markers.ts`). Das Trugbild flackert als Hologramm, baut sich auf und löst sich wieder auf. Beim Rammkurs fliegt
 // das Schiff auf sein Ziel zu (`charge`) und, wenn es den Aufprall übersteht, zurück (`withdraw`).
 // Die Modelle kommen als glTF aus `tools/ships/` (Blender); alle Dateien werden
-// beim Start geladen (`loadShipModels`) und pro Schiff instanziiert. Zu jedem Modell gehört ein Wrack
-// aus Bruchstücken, das bei der Zerstörung an seine Stelle tritt (`destruction.ts`).
+// beim Start geladen (`loadShipModels`), ihre Materialien gegen die Toon-Materialien aus `toon.ts` getauscht und pro
+// Schiff instanziiert. Zu jedem Modell gehört ein Wrack aus Bruchstücken, das bei der Zerstörung an seine Stelle tritt
+// (`destruction.ts`).
 
 import type { AssetContainer } from "@babylonjs/core/assetContainer";
 import { Ray } from "@babylonjs/core/Culling/ray";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader";
-import { Material } from "@babylonjs/core/Materials/material";
-import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial";
+import type { Material } from "@babylonjs/core/Materials/material";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -39,6 +39,7 @@ import { occludeGlow } from "./glow.ts";
 import { Maneuver } from "./maneuver.ts";
 import { FloorMarker, type Footprint, type MarkerKind, type MarkerSpec } from "./markers.ts";
 import { SHIP_ANCHOR_HEIGHT } from "./slotPad.ts";
+import { ghostMaterial, type ToonInstance, type ToonMaterial, toonMaterial, toonRenderer } from "./toon.ts";
 import { easeInCubic, easeInOutSine, easeOutCubic, tween } from "./tween.ts";
 
 /** Schiffe sind für den Hangar modelliert und auf dem Brett zu groß. */
@@ -79,14 +80,6 @@ const DISTRESS_ROLL = Tools.ToRadians(22);
 /** Hüllenpunkte: Strahlen aus diesem Kegel um „oben“ (die Kamera schaut von schräg oben), Abstand zur Hülle in Welteinheiten. */
 const SURFACE_CONE = Tools.ToRadians(75);
 const SURFACE_CLEARANCE = 0.05;
-/** Das Blitzlicht der Explosionen ist das fünfte Licht der Szene; Babylon rechnet sonst nur mit vier. */
-const MAX_LIGHTS = 6;
-/** Geist-Schiffe zeigen einen geplanten, noch nicht ausgeführten Zug: halb durchsichtig. */
-const GHOST_ALPHA = 0.35;
-/** Hologramm-Schimmer in der Farbe der leuchtenden Slots, damit der Geist nicht wie ein echtes Schiff wirkt. */
-const GHOST_TINT = new Color3(0.2, 0.62, 0.95);
-const GHOST_ALBEDO = new Color3(0.45, 0.6, 0.75);
-
 const TRACK_WIDTH = 2.72;
 const BAR_WIDTH = 2.56;
 const HP_COLOR_EMPTY = color3("hpEmpty");
@@ -121,24 +114,25 @@ const RAM_RETURN_DURATION = 900;
 
 const containers = new Map<string, AssetContainer>();
 
-/** Lädt Modell und Wrack aller Schiffe; erst danach lassen sich `ShipView`s erzeugen. */
+/**
+ * Lädt Modell und Wrack aller Schiffe und tauscht ihre glTF-Materialien gegen Toon-Materialien, die alle Instanzen
+ * teilen; erst danach lassen sich `ShipView`s erzeugen.
+ */
 export function loadShipModels(scene: Scene): Promise<void>[] {
   return allShipModels().map(async (url) => {
     const container = await LoadAssetContainerAsync(url, scene);
-    for (const material of container.materials) if (material instanceof PBRMaterial) material.maxSimultaneousLights = MAX_LIGHTS;
+    const toon = new Map<Material, ToonMaterial>();
+    for (const mesh of container.meshes) {
+      const source = mesh.material;
+      if (!source) continue;
+      if (!toon.has(source)) toon.set(source, toonMaterial(source, scene));
+      mesh.material = toon.get(source)!;
+    }
+    // Die Texturen (Glutmuster) übernehmen die Toon-Materialien.
+    for (const material of container.materials) material.dispose(false, false);
+    container.materials = [...toon.values()];
     containers.set(url, container);
   });
-}
-
-/**
- * Die Bruchstücke eines zerstörten Schiffs, an der Stelle des Modells: je Stück ein Knoten mit dem
- * Ursprung im Schwerpunkt. Der glTF-Loader macht aus einem Stück mit mehreren Materialien einen
- * TransformNode mit einem Mesh je Material, aus einem mit einem Material direkt ein Mesh.
- */
-export interface Wreck {
-  pieces: TransformNode[];
-  /** Eigene Kopien der Materialien, damit Glühen und Ausblenden nur dieses Wrack betreffen. */
-  materials: PBRMaterial[];
 }
 
 export class ShipView {
@@ -173,10 +167,13 @@ export class ShipView {
   private preview: ShipStats | null | undefined;
   /** Material und volle Deckkraft je Balken, zum Dämpfen (`setHoldingFire`). */
   private readonly bars: { material: StandardMaterial; alpha: number }[] = [];
-  /** Eigene Materialien (Balken, Geist-Kopien, Wrack); glTF-Materialien gehören dem geteilten Container. */
+  /** Eigene Materialien (Balken); die Toon-Materialien teilen alle Schiffe. */
   private readonly ownedMaterials: Material[] = [];
-  /** Geist-Kopie je glTF-Material, damit Meshes mit gleichem Material auch die Kopie teilen. */
-  private readonly ghostMaterials = new Map<Material, Material>();
+  /**
+   * Was Modell und Wrack beim Zeichnen lesen (`toon.ts`): die Seite für das Hauptlicht (setzt der Landeplatz), die Glut
+   * der Bruchflächen und die Helligkeit der Lichter (beides steuert `destruction.ts`).
+   */
+  readonly toon: ToonInstance = { facing: 1, heat: null, lights: 1 };
   /** Zu welcher Seite das Schiff im Todeskampf krängt. */
   private readonly listSide = Math.random() < 0.5 ? 1 : -1;
 
@@ -479,20 +476,24 @@ export class ShipView {
     this.modelRoot.rotation.set(DISTRESS_PITCH * amount ** 2, 0, this.listSide * DISTRESS_ROLL * amount ** 3);
   }
 
-  /** Tauscht das Modell gegen die Bruchstücke, die exakt an seiner Stelle liegen (auch in der Krängung). */
-  breakApart(): Wreck {
+  /**
+   * Tauscht das Modell gegen die Bruchstücke, die exakt an seiner Stelle liegen (auch in der Krängung): je Stück ein
+   * Knoten mit dem Ursprung im Schwerpunkt. Der glTF-Loader macht aus einem Stück mit mehreren Materialien einen
+   * TransformNode mit einem Mesh je Material, aus einem mit einem Material direkt ein Mesh. Glut und Lichter stehen in
+   * `toon`, damit sie nur dieses Wrack betreffen.
+   */
+  breakApart(): TransformNode[] {
     for (const node of this.modelRoot.getChildren()) node.dispose();
-    const entries = containers.get(wreckModel(this.card))!.instantiateModelsToScene((name) => `${this.card.id}-wreck-${name}`, true);
+    const entries = containers.get(wreckModel(this.card))!.instantiateModelsToScene((name) => `${this.card.id}-wreck-${name}`, false);
     const root = entries.rootNodes[0] as TransformNode;
     root.parent = this.modelRoot;
     root.scaling.scaleInPlace(MODEL_SCALE);
-    const materials = new Set<PBRMaterial>();
+    const renderer = toonRenderer(this.scene);
     for (const mesh of root.getChildMeshes()) {
       mesh.isPickable = false;
-      if (mesh.material instanceof PBRMaterial) materials.add(mesh.material);
+      renderer.register(mesh, this.toon);
     }
-    this.ownedMaterials.push(...materials);
-    return { pieces: root.getChildren().filter((node) => node instanceof TransformNode), materials: [...materials] };
+    return root.getChildren().filter((node) => node instanceof TransformNode);
   }
 
   dispose(): void {
@@ -500,8 +501,7 @@ export class ShipView {
     if (this.hologram) this.scene.onBeforeRenderObservable.remove(this.hologram);
     for (const marker of this.markers.values()) marker.dispose();
     this.root.dispose(false, false);
-    // Geist-Kopien klonen beim `clone()` auch ihre Texturen; die gehören dann ebenfalls diesem Schiff.
-    for (const material of this.ownedMaterials) material.dispose(false, true);
+    for (const material of this.ownedMaterials) material.dispose();
   }
 
   private addModel(): void {
@@ -525,9 +525,13 @@ export class ShipView {
 
   private prepareMesh(mesh: AbstractMesh): void {
     mesh.isPickable = false;
-    if (this.isGhost && mesh.material) mesh.material = this.ghostMaterial(mesh.material);
-    // Der Rumpf verdeckt den Schein der Marken am Boden, das durchscheinende Trugbild nicht.
-    if (!this.isGhost) occludeGlow(this.scene, mesh);
+    // Die Wurzel des glTF-Modells ist ein leeres Mesh ohne Material.
+    const material = mesh.material as ToonMaterial | null;
+    if (!material) return;
+    if (this.isGhost) mesh.material = ghostMaterial(material);
+    toonRenderer(this.scene).register(mesh, this.toon);
+    // Der Rumpf verdeckt den Schein der Marken am Boden, Geister und das durchscheinende Trugbild nicht.
+    if (!this.isGhost && material.spec.kind !== "hologram") occludeGlow(this.scene, mesh);
   }
 
   /** Hologramm: Die Deckkraft schwankt, ab und zu setzt das Bild aus und springt seitlich. */
@@ -547,32 +551,6 @@ export class ShipView {
     crown.alphaIndex = 3;
     crown.parent = this.statusBars;
     crown.position.set((TRACK_WIDTH + CROWN_SIZE) / 2 + 0.08, -0.05, 0);
-  }
-
-  /**
-   * Der glTF-Loader stellt undurchsichtige Materialien fest auf OPAQUE, `visibility` allein wirkt
-   * dann nicht. Der Geist bekommt deshalb geblendete Kopien; der Tiefen-Vorlauf zeigt nur die
-   * vorderste Hülle, statt Innenflächen durchscheinen zu lassen. Spiegelungen der Umgebung
-   * würden PBR-Material sonst unabhängig vom Alpha voll deckend zeichnen.
-   */
-  private ghostMaterial(source: Material): Material {
-    let ghost = this.ghostMaterials.get(source);
-    if (!ghost) {
-      ghost = source.clone(`${source.name}-ghost`)!;
-      ghost.transparencyMode = Material.MATERIAL_ALPHABLEND;
-      ghost.alpha = GHOST_ALPHA;
-      ghost.needDepthPrePass = true;
-      if (ghost instanceof PBRMaterial) {
-        ghost.useRadianceOverAlpha = false;
-        ghost.useSpecularOverAlpha = false;
-        ghost.albedoColor = GHOST_ALBEDO;
-        ghost.emissiveColor = GHOST_TINT;
-        ghost.emissiveIntensity = 1;
-      }
-      this.ghostMaterials.set(source, ghost);
-      this.ownedMaterials.push(ghost);
-    }
-    return ghost;
   }
 
   /** Alle Balken sind alpha-geblendet, damit `alphaIndex` die Reihenfolge Spur -> Füllung bestimmt. */

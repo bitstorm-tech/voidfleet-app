@@ -15,7 +15,7 @@ import { playSound } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
 import { type BlastStyle, randomBetween, randomInCone } from "./effects.ts";
 import type { MatchScene } from "./matchScene.ts";
-import type { ShipView, Wreck } from "./ship.ts";
+import type { ShipView } from "./ship.ts";
 import { tween } from "./tween.ts";
 
 export interface DestructionProfile {
@@ -81,12 +81,15 @@ const FADE = 700;
 /** Trümmer: Sinken (Welteinheiten/s²) und Abbremsen (Anteil pro Sekunde), damit sie lesbar bleiben. */
 const GRAVITY = 1.1;
 const DRAG = 0.45;
-/** Sekunden, bis die Bruchkanten dunkel sind und bis Düsen und Fenster erloschen sind. */
+/** Sekunden, bis die Bruchkanten dunkel sind und bis Düsen, Fenster und Kennzeichen erloschen sind. */
 const COOL_TIME = 1.6;
 const LIGHTS_OUT = 1.1;
-/** Glühen der Bruchkanten: weißglühend beim Aufbrechen, dann orange, zuletzt dunkelrot. */
+/** Glut der Bruchkanten (linear, mal Glutmuster): weißglühend beim Aufbrechen, dann orange, zuletzt dunkelrot. */
 const WHITE_HOT = new Color3(1, 0.72, 0.4);
 const COLD = new Color3(0.7, 0.06, 0);
+/** Stärke der Glut: was nachglimmt, plus der Aufschlag beim Aufbrechen (mal Hitze³). */
+const EMBERS = 0.4;
+const HEAT_BOOST = 10;
 /** Die ganze Hülle wird vom Feuerball angestrahlt (Overlay) und verliert das Licht in dieser Zeit (s). */
 const GLARE = new Color3(1, 0.6, 0.3);
 const GLARE_TIME = 0.5;
@@ -113,9 +116,9 @@ export async function destroyShip(ship: ShipView, view: MatchScene): Promise<voi
   ship.hideStatus();
   await agony(ship, profile, view);
   const center = ship.center;
-  const wreck = ship.breakApart();
+  const pieces = ship.breakApart();
   view.shake(profile.shake);
-  void scatter(wreck, center, profile, ship, view);
+  void scatter(pieces, center, profile, ship, view);
   await view.effects.detonate(center, profile.energy, profile.size, profile.style);
 }
 
@@ -142,16 +145,13 @@ async function agony(ship: ShipView, profile: DestructionProfile, view: MatchSce
 }
 
 /**
- * Die Bruchstücke fliegen radial auseinander und taumeln, die größten brennen und
- * explodieren nach; Bruchkanten kühlen ab, Lichter erlöschen, zuletzt verblasst alles.
+ * Die Bruchstücke fliegen radial auseinander und taumeln, die größten brennen und explodieren nach; Bruchkanten kühlen
+ * ab, die Lichter (alle Materialien der Art `light`, auch die Kennzeichen der Flaggschiffe) erlöschen flackernd, zuletzt
+ * verblasst alles. Glut und Lichter gelten nur für dieses Wrack (`ship.toon`).
  */
-async function scatter(wreck: Wreck, center: Vector3, profile: DestructionProfile, ship: ShipView, view: MatchScene): Promise<void> {
-  const { pieces, materials } = wreck;
-  const cuts = materials.filter((material) => material.name.endsWith("_wreck"));
-  // Die Kennzeichen der Flaggschiffe (`<id>_signal`) leuchten nur mit Stärke 1, erlöschen aber wie Lichter.
-  const lights = materials.filter((material) => !cuts.includes(material) && (material.emissiveIntensity > 1 || material.name.endsWith("_signal")));
-  const brightness = new Map(lights.map((material) => [material, material.emissiveIntensity]));
-
+async function scatter(pieces: TransformNode[], center: Vector3, profile: DestructionProfile, ship: ShipView, view: MatchScene): Promise<void> {
+  const glow = new Color3();
+  ship.toon.heat = glow;
   const bodies = launch(pieces, center, profile);
   const burning = [...bodies].sort((a, b) => b.extent - a.extent).slice(0, Math.ceil(profile.size * 1.5));
   for (const body of burning) view.effects.burn(body.piece, 0.3 + 0.3 * body.extent, body.extent * 0.35, profile.linger);
@@ -181,12 +181,9 @@ async function scatter(wreck: Wreck, center: Vector3, profile: DestructionProfil
       view.shake(profile.shake * 0.3);
     }
     const heat = Math.max(0, 1 - t / COOL_TIME);
-    for (const cut of cuts) {
-      cut.emissiveIntensity = 0.4 + 10 * heat ** 3;
-      Color3.LerpToRef(COLD, WHITE_HOT, heat ** 2, cut.emissiveColor);
-    }
-    const power = Math.max(0, 1 - t / LIGHTS_OUT);
-    for (const light of lights) light.emissiveIntensity = brightness.get(light)! * power * (0.5 + 0.5 * Math.random());
+    Color3.LerpToRef(COLD, WHITE_HOT, heat ** 2, glow);
+    glow.scaleInPlace(EMBERS + HEAT_BOOST * heat ** 3);
+    ship.toon.lights = Math.max(0, 1 - t / LIGHTS_OUT) * (0.5 + 0.5 * Math.random());
     const glare = Math.max(0, 1 - t / GLARE_TIME) ** 2;
     const fade = Math.min(Math.max((t - profile.linger / 1000) / (FADE / 1000), 0), 1);
     for (const mesh of meshes) {

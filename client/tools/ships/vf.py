@@ -1,159 +1,156 @@
-"""Bausteine für die Schiffe von Voidfleet in Blender (bpy/bmesh).
+"""Bausteine für die Schiffe von Voidfleet in Blender (bpy/bmesh), Stil „Clean Toon“.
 
-Konventionen (Blender-Koordinaten): Die Nase zeigt nach -Y, oben ist +Z, Steuerbord ist +X.
-Nach dem glTF-Export (Y-up) zeigt die Nase in Babylon nach +Z, wie `client/src/scene/ship.ts`
-es erwartet. Jedes Schiff ist ein einziges Mesh aus geschlossenen Primitiven: smooth shaded mit
-einem Bevel-Modifier (gehärtete Normalen) für weiche Kanten, Box-UVs je Fläche und kachelbaren
-Rumpfplatten-Texturen aus `tex.py` (Farbe, Rauheit/Metall, Normalmap). Düsen und Lichter sind
-Emission-Materialien für den Glow-Layer.
+Konventionen (Blender-Koordinaten): Die Nase zeigt nach -Y, oben ist +Z, Steuerbord ist +X. Nach dem glTF-Export
+(Y-up) zeigt die Nase in Babylon nach +Z, wie `client/src/scene/ship.ts` es erwartet. Jedes Schiff ist ein einziges
+Mesh aus geschlossenen, sich überlappenden Primitiven (`Ship.add`), ohne Bevel, ohne UVs, ohne Texturen. Auf dem Brett
+liegt der Slot bei Blender-z −1,4, bei Flaggschiffen wegen ihres Faktors 1,1 bei −1,27 (`slot`): Kein Teil darf darunter,
+sonst `Ship.lift`. Teile ohne Berührung zum übrigen Schiff findet `loose_parts`; `build.py` meldet beides.
+
+Normalen: Flächen eckiger Materialien sind flach (Flächennormale, ein Ton je Facette), Flächen runder Materialien und
+der Lichter geglättet, wobei Kanten über 38° hart bleiben (`SHARP_ANGLE`). Rund oder eckig ist also eine Eigenschaft
+des Materials: Rohre, Türme, Düsen und Barbetten bekommen die `_round`-Variante bzw. `steel`, alles Kantige die eckige.
+
+Material-Vertrag mit dem Spiel
+------------------------------
+Jedes Material trägt seine Art und seine Farben als Custom Property `vf`. Der Export (`export_extras=True`) schreibt sie
+nach `materials[i].extras.vf`, Babylon liefert sie als `material.metadata.gltf.extras.vf` (Loader-Erweiterung
+`ExtrasAsMetadata`, die `registerBuiltInLoaders()` immer aktiviert; Klone behalten `metadata`). Farben in `vf` sind
+sRGB-Hex "#rrggbb" (wie `client/src/data/palette.ts`), die glTF-Faktoren daneben linear (glTF-Norm). Vier Arten:
+
+  {"kind": "toon", "tones": [Licht, Halbschatten, Schatten], "round": bool, "glint": float}
+      Gestufte Fläche. `round`: geglättete Normalen und das schmalere Kantenlicht runder Teile; `glint`: Deckkraft des
+      harten Glanzpunkts (0 = keiner). glTF: baseColorFactor = Licht-Ton, metallicFactor 0, roughnessFactor 1
+      (Vorgabe, fehlt im JSON), keine Texturen. Auch die Zierlinie der Flaggschiffe `<id>_trim` (Goldtöne).
+  {"kind": "light", "color": Farbe, "glow": bool}
+      Unbeleuchtet in genau dieser Farbe: Düsen, Fenster, Emitter, Positionslichter (`glow`: true = glüht im Spiel) und
+      die Kennzeichen der Flaggschiffe `<id>_signal` in der UI-Farbe des Admirals (`glow`: false).
+      glTF: baseColorFactor schwarz, emissiveFactor = Farbe (Stärke 1).
+  {"kind": "hologram", "color": Farbe, "alpha": float, "glow": bool}
+      Durchscheinend und emissiv (das Trugbild), ohne Konturen. glTF: alphaMode BLEND, doubleSided (als einzige Art),
+      baseColorFactor schwarz mit `alpha`, emissiveFactor = Farbe.
+  {"kind": "wreck", "tones": [Licht, Halbschatten, Schatten], "heat": Farbe}
+      Bruchflächen der Wracks (`<id>_wreck`, nur in `<id>_wreck.glb`, siehe wreck.py): verkohlte Töne wie ein eckiges
+      toon-Material, dazu Glut. glTF: baseColorFactor = Licht-Ton, emissiveFactor = `heat`, emissiveTexture = Glutmuster
+      (Graustufen, kachelbar); nur die Primitive dieses Materials tragen TEXCOORD_0.
+
+Aufbau: `<id>.glb` ist ein Knoten mit einem Mesh, je Material ein Primitive (POSITION, NORMAL, Indizes); `<id>_wreck.glb`
+hat je Bruchstück einen Knoten (Ursprung im Schwerpunkt), seine Primitive mit dem Wrack-Material tragen zusätzlich
+TEXCOORD_0. Materialien heißen `<id>_<schlüssel>` (siehe `materials`), keine glTF-Erweiterungen. Nur Hologramme sind
+doubleSided, alle anderen einseitig: Jede Hülle ist geschlossen und nach außen orientiert, auch gespiegelte Teile und die
+Bruchflächen der Wracks (`bad_shells`, build.py meldet Verstöße).
+
+Farben und Töne stehen in palette.py, Licht, Linien und Glühen der Vorschau (Vorlage fürs Spiel) in look.py.
 """
 
-import hashlib
+import json
 import math
-import os
 import random
-import tempfile
+import struct
 
 import bmesh
 import bpy
 from mathutils import Euler, Matrix, Vector
+from mathutils.bvhtree import BVHTree
 
-import tex
+import palette
 
 COLLECTION = "VF_Ships"
-BEVEL_WIDTH = 0.02
-
-# ---------------------------------------------------------------- Texturen
-
-
-def _texture_dir():
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tex.py"), "rb") as f:
-        digest = hashlib.md5(f.read()).hexdigest()[:8]
-    return os.path.join(tempfile.gettempdir(), f"vf-textures-{digest}")
-
-
-_textures = {}
-
-
-def textures(style):
-    """Die drei Bilder eines Textur-Stils, bei Bedarf erzeugt (Cache je Stand von tex.py)."""
-    if style not in _textures:
-        directory = _texture_dir()
-        paths = {kind: os.path.join(directory, f"vf_{style}_{kind}.{ext}") for kind, ext in (("color", "jpg"), ("orm", "jpg"), ("normal", "png"))}
-        if not all(os.path.exists(p) for p in paths.values()):
-            paths = tex.save(style, directory)
-        images = {}
-        for kind, path in paths.items():
-            image = bpy.data.images.get(os.path.basename(path)) or bpy.data.images.load(path)
-            if kind != "color":
-                image.colorspace_settings.name = "Non-Color"
-            images[kind] = image
-        _textures[style] = images
-    return _textures[style]
-
+SHARP_ANGLE = math.radians(38)
+FLOOR = -1.4  # Oberkante des Slots im Modellraum (ship.ts: -SHIP_ANCHOR_HEIGHT / BOARD_SCALE / MODEL_SCALE)
+FLAGSHIP_SCALE = 1.1  # ship.ts vergrößert Flaggschiffe; ihr Slot liegt deshalb bei FLOOR / FLAGSHIP_SCALE = -1,27
+GLINT = 0.6  # Glanzpunkt auf Türmen, Rohren und Glas
 
 # ---------------------------------------------------------------- Materialien
-
-TILE = {}  # Materialname -> Kantenlänge einer Texturkachel in Blender-Einheiten
 
 
 def _socket(sockets, identifier):
     return next(s for s in sockets if s.identifier == identifier)
 
 
-def material(name, color, metallic=0.4, roughness=0.5, emission=None, strength=0.0, style=None, tile=1.5, normal_strength=1.0):
-    """PBR-Material; mit `style` werden die Platten-Texturen eingehängt, `metallic` und `roughness`
-    wirken dann als Faktoren auf die Texturwerte (Rauheit in der Textur liegt um 0.5)."""
+def surface(name, spec, base, emission=None, alpha=1.0):
+    """Material mit glTF-tauglichem Principled BSDF (metallic 0, roughness 1) und dem Vertrag `spec` als Custom
+    Property `vf`. `base` und `emission` sind sRGB-Hex. Die Vorschau ersetzt die Knoten durch das Toon-Shading."""
     mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
-    mat.use_nodes = True
     nodes, links = mat.node_tree.nodes, mat.node_tree.links
     nodes.clear()
     out = nodes.new("ShaderNodeOutputMaterial")
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
     links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
-    bsdf.inputs["Base Color"].default_value = (*color, 1.0)
-    bsdf.inputs["Metallic"].default_value = metallic
-    bsdf.inputs["Roughness"].default_value = roughness
-    bsdf.inputs["Emission Color"].default_value = (*(emission or color), 1.0)
-    bsdf.inputs["Emission Strength"].default_value = strength
-    if style:
-        images = textures(style)
-        tex_color = nodes.new("ShaderNodeTexImage")
-        tex_color.image = images["color"]
-        mix = nodes.new("ShaderNodeMix")
-        mix.data_type, mix.blend_type = "RGBA", "MULTIPLY"
-        mix.inputs[0].default_value = 1.0
-        links.new(tex_color.outputs["Color"], _socket(mix.inputs, "A_Color"))
-        _socket(mix.inputs, "B_Color").default_value = (*color, 1.0)
-        links.new(_socket(mix.outputs, "Result_Color"), bsdf.inputs["Base Color"])
-        tex_orm = nodes.new("ShaderNodeTexImage")
-        tex_orm.image = images["orm"]
-        separate = nodes.new("ShaderNodeSeparateColor")
-        links.new(tex_orm.outputs["Color"], separate.inputs["Color"])
-        for channel, factor, target in (("Green", roughness, "Roughness"), ("Blue", metallic, "Metallic")):
-            mul = nodes.new("ShaderNodeMath")
-            mul.operation = "MULTIPLY"
-            mul.inputs[1].default_value = factor
-            links.new(separate.outputs[channel], mul.inputs[0])
-            links.new(mul.outputs[0], bsdf.inputs[target])
-        tex_normal = nodes.new("ShaderNodeTexImage")
-        tex_normal.image = images["normal"]
-        normal_map = nodes.new("ShaderNodeNormalMap")
-        normal_map.inputs["Strength"].default_value = normal_strength
-        links.new(tex_normal.outputs["Color"], normal_map.inputs["Color"])
-        links.new(normal_map.outputs["Normal"], bsdf.inputs["Normal"])
-    mat.diffuse_color = (*color, 1.0)
-    TILE[mat.name] = tile
+    bsdf.inputs["Base Color"].default_value = (*palette.linear(base), 1.0)
+    bsdf.inputs["Metallic"].default_value = 0.0
+    bsdf.inputs["Roughness"].default_value = 1.0
+    if emission:
+        bsdf.inputs["Emission Color"].default_value = (*palette.linear(emission), 1.0)
+        bsdf.inputs["Emission Strength"].default_value = 1.0
+    if alpha < 1.0:
+        bsdf.inputs["Alpha"].default_value = alpha
+        mat.surface_render_method = "BLENDED"
+    # Einseitig (glTF doubleSided false), nur Hologramme beidseitig: Die Hüllen sind geschlossen und nach außen
+    # orientiert (bad_shells), das Spiel spart so die Rückseiten
+    mat.use_backface_culling = spec["kind"] != "hologram"
+    mat["vf"] = spec
+    mat.diffuse_color = (*palette.linear(emission or base), 1.0)
     return mat
 
 
-def iridescent(mat, thickness=420.0, ior=1.5):
-    """Dünnschicht-Schimmer (Thin Film) auf einem Material; der glTF-Export schreibt ihn als KHR_materials_iridescence
-    und liest den Faktor aus der Knotengruppe „glTF Material Output“. Ihr (unverbundener) Eingang „Occlusion“ hält
-    den Exporter davon ab, das Material zu vereinfachen (inline) und die Gruppe dabei zu verlieren."""
-    nodes = mat.node_tree.nodes
-    bsdf = next(n for n in nodes if n.type == "BSDF_PRINCIPLED")
-    bsdf.inputs["Thin Film Thickness"].default_value = thickness
-    bsdf.inputs["Thin Film IOR"].default_value = ior
-    group = bpy.data.node_groups.get("glTF Material Output")
-    if group is None:
-        group = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
-        for name in ("Occlusion", "Iridescence Factor", "Iridescence Thickness Minimum"):
-            group.interface.new_socket(name, in_out="INPUT", socket_type="NodeSocketFloat")
-    node = nodes.new("ShaderNodeGroup")
-    node.node_tree = group
-    node.inputs["Iridescence Factor"].default_value = 1.0
-    node.inputs["Iridescence Thickness Minimum"].default_value = thickness
-    return mat
+def toon(name, tones, round=False, glint=0.0):
+    """Gestufte Fläche; `tones` ist der Licht-Ton (die anderen leitet palette.tones ab) oder ein Tripel."""
+    t = palette.tones(tones)
+    return surface(name, {"kind": "toon", "tones": list(t), "round": round, "glint": glint}, t[0])
 
 
-GUNMETAL = (0.3, 0.33, 0.38)
-DARK = (0.09, 0.095, 0.105)
-STEEL = (0.62, 0.64, 0.66)
-WHITE = (0.85, 0.86, 0.87)
-WINDOW = (1.0, 0.85, 0.6)
+def light(name, color, glow=True):
+    """Unbeleuchtete Fläche in genau `color`; `glow` sagt dem Spiel, dass sie glühen soll."""
+    return surface(name, {"kind": "light", "color": color, "glow": glow}, "#000000", emission=color)
 
 
-def palette(ship, accent, glow, hull=GUNMETAL, style="plating", tile=1.5, canopy_glow=(0.03, 0.3, 0.42), **extra):
-    """Materialsatz eines Schiffs; `extra` ergänzt Farben als Name -> (rgb) (texturiert) oder (rgb, glow) (leuchtend)."""
-    mats = {
-        "hull": material(f"{ship}_hull", hull, 0.85, 0.9, style=style, tile=tile),
-        "accent": material(f"{ship}_accent", accent, 0.3, 1.0, style=style, tile=tile),
-        "dark": material(f"{ship}_dark", DARK, 0.6, 1.0, style=style, tile=tile * 0.7),
-        "steel": material(f"{ship}_steel", STEEL, 1.0, 0.75, style=style, tile=tile * 0.5, normal_strength=0.5),
-        "plain": material(f"{ship}_plain", DARK, 0.7, 0.55),
-        "glow": material(f"{ship}_glow", glow, 0.0, 0.4, emission=glow, strength=20.0),
-        "window": material(f"{ship}_window", WINDOW, 0.0, 0.3, emission=WINDOW, strength=5.0),
-        "canopy": material(f"{ship}_canopy", (0.01, 0.03, 0.045), 0.0, 0.08, emission=canopy_glow, strength=1.5),
-        "navred": material(f"{ship}_navred", (1.0, 0.2, 0.1), 0.0, 0.4, emission=(1.0, 0.2, 0.1), strength=12.0),
-        "navgreen": material(f"{ship}_navgreen", (0.2, 1.0, 0.3), 0.0, 0.4, emission=(0.2, 1.0, 0.3), strength=12.0),
+def hologram(name, color, alpha, glow=False):
+    """Durchscheinende, leuchtende Fläche eines Hologramms (konstantes Alpha, beidseitig)."""
+    return surface(name, {"kind": "hologram", "color": color, "alpha": alpha, "glow": glow}, "#000000", emission=color, alpha=alpha)
+
+
+def spec(mat):
+    """Der Vertrag eines Materials als dict (siehe Docstring)."""
+    return mat["vf"].to_dict()
+
+
+def smooth_normals(mat):
+    """Geglättete Normalen: runde toon-Materialien und Lichter; eckige, Hologramme und Bruchflächen sind flach."""
+    s = mat["vf"]
+    return s["kind"] == "light" or (s["kind"] == "toon" and bool(s["round"]))
+
+
+def materials(ship, ship_class):
+    """Standardsatz eines Schiffs, Namen `<ship>_<key>`: eckig `hull`, `armor`, `dark`, `accent`; rund `hull_round`,
+    `armor_round`, `dark_round`, `accent_round` (Türme), `steel` (Rohre), `glass` (Kanzeln); Lichter `glow` (Lichtbänder,
+    Leuchtfeuer), `core` (Brennkammer), `window`. Rumpf, Panzerung, Akzent und Lichtfarbe kommen aus der Klasse
+    (palette.CLASSES). Flaggschiffe
+    (palette.FLAGSHIPS) nehmen Akzent und Lichter ihres Admirals und bekommen dazu `signal` (Kennzeichen in der
+    UI-Farbe) und `trim` (Zierlinie). Weitere Materialien legt das Schiff selbst an (`toon`, `light`)."""
+    admiral = palette.FLAGSHIPS.get(ship)
+    look = palette.CLASSES[ship_class]
+    accent = palette.ADMIRAL_ACCENT[admiral] if admiral else look["accent"]
+    glow = palette.ADMIRALS[admiral] if admiral else look["glow"]
+    core = palette.pale(glow) if admiral else look["core"]
+    m = {
+        "hull": toon(f"{ship}_hull", look["hull"]),
+        "armor": toon(f"{ship}_armor", look["armor"]),
+        "dark": toon(f"{ship}_dark", palette.DARK),
+        "accent": toon(f"{ship}_accent", accent),
+        "hull_round": toon(f"{ship}_hull_round", look["hull"], round=True),
+        "armor_round": toon(f"{ship}_armor_round", look["armor"], round=True),
+        "dark_round": toon(f"{ship}_dark_round", palette.DARK, round=True),
+        "accent_round": toon(f"{ship}_accent_round", accent, round=True, glint=GLINT),
+        "steel": toon(f"{ship}_steel", palette.STEEL, round=True, glint=GLINT),
+        "glass": toon(f"{ship}_glass", palette.GLASS, round=True, glint=GLINT),
+        "glow": light(f"{ship}_glow", glow),
+        "core": light(f"{ship}_core", core),
+        "window": light(f"{ship}_window", palette.WINDOW),
     }
-    for key, value in extra.items():
-        if isinstance(value[0], tuple):
-            mats[key] = material(f"{ship}_{key}", value[0], 0.0, 0.4, emission=value[1], strength=20.0)
-        else:
-            mats[key] = material(f"{ship}_{key}", value, 0.6, 1.0, style=style, tile=tile)
-    return mats
+    if admiral:
+        m["signal"] = light(f"{ship}_signal", palette.ADMIRALS[admiral], glow=False)
+        m["trim"] = toon(f"{ship}_trim", palette.TRIM)
+    return m
 
 
 # ---------------------------------------------------------------- 2D-Profile (x, z)
@@ -184,6 +181,11 @@ def keel(w, h, drop=0.4):
     return [(w / 2, h / 2 - h * drop), (w / 2, h / 2), (-w / 2, h / 2), (-w / 2, h / 2 - h * drop), (0, -h / 2)]
 
 
+def facet(w, h, top=0.36, low=0.5, drop=0.6):
+    """Facettierter Tarnkappen-Querschnitt: scharfe Kimmkanten an den Seiten, schmaler flacher Grat oben, flacher Boden."""
+    return [(w / 2, 0.0), (w * top / 2, h / 2), (-w * top / 2, h / 2), (-w / 2, 0.0), (-w * low / 2, -h / 2 * drop), (w * low / 2, -h / 2 * drop)]
+
+
 def rounded(w, h, r, n=3):
     """Rechteck mit runden Ecken (Radius r, n Zwischenpunkte je Ecke)."""
     r = min(r, w / 2, h / 2)
@@ -205,13 +207,18 @@ def superellipse(w, h, n=24, p=2.6, phase=0.0):
     return pts
 
 
-def scaled(shape, sx, sz=None):
-    sz = sx if sz is None else sz
-    return [(x * sx, z * sz) for x, z in shape]
-
-
-def shifted(shape, dx=0.0, dz=0.0):
-    return [(x + dx, z + dz) for x, z in shape]
+def grow(points, d):
+    """Konvexes Polygon (x, y) um d nach außen versetzt."""
+    n = len(points)
+    sign = 1 if sum(points[i][0] * points[(i + 1) % n][1] - points[(i + 1) % n][0] * points[i][1] for i in range(n)) > 0 else -1
+    out = []
+    for i in range(n):
+        p0, p1, p2 = Vector(points[i - 1]), Vector(points[i]), Vector(points[(i + 1) % n])
+        e1, e2 = (p1 - p0).normalized(), (p2 - p1).normalized()
+        n1, n2 = Vector((e1.y, -e1.x)) * sign, Vector((e2.y, -e2.x)) * sign
+        b = (n1 + n2).normalized()
+        out.append(tuple(p1 + b * d / max(b.dot(n1), 0.3)))
+    return out
 
 
 def resample(shape, n):
@@ -266,6 +273,23 @@ def smooth(sections, subdiv=3):
     return out
 
 
+def flank(rings, z, dx=0.03, at=(0, 0, 0)):
+    """Punkte auf der Steuerbord-Flanke eines Lofts (Ringe wie aus `smooth`) in Höhe z, um dx nach außen versetzt:
+    die Bahn einer Zierlinie, die dem Rumpf folgt; `at` ist der Versatz, mit dem der Rumpf eingefügt wurde."""
+    ox, oy, oz = at
+    out = []
+    for ring in rings:
+        if not isinstance(ring, list):
+            continue
+        hits = [a.lerp(b, (z - oz - a.z) / (b.z - a.z)) for a, b in zip(ring, ring[1:] + ring[:1])
+                if (a.z - z + oz) * (b.z - z + oz) <= 0 and a.z != b.z]
+        hits = [p for p in hits if p.x > 0]
+        if hits:
+            p = max(hits, key=lambda p: p.x)
+            out.append((p.x + ox + dx, p.y + oy, z))
+    return out
+
+
 # ---------------------------------------------------------------- Primitive (liefern bmesh)
 
 
@@ -304,15 +328,6 @@ def _append(bm, part, matrix=None, flip=False):
     return faces
 
 
-def union(*parts):
-    """Mehrere Teile zu einem bmesh (ohne Verschmelzen)."""
-    bm = bmesh.new()
-    for part in parts:
-        _append(bm, part)
-        part.free()
-    return bm
-
-
 def loft(sections, cap_start=True, cap_end=True):
     """Haut zwischen Ringen; eine Spitze (Vector) schließt mit einem Fächer. Ringe mit
     unterschiedlicher Punktzahl werden auf die größte umgesampelt."""
@@ -342,11 +357,16 @@ def box(sx, sy, sz):
 
 
 def rbox(sx, sy, sz, r=0.05, segments=2):
-    """Quader mit gerundeten Kanten."""
+    """Quader mit gerundeten (bei segments=1 gefasten) Kanten."""
     bm = box(sx, sy, sz)
     bmesh.ops.bevel(bm, geom=bm.edges[:] + bm.verts[:], offset=min(r, sx / 2.2, sy / 2.2, sz / 2.2), segments=segments,
                     profile=0.5, affect="EDGES", clamp_overlap=True)
     return _finish(bm)
+
+
+def wedge(w, l, h, front=0.35, taper=0.85):
+    """Kastiger Aufbau mit schräger Front: Querschnitte entlang Y, vorn niedriger und schmaler (Brücken, Decksblöcke)."""
+    return loft([sec(-l / 2, rect(w * taper, h * 0.55), dz=-h * 0.225), sec(-l / 2 + l * front, rect(w, h)), sec(l / 2, rect(w, h))])
 
 
 def plate(points, thickness, plane="xy"):
@@ -360,6 +380,11 @@ def plate(points, thickness, plane="xy"):
     else:
         a, b = [Vector((x, -h, z)) for x, z in points], [Vector((x, h, z)) for x, z in points]
     return loft([a, b])
+
+
+def slab(outline, thickness, bend=0.0):
+    """Gewölbte Platte quer zur Längsachse: Umriss (x, z) ab y = 0 nach hinten, die Seiten um bend·x² zurückgezogen."""
+    return loft([[Vector((x, d + bend * x * x, z)) for x, z in outline] for d in (0.0, thickness)])
 
 
 def tube(n, r0, r1, y0, y1, dx=0.0, dz=0.0, phase=0.0, rz0=None, rz1=None):
@@ -387,6 +412,11 @@ def sphere(r, subdivisions=2):
     return _finish(bm)
 
 
+def crystal(r, h):
+    """Doppelpyramide (Emitterkristall) um den Ursprung, Spitzen in ±z."""
+    return loft([Vector((0, 0, -h)), [Vector((r * math.cos(a), r * math.sin(a), 0)) for a in (k * math.pi / 2 for k in range(4))], Vector((0, 0, h))])
+
+
 def hoop(n, r_in, r_out, h):
     """Flacher Ring um die Z-Achse (Signalring, Düsenkranz)."""
     bm = bmesh.new()
@@ -408,7 +438,24 @@ def dish(r, depth, n=24, rings=5, thickness=0.04):
         sections.append(sec(-depth * t * t, ngon(n, r * t)))
     bm = loft(sections, cap_end=False)
     bmesh.ops.solidify(bm, geom=bm.faces[:], thickness=thickness)
-    return _finish(bm)
+    return _canonical(bm)
+
+
+def _canonical(bm):
+    """Dieselbe Form in fester Reihenfolge: Eckpunkte nach Lage sortiert, jede Fläche beginnt an ihrem kleinsten Eckpunkt.
+    bmesh.ops.solidify ordnet die Flächen je Lauf anders an, und der Export trianguliert Vierecke ab dem ersten Eckpunkt;
+    ohne das wäre das GLB bei jedem Bau ein anderes."""
+    out = bmesh.new()
+    verts = {co: out.verts.new(co) for co in sorted(tuple(v.co) for v in bm.verts)}
+    faces = []
+    for f in bm.faces:
+        corners = [tuple(v.co) for v in f.verts]
+        k = corners.index(min(corners))
+        faces.append(corners[k:] + corners[:k])
+    for corners in sorted(faces):
+        _face(out, [verts[c] for c in corners])
+    bm.free()
+    return _finish(out)
 
 
 def segment(a, b, r, n=10):
@@ -448,13 +495,6 @@ def pipe(points, r, n=10, joints=True):
     return _finish(bm)
 
 
-def inset(bm, thickness=0.03, depth=0.012, min_area=0.02):
-    """Plattenfugen: setzt jede größere Fläche einzeln nach innen ab und senkt sie ein."""
-    faces = [f for f in bm.faces if f.calc_area() > min_area]
-    bmesh.ops.inset_individual(bm, faces=faces, thickness=thickness, depth=-depth, use_even_offset=True)
-    return bm
-
-
 # ---------------------------------------------------------------- Schiff zusammensetzen
 
 
@@ -478,20 +518,6 @@ class Ship:
         part.free()
         return self
 
-    def engine(self, m, r, y0, y1, dx=0.0, dz=0.0, n=24, mirror=False, glow="glow", plume=0.3):
-        """Triebwerk: geripptes Gehäuse, Düsenglocke mit Wandstärke, leuchtende Brennkammer und kurze Fahne."""
-        length = y1 - y0
-        ya, yb = y0 + 0.6 * length, y0 + 0.78 * length
-        self.add(tube(n, r, r, y0, ya, dx, dz), m["dark"], mirror=mirror)
-        for yr in (y0 + 0.18 * length, y0 + 0.42 * length):
-            self.add(hoop(n, r * 0.97, r * 1.06, 0.07 * length), m["steel"], at=(dx, yr, dz), rot=(90, 0, 0), mirror=mirror)
-        bell = [(r * 1.0, ya), (r * 0.76, yb), (r * 0.72, yb + 0.05 * length), (r * 0.9, y1), (r * 0.8, y1),
-                (r * 0.62, yb + 0.06 * length), (0.0, yb + 0.02 * length)]
-        self.add(revolve(bell, n), m["steel"], at=(dx, 0, dz), mirror=mirror)
-        self.add(revolve([(r * 0.6, yb + 0.03 * length), (r * 0.6, yb + 0.1 * length), (r * 0.5, y1 + 0.02 * length), (0.0, y1 + plume * length)], n),
-                 m[glow], at=(dx, 0, dz), mirror=mirror)
-        return self
-
     def _merge(self, part, index, matrix, flip=False):
         for face in _append(self.bm, part, matrix, flip):
             face.material_index = index
@@ -509,25 +535,23 @@ class Ship:
                 face.material_index = index[face.material_index]
         return self
 
-    def finish(self, bevel=BEVEL_WIDTH, panels=None):
-        """Box-UVs, Smooth Shading und Bevel-Modifier; erzeugt das Objekt in COLLECTION und ersetzt ein gleichnamiges."""
+    def lift(self, dz):
+        """Hebt das ganze Schiff an, damit sein tiefster Punkt über dem Slot bleibt (`slot`)."""
+        bmesh.ops.translate(self.bm, verts=self.bm.verts, vec=(0, 0, dz))
+        return self
+
+    def finish(self):
+        """Normalen nach Material (flach bzw. geglättet mit harten Kanten ab SHARP_ANGLE), Objekt in COLLECTION;
+        ersetzt ein gleichnamiges und warnt, wenn ein Teil unter den Slot ragt."""
         bm = self.bm
         bm.normal_update()
-        uv_layer = bm.loops.layers.uv.new("UVMap")
-        tiles = [TILE.get(m.name, 1.5) for m in self.materials]
+        smooth_by_index = [smooth_normals(m) for m in self.materials]
         for face in bm.faces:
-            n = face.normal
-            ax, ay, az = abs(n.x), abs(n.y), abs(n.z)
-            t = tiles[face.material_index]
-            for loop in face.loops:
-                co = loop.vert.co
-                if ax >= ay and ax >= az:
-                    u, v = co.y, co.z
-                elif ay >= az:
-                    u, v = co.x, co.z
-                else:
-                    u, v = co.x, co.y
-                loop[uv_layer].uv = (u / t, v / t)
+            face.smooth = smooth_by_index[face.material_index]
+        mark_sharp(bm)
+        low, floor = min((v.co.z for v in bm.verts), default=0.0), slot(self.name)
+        if low < floor - 1e-3:
+            print(f"WARNUNG {self.name}: tiefster Punkt bei z = {low:.2f} liegt unter dem Slot (z = {floor:.2f}), Ship.lift benutzen")
         collection = ships_collection()
         old = bpy.data.objects.get(self.name)
         if old:
@@ -539,119 +563,21 @@ class Ship:
         bm.free()
         for mat in self.materials:
             mesh.materials.append(mat)
-        mesh.shade_smooth()
         obj = bpy.data.objects.new(self.name, mesh)
         collection.objects.link(obj)
-        if bevel:
-            mod = obj.modifiers.new("Bevel", "BEVEL")
-            mod.width = bevel
-            mod.segments = 1
-            mod.limit_method = "ANGLE"
-            mod.angle_limit = math.radians(32)
-            mod.harden_normals = True
-            mod.use_clamp_overlap = True
-            mod.miter_outer = "MITER_ARC"
         return obj
 
 
-# ---------------------------------------------------------------- Wiederkehrende Baugruppen
+def slot(ship):
+    """Höhe der Slot-Oberkante im Modellraum des Schiffs; kein Teil darf darunter."""
+    return FLOOR / FLAGSHIP_SCALE if ship in palette.FLAGSHIPS else FLOOR
 
 
-def turret(s, m, at, barrel=1.1, r=0.42, barrels=2, yaw=0.0, mirror=False):
-    """Geschützturm: Sockelring, Barbette, gerundetes Gehäuse, Blende, Rohre mit Hülsen und Mündungen, Luke, Sensor."""
-    x, y, z = at
-    s.add(post(20, r * 1.05, r * 1.0, 0.0, 0.1), m["steel"], at=(x, y, z), mirror=mirror)
-    s.add(post(20, r * 0.86, r * 0.86, 0.1, 0.24), m["dark"], at=(x, y, z), mirror=mirror)
-    g = Ship("turret")
-    g.add(loft(smooth([sec(-0.95 * r, rounded(1.2 * r, 0.5 * r, 0.12 * r)), sec(-0.5 * r, rounded(1.7 * r, 0.8 * r, 0.16 * r)),
-                       sec(0.55 * r, rounded(1.7 * r, 0.84 * r, 0.16 * r)), sec(1.05 * r, rounded(1.3 * r, 0.6 * r, 0.14 * r))], 1)), m["hull"])
-    g.add(rbox(1.25 * r, 0.3 * r, 0.52 * r, 0.05 * r, 1), m["dark"], at=(0, -1.05 * r, 0.02 * r))
-    g.add(rbox(0.5 * r, 0.5 * r, 0.08 * r, 0.03 * r, 1), m["steel"], at=(0.3 * r, 0.3 * r, 0.44 * r))
-    g.add(box(0.16 * r, 0.3 * r, 0.14 * r), m["plain"], at=(-0.55 * r, 0.1 * r, 0.44 * r))
-    g.add(tube(10, 0.03 * r, 0.03 * r, -0.5 * r, 0.5 * r), m["steel"], at=(0.75 * r, 0.1 * r, 0.42 * r))
-    rb = 0.16 * r
-    for dx in ([0.0] if barrels == 1 else [-0.36 * r, 0.36 * r]):
-        g.add(tube(12, rb * 1.45, rb * 1.35, -0.45 * barrel, -1.0 * r), m["dark"], at=(dx, 0, 0.05 * r))
-        g.add(tube(12, rb, rb * 0.9, -barrel, -0.4 * barrel), m["steel"], at=(dx, 0, 0.05 * r))
-        g.add(tube(12, rb * 1.25, rb * 1.25, -barrel - 0.08, -barrel + 0.1), m["dark"], at=(dx, 0, 0.05 * r))
-    s.place(g, at=(x, y, z + 0.24 + 0.4 * r), rot=(0, 0, yaw), mirror=mirror)
-    g.bm.free()
-
-
-def pd_turret(s, m, at, r=0.14, yaw=0.0, mirror=False):
-    """Kleiner Flak-Turm: Sockel, Kuppel, dünner Doppellauf."""
-    x, y, z = at
-    s.add(post(14, r * 1.1, r, 0.0, 0.5 * r), m["steel"], at=(x, y, z), mirror=mirror)
-    s.add(sphere(r, 2), m["hull"], at=(x, y, z + 0.5 * r), mirror=mirror)
-    for dx in (-0.35 * r, 0.35 * r):
-        s.add(tube(8, 0.12 * r, 0.1 * r, -3.2 * r, 0.0), m["plain"], at=(x + dx, y, z + 0.6 * r), rot=(0, 0, yaw), mirror=mirror)
-
-
-def missile_pod(s, m, at, size=(0.5, 0.9, 0.34), cells=(3, 2), rot=(0, 0, 0), mirror=False):
-    """Raketenwerfer: gerundeter Kasten mit Rohröffnungen vorn und Akzentstreifen."""
-    w, l, h = size
-    s.add(rbox(w, l, h, 0.04, 1), m["hull"], at=at, rot=rot, mirror=mirror)
-    cx, cz = cells
-    rr = min(w / cx, h / cz) * 0.36
-    for i in range(cx):
-        for j in range(cz):
-            dx = (i - (cx - 1) / 2) * w / cx
-            dz = (j - (cz - 1) / 2) * h / cz
-            s.add(tube(10, rr * 1.15, rr * 1.15, -0.04, 0.0), m["plain"], at=(at[0] + dx, at[1] - l / 2, at[2] + dz), rot=rot, mirror=mirror)
-            s.add(tube(10, rr * 0.85, 0.0, 0.0, 0.06), m["dark"], at=(at[0] + dx, at[1] - l / 2 - 0.04, at[2] + dz), rot=rot, mirror=mirror)
-    s.add(box(w * 1.02, 0.08, h * 0.4), m["accent"], at=(at[0], at[1] + l * 0.3, at[2]), rot=rot, mirror=mirror)
-
-
-def antenna(s, m, at, height, r=0.025, discs=2, mirror=False):
-    """Mast mit Querscheiben und rotem Positionslicht an der Spitze."""
-    x, y, z = at
-    s.add(post(8, r, r * 0.6, 0.0, height), m["steel"], at=(x, y, z), mirror=mirror)
-    for k in range(discs):
-        zz = height * (0.45 + 0.4 * k / max(discs - 1, 1))
-        s.add(hoop(10, r * 1.2, r * 4, r * 1.2), m["plain"], at=(x, y, z + zz), mirror=mirror)
-    s.add(sphere(r * 1.6, 1), m["navred"] if "navred" in m else m["glow"], at=(x, y, z + height + r), mirror=mirror)
-
-
-def radar(s, m, at, width=0.6, height=0.25, yaw=0.0):
-    """Phased-Array-Platte auf kurzem Mast mit Rückenstruktur."""
-    x, y, z = at
-    s.add(post(10, 0.04, 0.03, 0.0, 0.18), m["steel"], at=(x, y, z))
-    s.add(box(width, 0.05, height), m["dark"], at=(x, y, z + 0.18 + height / 2), rot=(0, 0, yaw))
-    s.add(box(width * 0.92, 0.02, height * 0.84), m["steel"], at=(x, y - 0.035, z + 0.18 + height / 2), rot=(0, 0, yaw))
-    for k in range(3):
-        s.add(box(width * 0.9, 0.025, 0.012), m["plain"], at=(x, y - 0.05, z + 0.18 + height * (0.25 + 0.25 * k)), rot=(0, 0, yaw))
-
-
-def windows(s, m, start, end, count, size=(0.05, 0.03, 0.05), mirror=False):
-    """Fensterreihe: kleine leuchtende Kästen von start bis end."""
-    a, b = Vector(start), Vector(end)
-    for k in range(count):
-        p = a.lerp(b, (k + 0.5) / count)
-        s.add(box(*size), m["window"], at=tuple(p), mirror=mirror)
-
-
-def vents(s, m, at, width, height, slots=4, depth=0.03, rot=(0, 0, 0), mirror=False):
-    """Lüftungsgitter: dunkler Kasten in der XZ-Ebene (zeigt nach -Y) mit hellen Stegen."""
-    s.add(box(width, depth, height), m["plain"], at=at, rot=rot, mirror=mirror)
-    pitch = height / (slots + 1)
-    for k in range(slots):
-        s.add(box(width * 0.9, depth * 1.4, pitch * 0.35), m["steel"],
-              at=(at[0], at[1], at[2] - height / 2 + pitch * (k + 1)), rot=rot, mirror=mirror)
-
-
-def greebles(s, m, region, z, count, size=(0.08, 0.25), seed=1, mats=("dark", "steel", "hull", "plain"), mirror=False):
-    """Zufällige kleine Aufbauten (Kästen, Zylinder) auf einer Fläche: region = (x0, y0, x1, y1), Oberseite bei z."""
-    rng = random.Random(seed)
-    x0, y0, x1, y1 = region
-    for _ in range(count):
-        w, l = rng.uniform(*size), rng.uniform(*size)
-        h = rng.uniform(size[0] * 0.4, size[0] * 1.6)
-        x, y = rng.uniform(x0 + w / 2, x1 - w / 2), rng.uniform(y0 + l / 2, y1 - l / 2)
-        mat = m[rng.choice(mats)]
-        if rng.random() < 0.3:
-            s.add(post(10, w / 2, w / 2 * 0.9, 0.0, h), mat, at=(x, y, z), mirror=mirror)
-        else:
-            s.add(box(w, l, h), mat, at=(x, y, z + h / 2), mirror=mirror)
+def mark_sharp(bm):
+    """Kanten zwischen Flächen, deren Normalen mehr als SHARP_ANGLE auseinanderliegen, werden hart."""
+    for edge in bm.edges:
+        faces = edge.link_faces
+        edge.smooth = not (len(faces) == 2 and faces[0].normal.angle(faces[1].normal, 0.0) > SHARP_ANGLE)
 
 
 def ships_collection():
@@ -664,14 +590,15 @@ def ships_collection():
     return collection
 
 
+# ---------------------------------------------------------------- Prüfen
+
+
 def stats(obj):
-    depsgraph = bpy.context.evaluated_depsgraph_get()
-    mesh = obj.evaluated_get(depsgraph).data
+    mesh = obj.data
     xs = [v.co.x for v in mesh.vertices]
     ys = [v.co.y for v in mesh.vertices]
     zs = [v.co.z for v in mesh.vertices]
     return {
-        "faces": len(mesh.polygons),
         "tris": sum(len(p.vertices) - 2 for p in mesh.polygons),
         "size": [round(max(xs) - min(xs), 2), round(max(ys) - min(ys), 2), round(max(zs) - min(zs), 2)],
         "y": [round(min(ys), 2), round(max(ys), 2)],
@@ -679,13 +606,142 @@ def stats(obj):
     }
 
 
+def loose_parts(obj, tolerance=0.03):
+    """Schwebende Teile: Gruppen geschlossener Teile, die das übrige Schiff weder berühren noch schneiden noch in ihm
+    stecken; Lücken unter `tolerance` (0,03 ≈ 1 px im Zoom) gelten als Berührung. Liefert je Gruppe (Mittelpunkt, Zahl
+    der Dreiecke), leer wenn alles zusammenhängt."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+    bm.normal_update()
+    island = [-1] * len(bm.verts)
+    count = 0
+    for start in bm.verts:
+        if island[start.index] >= 0:
+            continue
+        island[start.index] = count
+        stack = [start]
+        while stack:
+            for edge in stack.pop().link_edges:
+                for v in edge.verts:
+                    if island[v.index] < 0:
+                        island[v.index] = count
+                        stack.append(v)
+        count += 1
+    face_island = [island[f.verts[0].index] for f in bm.faces]
+    parent = list(range(count))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    tree = BVHTree.FromBMesh(bm)
+    up = Vector((0, 0, 1))
+    for v in bm.verts:
+        own = island[v.index]
+        touching = {face_island[hit[2]] for hit in tree.find_nearest_range(v.co, tolerance)} - {own}
+        if not touching:
+            # Steckt der Punkt in einem anderen Teil? Der Strahl nach oben verlässt dieses dann, ohne es betreten zu haben.
+            origin = v.co + up * 1e-4
+            entered = set()
+            for _ in range(64):
+                hit, normal, index, _ = tree.ray_cast(origin, up)
+                if hit is None:
+                    break
+                other = face_island[index]
+                if other != own:
+                    if normal.dot(up) < 0:
+                        entered.add(other)
+                    elif other in entered:
+                        entered.discard(other)
+                    else:
+                        touching = {other}
+                        break
+                origin = hit + up * 1e-4
+        for other in touching:
+            parent[root(other)] = root(own)
+    faces = [0] * count
+    for i in face_island:
+        faces[i] += 1
+    biggest = max(range(count), key=lambda i: faces[i]) if count else 0
+    # Was noch nicht am Rumpf hängt, kann ihn ohne Eckpunkt im Inneren durchstoßen (Leiste durch ein Gehäuse):
+    # Dreiecke des Teils gegen alle anderen schneiden
+    by_island = {}
+    for f in bm.faces:
+        if root(face_island[f.index]) != root(biggest):
+            by_island.setdefault(face_island[f.index], []).append(f)
+    for own, island_faces in by_island.items():
+        verts = {v for f in island_faces for v in f.verts}
+        index = {v: k for k, v in enumerate(verts)}
+        part = BVHTree.FromPolygons([v.co for v in verts], [[index[v] for v in f.verts] for f in island_faces])
+        for _, other in part.overlap(tree):
+            if face_island[other] != own:
+                parent[root(face_island[other])] = root(own)
+    main = root(biggest)
+    groups = {}
+    for v in bm.verts:
+        r = root(island[v.index])
+        if r != main:
+            groups.setdefault(r, []).append(v.co.copy())
+    out = []
+    for r, points in groups.items():
+        tris = sum(len(f.verts) - 2 for f in bm.faces if root(face_island[f.index]) == r)
+        out.append((sum(points, Vector()) / len(points), tris))
+    bm.free()
+    return out
+
+
+def bad_shells(obj):
+    """Teile, deren Hülle für einseitige Materialien nicht taugt: offen (Kante mit mehr oder weniger als zwei Flächen),
+    uneinheitlich orientiert oder innen nach außen (negatives Volumen). Liefert je Teil (Mittelpunkt, Dreiecke, Befund);
+    Teile nur aus Hologramm-Flächen zählen nicht, die sind beidseitig."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    hologram = {i for i, mat in enumerate(obj.data.materials) if spec(mat)["kind"] == "hologram"}
+    seen, out = set(), []
+    for start in bm.faces:
+        if start.index in seen:
+            continue
+        seen.add(start.index)
+        faces, stack = [], [start]
+        while stack:
+            face = stack.pop()
+            faces.append(face)
+            for edge in face.edges:
+                for other in edge.link_faces:
+                    if other.index not in seen:
+                        seen.add(other.index)
+                        stack.append(other)
+        if all(f.material_index in hologram for f in faces):
+            continue
+        edges = {e for f in faces for e in f.edges}
+        if any(len(e.link_faces) != 2 for e in edges):
+            problem = "offen"
+        elif not all(e.is_contiguous for e in edges):
+            problem = "uneinheitlich orientiert"
+        else:
+            o = faces[0].verts[0].co
+            volume = sum((f.verts[0].co - o).dot((f.verts[i].co - o).cross(f.verts[i + 1].co - o)) for f in faces for i in range(1, len(f.verts) - 1))
+            problem = "innen nach außen" if volume < 0 else None
+        if problem:
+            center = sum((f.calc_center_median() for f in faces), Vector()) / len(faces)
+            out.append((obj.matrix_world @ center, sum(len(f.verts) - 2 for f in faces), problem))
+    bm.free()
+    return out
+
+
 # ---------------------------------------------------------------- Export
 
 
-def export_glb(obj, path):
+def export_glb(objects, path):
+    """GLB mit den Material-Extras (`vf`), ohne Kameras, Lichter und Animationen."""
     bpy.ops.object.select_all(action="DESELECT")
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
+    for obj in objects:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
     bpy.ops.export_scene.gltf(
         filepath=path,
         export_format="GLB",
@@ -693,96 +749,68 @@ def export_glb(obj, path):
         use_active_scene=True,
         export_apply=True,
         export_yup=True,
+        export_extras=True,
         export_image_format="AUTO",
-        export_image_quality=85,
         export_animations=False,
         export_lights=False,
         export_cameras=False,
     )
+    _drop_unused_texcoords(path)
 
 
-# ---------------------------------------------------------------- Vorschau
+def _uses_texture(value):
+    if isinstance(value, dict):
+        return any(key.endswith("Texture") or _uses_texture(v) for key, v in value.items())
+    return isinstance(value, list) and any(_uses_texture(v) for v in value)
 
 
-def preview_scene():
-    """Eigene Szene mit Himmelsverlauf (für Reflexionen), drei Sonnen und einer Kamera; lässt die Nutzer-Szene in Ruhe."""
-    scene = bpy.data.scenes.get("Voidfleet")
-    if scene is None:
-        scene = bpy.data.scenes.new("Voidfleet")
-    bpy.context.window.scene = scene
-    scene.render.engine = "BLENDER_EEVEE"
-    scene.render.resolution_x, scene.render.resolution_y = 960, 640
-    scene.render.resolution_percentage = 100
-    scene.render.image_settings.file_format = "PNG"
-    scene.eevee.taa_render_samples = 32
-    world = bpy.data.worlds.get("VF_World") or bpy.data.worlds.new("VF_World")
-    world.use_nodes = True
-    nodes, links = world.node_tree.nodes, world.node_tree.links
-    nodes.clear()
-    out = nodes.new("ShaderNodeOutputWorld")
-    background = nodes.new("ShaderNodeBackground")
-    coords = nodes.new("ShaderNodeTexCoord")
-    separate = nodes.new("ShaderNodeSeparateXYZ")
-    ramp = nodes.new("ShaderNodeValToRGB")
-    ramp.color_ramp.elements[0].position, ramp.color_ramp.elements[0].color = 0.0, (0.01, 0.012, 0.02, 1)
-    ramp.color_ramp.elements[1].position, ramp.color_ramp.elements[1].color = 1.0, (0.35, 0.42, 0.55, 1)
-    mid = ramp.color_ramp.elements.new(0.5)
-    mid.color = (0.05, 0.06, 0.1, 1)
-    links.new(coords.outputs["Generated"], separate.inputs["Vector"])
-    links.new(separate.outputs["Z"], ramp.inputs["Fac"])
-    links.new(ramp.outputs["Color"], background.inputs["Color"])
-    links.new(background.outputs["Background"], out.inputs["Surface"])
-    background.inputs["Strength"].default_value = 1.0
-    scene.world = world
-    ships_collection()
-    for name, rotation, energy, color in (
-        ("VF_Key", (50, 12, -35), 4.0, (1.0, 0.97, 0.92)),
-        ("VF_Fill", (65, -20, 120), 1.5, (0.75, 0.85, 1.0)),
-        ("VF_Rim", (-60, 0, 160), 2.5, (0.6, 0.75, 1.0)),
-    ):
-        light = bpy.data.objects.get(name)
-        if light is None:
-            data = bpy.data.lights.new(name, "SUN")
-            light = bpy.data.objects.new(name, data)
-            scene.collection.objects.link(light)
-        light.data.energy = energy
-        light.data.color = color
-        light.data.angle = math.radians(6)
-        light.rotation_euler = Euler([math.radians(a) for a in rotation])
-    camera = bpy.data.objects.get("VF_Camera")
-    if camera is None:
-        camera = bpy.data.objects.new("VF_Camera", bpy.data.cameras.new("VF_Camera"))
-        scene.collection.objects.link(camera)
-    camera.data.lens = 50
-    scene.camera = camera
-    return scene
-
-
-VIEWS = {
-    "front": Vector((-0.85, -1.0, 0.6)),
-    "rear": Vector((0.8, 1.0, 0.5)),
-    "top": Vector((0.0, -0.08, 1.0)),
-    "side": Vector((1.0, -0.05, 0.12)),
-    "game": Vector((0.3, 0.9, 1.0)),
-    "game_front": Vector((-0.3, -0.9, 1.0)),
-}
-
-
-def render(obj, path, view="front", zoom=1.0):
-    """Rendert nur `obj` aus einer der VIEWS-Richtungen nach `path`."""
-    scene = preview_scene()
-    for other in ships_collection().objects:
-        other.hide_render = other is not obj
-    corners = [obj.matrix_world @ Vector(c) for c in obj.bound_box]
-    center = sum(corners, Vector()) / 8
-    radius = max((c - center).length for c in corners)
-    camera = scene.camera
-    aspect = scene.render.resolution_x / scene.render.resolution_y
-    fov = min(camera.data.angle, 2 * math.atan(math.tan(camera.data.angle / 2) / aspect))
-    distance = radius / math.sin(fov / 2) * 1.05 / zoom
-    direction = VIEWS[view].normalized()
-    camera.location = center + direction * distance
-    camera.rotation_euler = (-direction).to_track_quat("-Z", "Y").to_euler()
-    scene.render.filepath = path
-    bpy.ops.render.render(write_still=True)
-    return path
+def _drop_unused_texcoords(path):
+    """Der Exporter schreibt die UV-Ebene eines Meshes in jedes seiner Primitive, auch in die ohne Textur; bei den Wracks
+    sind das fast alle (nur die Bruchflächen tragen das Glutmuster). Entfernt dort TEXCOORD_n und packt den Binärteil
+    neu; Reihenfolge und Inhalt von allem anderen bleiben."""
+    with open(path, "rb") as f:
+        data = f.read()
+    json_length = struct.unpack_from("<I", data, 12)[0]
+    gltf = json.loads(data[20:20 + json_length])
+    start = 20 + json_length
+    binary = data[start + 8:start + 8 + struct.unpack_from("<I", data, start)[0]]
+    textured = {i for i, mat in enumerate(gltf.get("materials", [])) if _uses_texture(mat)}
+    primitives = [p for mesh in gltf.get("meshes", []) for p in mesh["primitives"]]
+    stale = [(p, name) for p in primitives if p.get("material") not in textured for name in p["attributes"] if name.startswith("TEXCOORD_")]
+    if not stale or "animations" in gltf or "skins" in gltf:
+        return
+    for p, name in stale:
+        del p["attributes"][name]
+    used = sorted({i for p in primitives for i in [*p["attributes"].values(), p.get("indices"), *(v for t in p.get("targets", []) for v in t.values())]
+                   if i is not None})
+    accessor = {old: new for new, old in enumerate(used)}
+    for p in primitives:
+        p["attributes"] = {name: accessor[i] for name, i in p["attributes"].items()}
+        if "indices" in p:
+            p["indices"] = accessor[p["indices"]]
+        if "targets" in p:
+            p["targets"] = [{name: accessor[i] for name, i in t.items()} for t in p["targets"]]
+    accessors = [gltf["accessors"][i] for i in used]
+    images = gltf.get("images", [])
+    views = sorted({a["bufferView"] for a in accessors if "bufferView" in a} | {img["bufferView"] for img in images if "bufferView" in img})
+    view = {old: new for new, old in enumerate(views)}
+    packed, buffer_views = bytearray(), []
+    for old in views:
+        entry = dict(gltf["bufferViews"][old])
+        offset = entry.get("byteOffset", 0)
+        packed += bytes(-len(packed) % 4)
+        entry["byteOffset"] = len(packed)
+        packed += binary[offset:offset + entry["byteLength"]]
+        buffer_views.append(entry)
+    packed += bytes(-len(packed) % 4)
+    for item in accessors + images:
+        if "bufferView" in item:
+            item["bufferView"] = view[item["bufferView"]]
+    gltf["accessors"], gltf["bufferViews"] = accessors, buffer_views
+    gltf["buffers"][0]["byteLength"] = len(packed)
+    text = json.dumps(gltf, separators=(",", ":")).encode()
+    text += b" " * (-len(text) % 4)
+    with open(path, "wb") as f:
+        f.write(struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(text) + 8 + len(packed)))
+        f.write(struct.pack("<I4s", len(text), b"JSON") + text)
+        f.write(struct.pack("<I4s", len(packed), b"BIN\0") + packed)

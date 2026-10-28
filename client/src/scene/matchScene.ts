@@ -1,6 +1,7 @@
 // Die 3D-Szene des Match-Bretts: Kamera-Rig mit Maus-Parallaxe, Zoom per Mausrad und ↑ ↓, Verschieben per Ziehen, zwei
-// Ansichten mit jedem Stand dazwischen (Drehen mit ← → oder der mittleren Maustaste), Lichter, Glow, Hintergrund und
-// die vier Lanes mit je sechs Landeplätzen.
+// Ansichten mit jedem Stand dazwischen (Drehen mit ← → oder der mittleren Maustaste), Toon-Darstellung der Schiffe,
+// Glow, Hintergrund und die vier Lanes mit je sechs Landeplätzen. Lichter gibt es keine: Die Schiffe rechnen ihr Licht
+// selbst (`toon.ts`), alles andere leuchtet aus sich.
 //
 // Koordinaten: Babylon ist linkshändig, die Godot-Szene rechtshändig. Alle
 // Z-Werte aus der Godot-Szene sind hier negiert; x (Lanes) und y bleiben.
@@ -9,12 +10,8 @@ import { TargetCamera } from "@babylonjs/core/Cameras/targetCamera";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import type { PointerInfo } from "@babylonjs/core/Events/pointerEvents";
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
-import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
-import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
-import { PointLight } from "@babylonjs/core/Lights/pointLight";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture";
-import { HDRCubeTexture } from "@babylonjs/core/Materials/Textures/hdrCubeTexture";
 import { Color4 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Vector2, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
@@ -24,7 +21,6 @@ import { Scene } from "@babylonjs/core/scene";
 import "@babylonjs/core/Culling/ray";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic";
 import type { Board, Lane, LaneType, Side } from "../../../shared/board.ts";
-import environmentUrl from "../../assets/env/space.hdr";
 import { setScreenSide } from "../audio/sounds.ts";
 import { color3 } from "../data/palette.ts";
 import { t, upper } from "../i18n/index.ts";
@@ -38,6 +34,7 @@ import type { ShipView } from "./ship.ts";
 import { createPadMaterials, PAD_DEPTH, PAD_WIDTH, SlotPad } from "./slotPad.ts";
 import { TargetLines } from "./targetLines.ts";
 import { TargetReticle } from "./targetReticle.ts";
+import { ToonRenderer } from "./toon.ts";
 import { animationTimeScale, easeInOutSine } from "./tween.ts";
 
 const BOARD_Z = 2.5;
@@ -97,14 +94,7 @@ const ORBIT_DRAG_WIDTH = 0.5;
 const slotZ = (index: number, step: number): number => (2.5 - index) * step;
 /** Neue Schiffe fliegen von hier aus ein, außerhalb des Bildes am Rand ihrer Seite (Welt-|x|). */
 const ARRIVAL_X = 19;
-/** Die Lichter kreisen mit der Kamera um die Brettmitte; ihre Lage gilt von der Seite gesehen. */
 const BOARD_CENTER = new Vector3(0, 0, BOARD_Z);
-const KEY_DIRECTION = new Vector3(0.4, -0.78, 0.48);
-const FILL_OFFSET = new Vector3(0, 5, -5.5);
-const RIM_OFFSET = new Vector3(0, 4, 8.5);
-/** Die HDR-Umgebung (tools/ships/env.py) liefert Reflexionen und indirektes Licht der PBR-Schiffe. */
-const ENVIRONMENT_SIZE = 128;
-const ENVIRONMENT_INTENSITY = 0.8;
 const LABEL_COLORS: Record<Side, string> = {
   player: "rgba(140, 217, 255, 0.7)",
   enemy: "rgba(255, 140, 128, 0.7)",
@@ -162,7 +152,6 @@ export class MatchScene {
   private readonly cameraRig: TransformNode;
   private readonly glow: GlowLayer;
   private readonly background: Background;
-  private readonly lights: { key: DirectionalLight; fill: PointLight; rim: PointLight };
   /** Je Lane ihr Knoten, dessen Welt-x der Ansicht folgt, und ihre Beschriftung. */
   private readonly lanes: { lane: Lane; root: TransformNode; label: LaneLabel }[] = [];
   /** Stand zwischen den Ansichten (0 von der Seite, 1 von hinten oben) und sein Tempo pro Sekunde. */
@@ -217,11 +206,10 @@ export class MatchScene {
     this.scene.pointerDownPredicate = isPadHitbox;
     this.scene.pointerUpPredicate = isPadHitbox;
 
-    this.lights = this.createLights();
-    this.createEnvironment();
+    const toon = new ToonRenderer(this.scene, camera);
     // Nur die Rahmen gültiger Ziele bekommen Bloom, alles andere bleibt scharf.
     this.glow = createGlowLayer(this.scene);
-    this.effects = new BoardEffects(this.scene, this.glow);
+    this.effects = new BoardEffects(this.scene, this.glow, toon.flash);
     this.moveArrow = new MoveArrow(this.scene, this.glow);
     this.maneuverArrow = new MoveArrow(this.scene, this.glow);
     this.swapArrow = new MoveArrow(this.scene, this.glow);
@@ -256,9 +244,9 @@ export class MatchScene {
     return this.panned;
   }
 
-  /** Wartet, bis Hintergrundbild und HDR-Umgebung geladen sind. */
+  /** Wartet, bis das Hintergrundbild geladen ist. */
   texturesReady(): Promise<void> {
-    return new Promise((resolve) => BaseTexture.WhenAllReady([this.background.texture, this.scene.environmentTexture!], resolve));
+    return new Promise((resolve) => BaseTexture.WhenAllReady([this.background.texture], resolve));
   }
 
   pad(side: Side, lane: LaneType, slotIndex: number): SlotPad {
@@ -339,26 +327,6 @@ export class MatchScene {
     return this.lanes.find(({ lane }) => lane.side === side && lane.type === type)!.root.position.x;
   }
 
-  /** Die Lage von Füll- und Kantenlicht und die Richtung des Hauptlichts setzt `applyView`. */
-  private createLights(): { key: DirectionalLight; fill: PointLight; rim: PointLight } {
-    const key = new DirectionalLight("key", KEY_DIRECTION.clone(), this.scene);
-    key.intensity = 1.6;
-    const fill = new PointLight("fill", Vector3.Zero(), this.scene);
-    fill.intensity = 0.9;
-    fill.range = 26;
-    const rim = new PointLight("rim", Vector3.Zero(), this.scene);
-    rim.intensity = 0.7;
-    rim.range = 22;
-    const ambient = new HemisphericLight("ambient", new Vector3(0, 1, 0), this.scene);
-    ambient.intensity = 0.25;
-    return { key, fill, rim };
-  }
-
-  private createEnvironment(): void {
-    this.scene.environmentTexture = new HDRCubeTexture(environmentUrl, this.scene, ENVIRONMENT_SIZE, false, true, false, true);
-    this.scene.environmentIntensity = ENVIRONMENT_INTENSITY;
-  }
-
   private createBoard(board: Board): void {
     const boardRoot = new TransformNode("board", this.scene);
     boardRoot.position.z = BOARD_Z;
@@ -379,8 +347,8 @@ export class MatchScene {
   }
 
   /**
-   * Stellt Lanes, Slots, Beschriftungen, Kamera und Lichter auf den Stand zwischen den Ansichten; Zielbögen und Pfeile
-   * folgen den Pads.
+   * Stellt Lanes, Slots, Beschriftungen und Kamera auf den Stand zwischen den Ansichten; Zielbögen und Pfeile folgen den
+   * Pads. Das Hauptlicht der Schiffe dreht nicht mit (`toon.ts`).
    */
   private applyView(): void {
     const { side, top } = VIEWS;
@@ -408,11 +376,6 @@ export class MatchScene {
     const [bandTop, bandBottom] = [mix(side.frame[0], top.frame[0]), mix(side.frame[1], top.frame[1])];
     this.bandMiddle = (bandTop + bandBottom) / 2;
     this.frameBoard(halfWidth, halfDepth, bandTop, bandBottom);
-
-    const turn = Matrix.RotationY(this.yaw);
-    this.lights.key.direction = Vector3.TransformNormal(KEY_DIRECTION, turn);
-    this.lights.fill.position = BOARD_CENTER.add(Vector3.TransformCoordinates(FILL_OFFSET, turn));
-    this.lights.rim.position = BOARD_CENTER.add(Vector3.TransformCoordinates(RIM_OFFSET, turn));
 
     this.targetLines.refresh();
     for (const arrow of [this.moveArrow, this.maneuverArrow, this.swapArrow]) arrow.refresh();
