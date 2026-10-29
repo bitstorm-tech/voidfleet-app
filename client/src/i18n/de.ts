@@ -638,91 +638,86 @@ export const de: Messages = {
     free_own_strike_slot: "Strike-Slot wählen",
   },
   commands: {
-    emergency_shields: { name: "Notschilde", effect: "Das gewählte verbündete Schiff erhält diese Runde Schild 3." },
-    emp_blast: { name: "EMP-Stoß", effect: "Das gegnerische Schiff mit der höchsten ATK kann diese Runde nicht angreifen." },
+    emergency_shields: { name: "Notschilde", effect: "Verbündetes Schiff erhält diese Runde Schild 3." },
+    emp_blast: { name: "EMP-Stoß", effect: "Gegner mit höchster ATK feuert diese Runde nicht." },
     flanking_maneuver: {
       name: "Flankenmanöver",
-      effect: "Das gewählte verbündete Schiff wechselt die Lane (Strike ↔ Command), in einen freien Slot deiner Wahl.",
+      effect: "Schiff wechselt in freien Slot der anderen Lane.",
     },
     intercept: {
       name: "Abfangen",
-      effect: "Holt ein gewähltes Schiff aus der Command-Lane in einen freien Slot deiner Wahl in der Strike-Lane. Diese Runde +2 ATK.",
+      effect: "Command-Schiff rückt nach vorn, diese Runde +2 ATK.",
     },
-    orbital_strike: { name: "Orbitalschlag", effect: "4 Schaden an das gegnerische Schiff mit den meisten HP." },
-    overcharge: { name: "Überladung", effect: "Das gewählte Schiff erhält diese Runde +3 ATK. Nimmt nach dem Kampf 2 Schaden." },
-    power_surge: { name: "Energiestoß", effect: "Alle verbündeten Schiffe in der Strike-Lane erhalten diese Runde +1 ATK." },
+    orbital_strike: { name: "Orbitalschlag", effect: "4 Schaden an Gegner mit den meisten HP." },
+    overcharge: { name: "Überladung", effect: "Diese Runde +3 ATK, danach 2 Schaden." },
+    power_surge: { name: "Energiestoß", effect: "Eigene Strike-Schiffe erhalten diese Runde +1 ATK." },
     recall: {
       name: "Rückruf",
-      effect: "Ein gewähltes Schiff der Strike-Lane zieht sich in einen freien Slot deiner Wahl in der Command-Lane zurück. Heilt 2 HP.",
+      effect: "Strike-Schiff rückt nach hinten, heilt 2 HP.",
     },
-    scavenge: { name: "Plündern", effect: "Ziehe 1 zusätzliches Schiff und 1 zusätzlichen Befehl." },
-    targeting_jammer: { name: "Zielstörer", effect: "Alle gegnerischen Schiffe in der Strike-Lane erhalten diese Runde -1 ATK (min. 0)." },
+    scavenge: { name: "Plündern", effect: "Ziehe sofort 1 Schiff und 1 Befehl." },
+    targeting_jammer: { name: "Zielstörer", effect: "Gegnerische Strike-Schiffe erhalten diese Runde -1 ATK." },
     volley_fire: { name: "Salvenfeuer", effect: "1 Schaden an ALLE gegnerischen Schiffe." },
     torpedo: {
       name: "Torpedo",
-      effect: "Wähle einen gegnerischen Slot. Nach allen Bewegungen 5 Schaden an das Schiff dort, auch wenn es gedeckt ist. Leerer Slot: verpufft.",
+      effect: "Nach Bewegungen: 5 Schaden im Slot, trotz Deckung.",
     },
-    barrage: { name: "Sperrfeuer", effect: "3 Schaden an jedes gegnerische Schiff, das in dieser Runde seinen Slot gewechselt hat." },
+    barrage: { name: "Sperrfeuer", effect: "3 Schaden an jeden Gegner mit Slotwechsel." },
     evasive_action: {
       name: "Ausweichmanöver",
-      effect: "Das gewählte verbündete Schiff wechselt in einen freien Slot derselben Lane und erhält diese Runde Schild 2.",
+      effect: "Schiff wechselt in derselben Lane, erhält Schild 2.",
     },
     micro_jump: {
       name: "Kurzsprung",
-      effect:
-        "Das gewählte verbündete Schiff verlässt nach allen Bewegungen das Gefecht und kehrt am Rundenende zurück. Bis dahin trifft es nichts, es feuert und deckt aber auch nicht.",
+      effect: "Verlässt bis Rundenende das Gefecht: unangreifbar, aber wirkungslos.",
     },
     rapid_deployment: { name: "Schnellverlegung", effect: "Du darfst diese Runde ein Schiff mehr legen." },
     draw_fire: {
       name: "Ablenkung",
-      effect:
-        "Das gewählte verbündete Schiff zieht diese Runde die Schüsse aller gegnerischen Schiffe mit Feuerbefehl auf sich, solange es steht und für sie ungedeckt ist. Schwarmangriff und Railgun behalten ihr Ziel.",
+      effect: "Lenkt alle Feuerbefehle auf sich, solange ungedeckt.",
     },
     shield_grid: { name: "Schildgitter", effect: "Alle verbündeten Schiffe erhalten diese Runde Schild 1." },
-    ablative_armor: { name: "Ablativpanzerung", effect: "Das gewählte verbündete Schiff erhält dauerhaft Schild 2. Er verfällt nicht am Rundenende." },
+    ablative_armor: { name: "Ablativpanzerung", effect: "Schiff erhält dauerhaft Schild 2." },
     covering_fire: {
       name: "Feuerschutz",
-      effect: "Das gewählte verbündete Schiff und das Schiff direkt vor bzw. hinter ihm erhalten diese Runde je +1 ATK und Schild 1.",
+      effect: "Schiff und Vorder- oder Hintermann: +1 ATK, Schild 1.",
     },
     drone_squadron: {
       name: "Drohnenstaffel",
-      effect:
-        "Zwei Drohnen (1 HP, 1 ATK) starten in freie Strike-Slots, zuerst vor ungedeckte Command-Schiffe. Sie decken sofort; in dieser Runde feuern sie nur mit dem Schwarmangriff.",
+      effect: "Zwei Drohnen starten und decken sofort ungedeckte Command-Schiffe.",
     },
     collision_course: {
       name: "Rammkurs",
-      effect:
-        "Das gewählte verbündete Strike-Schiff (kein Flaggschiff) rammt das ungedeckte Gegnerschiff gegenüber. Beide nehmen so viel Schaden, wie das andere HP hat. Der Rammer feuert diese Runde nicht.",
+      effect: "Rammt Gegner gegenüber: Jeder nimmt die HP des anderen als Schaden. Feuert nicht.",
     },
     countermeasures: {
       name: "Gegenmaßnahmen",
-      effect: "Spielt der Gegner diese Runde einen Angriffs- oder Schwächungsbefehl, verpufft er. Sonst ziehst du einen Befehl.",
+      effect: "Gegnerischer Angriffs-/Schwächungsbefehl verpufft, sonst ziehe einen Befehl.",
     },
-    carte_blanche: { name: "Freie Hand", effect: "Du darfst diese Runde das Grundmanöver und deine Admiralsfähigkeit einsetzen." },
-    radio_silence: { name: "Funkstille", effect: "Die gegnerische Admiralsfähigkeit dieser Runde verpufft; ein Trugbild löst sich auf." },
+    carte_blanche: { name: "Freie Hand", effect: "Diese Runde Grundmanöver und Admiralsfähigkeit." },
+    radio_silence: { name: "Funkstille", effect: "Gegnerische Admiralsfähigkeit verpufft, Trugbild löst sich auf." },
     minefield: {
       name: "Minenfeld",
-      effect: "3 Schaden an jedes gegnerische Schiff, das diese Runde aufs Brett gekommen ist (gelegt, als Drohne gestartet, Trugbild).",
+      effect: "3 Schaden an jeden gegnerischen Neuankömmling.",
     },
     tractor_beam: {
       name: "Traktorstrahl",
-      effect:
-        "Zieht das gewählte gegnerische Schiff (kein Flaggschiff) nach allen Bewegungen in den nächsten freien Slot der anderen Lane. Es gilt als bewegt.",
+      effect: "Zieht Gegner in andere Lane, gilt als bewegt.",
     },
     heat_seeker: {
       name: "Wärmesucher",
-      effect: "Folgt dem gewählten gegnerischen Schiff: 3 Schaden, auch wenn es gedeckt ist; 5, wenn es diese Runde seinen Slot gewechselt hat.",
+      effect: "3 Schaden trotz Deckung, 5 bei Slotwechsel.",
     },
     coup_de_grace: {
       name: "Gnadenstoß",
-      effect: "4 Schaden an das gegnerische Schiff mit den wenigsten HP, auch wenn es gedeckt ist (keine Drohnen und Trugbilder).",
+      effect: "4 Schaden trotz Deckung an Gegner mit wenigsten HP (keine Drohnen/Trugbilder).",
     },
     piercing_shot: {
       name: "Durchschlag",
-      effect: "Wähle eine gegnerische Spalte. Nach allen Bewegungen 3 Schaden an das vorderste Schiff dort und 2 an das Schiff dahinter.",
+      effect: "Nach Bewegungen: 3 Schaden vorn, 2 dahinter.",
     },
     bombardment: { name: "Bombardement", effect: "2 Schaden an jedes Schiff der gegnerischen Command-Lane." },
-    crossfire: { name: "Kreuzfeuer", effect: "3 Schaden an jedes gegnerische Schiff ohne Schiff direkt davor oder dahinter." },
+    crossfire: { name: "Kreuzfeuer", effect: "3 Schaden an jeden Gegner allein in seiner Spalte." },
     scrap_salvage: { name: "Schrottverwertung", target: "Eigener Schrott-Raider", effect: "Der gewählte Schrott-Raider erhält dauerhaft +1 ATK." },
   },
 };
