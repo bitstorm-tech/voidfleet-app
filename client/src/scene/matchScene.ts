@@ -253,6 +253,11 @@ export class MatchScene {
     return this.panned;
   }
 
+  /** Zeigt zum neuen Match einen anderen Hintergrund. */
+  changeBackground(): void {
+    this.background.change();
+  }
+
   /** Wartet, bis das Hintergrundbild geladen ist. */
   texturesReady(): Promise<void> {
     return new Promise((resolve) => BaseTexture.WhenAllReady([this.background.texture], resolve));

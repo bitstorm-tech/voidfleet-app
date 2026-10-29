@@ -1,6 +1,6 @@
 // Weltraum-Hintergrund als Fullscreen-Layer hinter der 3D-Szene, der den
 // Viewport wie "cover" füllt und sich leicht gegen die Kamera verschiebt.
-// Jedes Match zieht einen der zehn Hintergründe zufällig.
+// Jedes Match zeigt zufällig einen der zehn Hintergründe, nie zweimal hintereinander denselben.
 
 import { Layer } from "@babylonjs/core/Layers/layer";
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
@@ -35,23 +35,36 @@ const OVERSCAN = 1.06;
 
 export class Background {
   private readonly layer: Layer;
-  readonly texture: Texture;
+  private index = Math.floor(Math.random() * BACKGROUNDS.length);
+  texture: Texture;
 
   constructor(private readonly scene: Scene) {
     this.layer = new Layer("background", null, scene, true);
-    this.texture = new Texture(BACKGROUNDS[Math.floor(Math.random() * BACKGROUNDS.length)]!, scene, true, false, Texture.BILINEAR_SAMPLINGMODE, () =>
-      this.fit(),
-    );
-    this.texture.wrapU = Texture.CLAMP_ADDRESSMODE;
-    this.texture.wrapV = Texture.CLAMP_ADDRESSMODE;
-    this.layer.texture = this.texture;
+    this.texture = this.load(BACKGROUNDS[this.index]!);
     scene.getEngine().onResizeObservable.add(() => this.fit());
+  }
+
+  /** Wechselt zu einem anderen der Hintergründe; das alte Bild bleibt, bis das neue geladen ist. */
+  change(): void {
+    this.index = (this.index + 1 + Math.floor(Math.random() * (BACKGROUNDS.length - 1))) % BACKGROUNDS.length;
+    this.load(BACKGROUNDS[this.index]!);
   }
 
   /** Verschiebung als Anteil des Viewports, y nach unten positiv. */
   setScrollOffset(x: number, y: number): void {
     // Clip-Space: 2 Einheiten entsprechen der Viewport-Breite bzw. -Höhe.
     this.layer.offset.set(x * 2, -y * 2);
+  }
+
+  private load(url: string): Texture {
+    const texture = new Texture(url, this.scene, true, false, Texture.BILINEAR_SAMPLINGMODE, () => {
+      if (this.layer.texture !== texture) this.layer.texture?.dispose();
+      this.layer.texture = this.texture = texture;
+      this.fit();
+    });
+    texture.wrapU = Texture.CLAMP_ADDRESSMODE;
+    texture.wrapV = Texture.CLAMP_ADDRESSMODE;
+    return texture;
   }
 
   private fit(): void {

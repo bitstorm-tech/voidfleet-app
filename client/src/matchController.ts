@@ -204,6 +204,7 @@ export class MatchController {
     this.connection.close();
     this.isConnected = true;
     this.pendingAdmiral = null;
+    this.view.changeBackground();
     this.connection = this.connect(true);
   }
 
