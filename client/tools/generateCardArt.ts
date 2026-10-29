@@ -282,9 +282,9 @@ const SHIP_LOOKS: Record<ShipId, [shape: string, palette: string]> = {
     `dark slate hull, teal accent panels, glowing turquoise (#33D1C6) seams and lights, a bright cyan-white canopy glow, ${TRIM} along the leading edge`,
   ],
   pendulum: [
-    "a railgun battleship lying diagonally in the frame, its very long railgun pointing to the upper right and ringed with glowing coils " +
-      "and brass collars, a huge toothed brass gear ring with a tilted coil ring around the hull, a small brass gear on the deck, " +
-      "a bridge with an antenna and a round brass pendulum bob beneath the keel",
+    "a railgun battleship seen from the front left and slightly below, its very long railgun pointing to the upper right and ringed with glowing coils " +
+      "and brass collars, a huge toothed brass gear ring with a tilted coil ring around the hull, " +
+      "angular underside armor and a round brass pendulum bob beneath the keel",
     `${HULL}, muted steel-blue accent panels, glowing steel blue (#5B8DFF) coils, rings and lights, brass (#C39A52) gear rings, collars and pendulum, ` +
       `${TRIM} along the hull`,
   ],
