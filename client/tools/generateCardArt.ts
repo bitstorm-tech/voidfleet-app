@@ -1,18 +1,17 @@
 // Erzeugt die Bilder im Stil „Clean Toon“ über fal.ai: die Kartenillustrationen (`assets/images/cards/<id>.jpg`,
-// 736×1024, auch Flaggschiffe, Drohne und Trugbild), die Porträts der Admirale (`assets/images/admirals/<id>.jpg`,
-// 736×1024) und den Spielhintergrund (`assets/images/match_screen_background.png`, 2048×1143).
+// 736×1024, auch Flaggschiffe, Drohne und Trugbild) und die Porträts der Admirale (`assets/images/admirals/<id>.jpg`,
+// 736×1024).
 // Vorhandene Bilder werden übersprungen.
 //
 //   FAL_KEY=… bun tools/generateCardArt.ts                # alle fehlenden Bilder
 //   FAL_KEY=… bun tools/generateCardArt.ts --force        # alle neu
 //   FAL_KEY=… bun tools/generateCardArt.ts recall osei    # nur diese Karten bzw. Admirale (immer neu)
-//   FAL_KEY=… bun tools/generateCardArt.ts ships          # nur eine Gruppe: ships, commands, admirals, background
+//   FAL_KEY=… bun tools/generateCardArt.ts ships          # nur eine Gruppe: ships, commands, admirals
 //
 // Jedes Bild entsteht in zwei Stufen:
 // 1. Motiv. Befehle und Porträts: Flux Pro 1.1 mit `SUBJECTS` bzw. `PORTRAITS` im Stil der ersten Kartengeneration,
 //    gespeichert im gitignorierten Cache `tools/cache/motifs/<id>.jpg` und nur erzeugt, wenn es dort fehlt. Schiffe:
-//    der Hero-Render aus Blender (`tools/ships/renders/<id>/hero.png`); fehlt er, bricht das Skript ab. Der
-//    Hintergrund hat kein Motiv.
+//    der Hero-Render aus Blender (`tools/ships/renders/<id>/hero.png`); fehlt er, bricht das Skript ab.
 // 2. Clean Toon: Nano Banana Pro mit dem Motiv bzw. Hero-Render als erstem und der Stilvorlage
 //    `tools/cardStyleReference.jpg` als zweitem Bild, bei Schiffen mit Formbeschreibung und Palette aus `SHIP_LOOKS`.
 //    Das Ergebnis wird mittig auf das Zielformat beschnitten.
@@ -198,17 +197,6 @@ const portraitPrompt = (admiral: AdmiralId) =>
   "no textures, no painterly brushwork, no gradients on skin or clothes. " +
   `Uniform accents and rim light in ${ADMIRAL_ACCENT[admiral]}. ${SPACE}. ${CLEAN}`;
 
-/**
- * Hintergrund hinter dem Brett: so dunkel und ruhig, dass Schiffe mit dunklen Konturen davor lesbar bleiben. Statt eines
- * Verlaufs ein Toon-Glühen aus wenigen, kaum helleren Stufen; mit hellen Flächen oder sanftem Verlauf wurde er zu hell.
- */
-const BACKGROUND_PROMPT =
-  "Paint a wide, empty space backdrop in exactly the art style and colors of the background of this image, without its battleship: " +
-  "dark navy space (#161c2b) with a few sparse small stars of slightly different sizes. Instead of a smooth gradient, a very subtle cel-shaded glow " +
-  "toward the upper right: two or three large, softly curved areas, each only a little lighter than the one around it (#1a2133, then #1e283c), " +
-  "with clean edges and no outlines; everything else stays dark and calm. Extremely low contrast, no bright areas. " +
-  `No nebula clouds, no purple, no noise, no texture, no ships, no objects, no planets. ${CLEAN}`;
-
 const HULL = "deep desaturated blue-grey hull";
 const TRIM = "a thin white-gold (#F4D68C) command trim";
 
@@ -337,16 +325,16 @@ export function motif(prompt: string, seed: number, size: { width: number; heigh
 }
 
 /** Stufe 2: Clean Toon mit Nano Banana Pro; nach den Bildern (Motiv bzw. Hero-Render) kommt die Stilvorlage. */
-export async function toon(prompt: string, seed: number, aspectRatio: string, images: string[], resolution = "1K"): Promise<Buffer> {
+export async function toon(prompt: string, seed: number, aspectRatio: string, images: string[]): Promise<Buffer> {
   const image_urls = await Promise.all([...images, STYLE_REFERENCE].map(dataUri));
-  return fal("fal-ai/nano-banana-pro/edit", { prompt, seed, aspect_ratio: aspectRatio, resolution, image_urls });
+  return fal("fal-ai/nano-banana-pro/edit", { prompt, seed, aspect_ratio: aspectRatio, resolution: "1K", image_urls });
 }
 
 // ---------------------------------------------------------------- Aufträge
 
 interface Job {
   id: string;
-  group: "ships" | "commands" | "admirals" | "background";
+  group: "ships" | "commands" | "admirals";
   path: string;
   size: { width: number; height: number };
   /** Motiv der ersten Stufe; ohne `makeMotif` muss es schon da sein (Hero-Render). */
@@ -395,13 +383,6 @@ const JOBS: Job[] = [
       paint: () => toon(portraitPrompt(id), seed(id), "3:4", [cached(id)]),
     }),
   ),
-  {
-    id: "background",
-    group: "background",
-    path: `${ASSETS}/images/match_screen_background.png`,
-    size: { width: 2048, height: 1143 },
-    paint: () => toon(BACKGROUND_PROMPT, seed("background"), "16:9", [], "2K"),
-  },
 ];
 
 async function run(job: Job): Promise<void> {
@@ -409,8 +390,10 @@ async function run(job: Job): Promise<void> {
     await Bun.write(job.motif, await job.makeMotif());
     console.log(`  Motiv ${job.id}`);
   }
-  const image = sharp(await job.paint()).resize(job.size.width, job.size.height, { fit: "cover" });
-  await (job.path.endsWith(".png") ? image.png() : image.jpeg({ quality: 90 })).toFile(job.path);
+  await sharp(await job.paint())
+    .resize(job.size.width, job.size.height, { fit: "cover" })
+    .jpeg({ quality: 90 })
+    .toFile(job.path);
   console.log(`✓ ${job.id}`);
 }
 

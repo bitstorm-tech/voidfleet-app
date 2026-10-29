@@ -19,8 +19,8 @@ Ansichten (Kamera und Ausschnitt wie beim Stilvergleich, damit Neubauten verglei
     hero        736x1024  Kartenvorlage: Dreiviertelansicht von schräg unten auf dunklem Grund, Schiff füllt die Breite;
                           Schiffe mit dem Kennzeichen oben von schräg oben mit eigenem Licht (look.HERO_SHIPS)
     wreck       960x600   Explosionszeichnung des Wracks (wreck.py) auf dunklem Grund, Bruchflächen glühend
-Licht, Stufen, Linien und Glühen je Ansicht stehen in look.py, die Farben in palette.py. Der Spielhintergrund
-(assets/images/match_screen_background.png) wird vor jedem Render neu von der Platte gelesen.
+Licht, Stufen, Linien und Glühen je Ansicht stehen in look.py, die Farben in palette.py. Als Spielhintergrund dient
+assets/images/backgrounds/01-nebelschlucht.png; er wird vor jedem Render neu von der Platte gelesen.
 
 Umgebung: VF_SAMPLES (Samples je Pixel, Standard 24; für Kartenvorlagen gern 64), VF_THREADS (Render-Threads,
 Standard 2, weil mehrere Agents gleichzeitig rendern). Ein `board` rendert damit in etwa 3 s, samt Blender-Start und
@@ -48,7 +48,7 @@ import palette  # noqa: E402
 import vf  # noqa: E402
 import wreck  # noqa: E402
 
-BACKGROUND = os.path.normpath(os.path.join(ROOT, "..", "..", "assets", "images", "match_screen_background.png"))
+BACKGROUND = os.path.normpath(os.path.join(ROOT, "..", "..", "assets", "images", "backgrounds", "01-nebelschlucht.png"))
 OUT_DIR = os.path.join(ROOT, "renders")
 
 # Kamerarichtungen (vom Schiff zur Kamera, Schiffskoordinaten). Brett: Breitseite der eigenen Seite (Backbord, -X)
