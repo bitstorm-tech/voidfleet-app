@@ -1,6 +1,6 @@
 // Kurzlebige Effekte auf dem Brett: Laserbolzen (auch verpuffende), die Zielmarke eines umgelenkten Schusses, der
 // Strahl der Railgun, die Rakete des Wärmesuchers mit Leuchtspur, der Traktorstrahl, Impulse, Schildblasen, Einschläge,
-// Sekundärexplosionen, Detonationen und brennende Trümmer. Alle räumen sich nach dem Abspielen selbst weg.
+// Sekundärexplosionen, Detonationen, brennende Trümmer und der Austritt eines Schiffs aus dem Hyperraum. Alle räumen sich nach dem Abspielen selbst weg.
 
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
@@ -64,6 +64,8 @@ interface Burst {
   /** Halber Öffnungswinkel des Kegels; seine Achse zeigt zum Angreifer, mit `through` durch das Schiff hindurch. */
   cone: number;
   through?: boolean;
+  /** Halbe Kantenlänge des Kastens, aus dem die Partikel kommen (Welteinheiten); ohne Angabe fast ein Punkt. */
+  spread?: number;
   /** Welteinheiten pro Sekunde und Lebensdauer in Sekunden, jeweils min und max. */
   speed: [number, number];
   lifeTime: [number, number];
@@ -269,6 +271,47 @@ const BLAST: Record<BlastStyle, readonly Burst[]> = {
 };
 
 /** Ein Lichtblitz: die laufenden und das eine Blitzlicht der Szene, das immer den gerade stärksten zeigt. */
+/**
+ * Austritt aus dem Hyperraum: Blitz, ein Portalring quer zur Flugrichtung, der aufreißt und sich wieder schließt,
+ * Lichtstreifen, die in Flugrichtung vorbeischießen, und ein paar Funken, die stehen bleiben und verglimmen.
+ * Größen in Vielfachen des Schiffsradius, Dauern in ms.
+ */
+const WARP_COLOR = new Color3(0.45, 0.75, 1);
+const WARP_FLASH = 2.6;
+const WARP_FLASH_DURATION = 260;
+const WARP_LIGHT = 5;
+const WARP_PORTAL = 2.6;
+const WARP_PORTAL_DURATION = 750;
+const WARP_STREAKS: Burst = {
+  count: 36,
+  cone: Tools.ToRadians(6),
+  spread: 0.5,
+  speed: [14, 24],
+  lifeTime: [0.12, 0.3],
+  size: [0.05, 0.1],
+  stretch: 9,
+  gravity: 0,
+  colors: [
+    [0, new Color4(1, 1, 1, 1)],
+    [0.4, new Color4(0.55, 0.8, 1, 0.9)],
+    [1, new Color4(0.3, 0.5, 1, 0)],
+  ],
+};
+const WARP_SPARKS: Burst = {
+  count: 24,
+  cone: SPHERE,
+  spread: 0.4,
+  speed: [0.4, 1.4],
+  lifeTime: [0.4, 0.8],
+  size: [0.06, 0.12],
+  stretch: 1.5,
+  gravity: 0,
+  colors: [
+    [0, new Color4(0.85, 0.95, 1, 1)],
+    [1, new Color4(0.4, 0.6, 1, 0)],
+  ],
+};
+
 export interface Flash {
   position: Vector3;
   intensity: number;
@@ -460,6 +503,30 @@ export class BoardEffects {
   }
 
   /**
+   * Ein Schiff mit dem Radius `size` fällt bei `position` aus dem Hyperraum und fliegt in Richtung `forward` weiter;
+   * der Portalring steht quer dazu, und das Schiff zieht ihn mit Rumpf und Heck durch.
+   */
+  async warp(position: Vector3, forward: Vector3, size: number): Promise<void> {
+    const portal = this.createSprite("warp-portal", this.ring, WARP_COLOR, position, false);
+    portal.billboardMode = Mesh.BILLBOARDMODE_NONE;
+    // Hinter dem Rumpf verdeckt, wie ein Ring im Raum statt eines Overlays.
+    portal.renderingGroupId = 0;
+    portal.lookAt(position.add(forward));
+    const material = portal.material as StandardMaterial;
+    this.burst("warp-streaks", position.subtract(forward.scale(size)), forward, WARP_STREAKS, WARP_COLOR, size);
+    this.burst("warp-sparks", position, forward, WARP_SPARKS, WARP_COLOR, size);
+    void this.flash(position, Color3.Lerp(WARP_COLOR, Color3.White(), 0.6), WARP_FLASH * size, WARP_FLASH_DURATION);
+    void this.flashLight(position, WARP_LIGHT * size, WARP_FLASH_DURATION * 1.5);
+    await tween(this.scene, WARP_PORTAL_DURATION, (progress) => {
+      // Reißt schnell auf und zieht sich langsamer wieder zusammen.
+      const open = progress < 0.25 ? easeOutCubic(progress / 0.25) : 1 - easeInCubic((progress - 0.25) / 0.75);
+      portal.scaling.setAll(Math.max(WARP_PORTAL * size * open, 0.01));
+      material.alpha = Math.min(1, open * 1.5);
+    });
+    this.disposeMesh(portal);
+  }
+
+  /**
    * Die Detonation eines Schiffs: Kern und Blitz, eine flache Druckwelle über das Brett und eine aufrechte,
    * dazu die Schwärme des Stils und das Blitzlicht. Endet, sobald der Kern verglüht ist; der Rest läuft weiter.
    */
@@ -596,8 +663,9 @@ export class BoardEffects {
     system.billboardMode = ParticleSystem.BILLBOARDMODE_STRETCHED;
     // Partikel altern in Sekunden und sind wie die Tweens gestreckt: Babylon zählt `updateSpeed` pro 60-Hz-Frame hoch.
     system.updateSpeed = 1 / 60 / animationTimeScale();
-    system.minEmitBox = new Vector3(-0.06, -0.06, -0.06);
-    system.maxEmitBox = new Vector3(0.06, 0.06, 0.06);
+    const spread = burst.spread ?? 0.06;
+    system.minEmitBox = new Vector3(-spread, -spread, -spread);
+    system.maxEmitBox = new Vector3(spread, spread, spread);
     [system.minLifeTime, system.maxLifeTime] = burst.lifeTime;
     system.minScaleY = system.maxScaleY = burst.stretch;
     system.gravity = new Vector3(0, burst.gravity * scale, 0);

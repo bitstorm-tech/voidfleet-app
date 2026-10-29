@@ -34,7 +34,7 @@ import { flagshipAdmiral } from "../data/admirals.ts";
 import { color3, PALETTE, toCss } from "../data/palette.ts";
 import { allShipModels, shipModel, wreckModel } from "../data/shipModels.ts";
 import type { SoundId } from "../data/sounds.ts";
-import { randomInCone } from "./effects.ts";
+import { type BoardEffects, randomInCone } from "./effects.ts";
 import { occludeGlow } from "./glow.ts";
 import { Maneuver } from "./maneuver.ts";
 import { FloorMarker, type Footprint, type MarkerKind, type MarkerSpec } from "./markers.ts";
@@ -54,12 +54,19 @@ const FLAGSHIP_SCALE = 1.1;
 /** Die Balken schweben mindestens so hoch, bei hohen Aufbauten knapp über dem Modell. */
 const BAR_MIN_HEIGHT = 1.15;
 const BAR_MARGIN = 0.3;
-/** Deploy: Das Schiff fliegt von hinten waagerecht ein und bremst vor dem Pad ab. */
-const ARRIVAL_DURATION = 1300;
-/** Überflug: so hoch über einem Schiff im Weg, Sinkflug ab knapp hinter dessen Mitte, Nase dabei leicht gesenkt. */
-const OVERFLIGHT_HEIGHT = 1.7;
-const DESCENT_START = 0.9;
-const DESCENT_PITCH = Tools.ToRadians(12);
+/**
+ * Deploy: Das Schiff fällt direkt im Slot aus dem Hyperraum, so weit hinter dem Pad (Welteinheiten), und gleitet bremsend
+ * nach vorn. Anfangs ist es um diesen Faktor in die Länge gezogen (die Nase bleibt, das Heck zieht sich nach) und dafür
+ * schmaler; auf diesem Anteil der Flugzeit schnappt es auf seine Form zurück. Die Hülle glüht dabei hell und verblasst.
+ */
+const WARP_DURATION = 1200;
+const WARP_GLIDE = 1.4;
+const WARP_STRETCH = 3.5;
+const WARP_SQUEEZE = 0.65;
+const WARP_SNAP = 0.3;
+const WARP_GLOW_COLOR = new Color3(0.75, 0.9, 1);
+const WARP_GLOW_ALPHA = 0.9;
+const WARP_GLOW_FADE = 0.55;
 /** Triebwerk je Schiffsklasse während eines Flugs; nach der Landung verklingt es in so vielen Sekunden. */
 const ENGINE_SOUNDS: Record<ShipClass, SoundId> = {
   fighter: "engine_light",
@@ -308,22 +315,35 @@ export class ShipView {
   }
 
   /**
-   * Deploy: fliegt aus `distance` hinter dem Pad ein und bremst ab; die Balken erscheinen erst danach.
-   * Steht `obstacle` weiter hinten ein Schiff im Weg, kommt es in Überflughöhe und sinkt erst danach.
+   * Deploy: Das Schiff kommt hinter dem Pad aus dem Hyperraum, lang gezogen und hell glühend, schnappt auf seine Form
+   * zurück und gleitet in den Slot; Lichtblitz, Portal und Lichtstreifen kommen aus `effects`. Die Balken erscheinen erst danach.
    */
-  async arrive(distance: number, obstacle: number | null): Promise<void> {
+  async arrive(effects: BoardEffects): Promise<void> {
     this.statusBars.setEnabled(false);
     this.floor.setEnabled(false);
-    const descentStart = obstacle === null ? 0 : -obstacle + DESCENT_START;
-    await this.fly(ARRIVAL_DURATION, (progress) => {
-      const z = -distance * (1 - easeOutCubic(progress));
-      this.root.position.z = z;
-      if (obstacle === null) return;
-      // 1 bis zum Beginn des Sinkflugs, 0 auf dem Pad.
-      const altitude = Math.min(z / descentStart, 1);
-      this.root.position.y = OVERFLIGHT_HEIGHT * easeInOutSine(altitude);
-      this.modelRoot.rotation.x = DESCENT_PITCH * Math.sin(Math.PI * altitude);
+    this.root.position.z = -WARP_GLIDE;
+    void effects.warp(this.center, this.root.getDirection(Vector3.Forward()).normalize(), this.radius);
+    const base = this.modelRoot.scaling.x;
+    // Halbe Länge im Raum des Schiffs: um so viel je Streckung rückt das Modell zurück, damit die Nase vorn bleibt.
+    const halfLength = this.footprint.length / BOARD_SCALE / 2;
+    const meshes = this.hullMeshes();
+    for (const mesh of meshes) {
+      mesh.renderOverlay = true;
+      mesh.overlayColor = WARP_GLOW_COLOR;
+    }
+    await this.fly(WARP_DURATION, (progress) => {
+      this.root.position.z = -WARP_GLIDE * (1 - easeOutCubic(progress));
+      const snap = easeOutCubic(Math.min(progress / WARP_SNAP, 1));
+      const length = WARP_STRETCH + (1 - WARP_STRETCH) * snap;
+      const width = WARP_SQUEEZE + (1 - WARP_SQUEEZE) * snap;
+      this.modelRoot.scaling.set(base * width, base * width, base * length);
+      this.modelRoot.position.z = -halfLength * (length - 1);
+      const glow = WARP_GLOW_ALPHA * (1 - Math.min(progress / WARP_GLOW_FADE, 1)) ** 2;
+      for (const mesh of meshes) mesh.overlayAlpha = glow;
     });
+    for (const mesh of meshes) mesh.renderOverlay = false;
+    this.modelRoot.scaling.setAll(base);
+    this.modelRoot.position.z = 0;
     this.statusBars.setEnabled(true);
     this.floor.setEnabled(true);
   }
@@ -430,7 +450,7 @@ export class ShipView {
 
   /** Treffer: die Hülle blitzt hell auf; der Einschlag selbst kommt aus `BoardEffects.hit`. */
   async flash(strength = HIT_FLASH_ALPHA): Promise<void> {
-    const meshes = this.modelRoot.getChildMeshes().filter((mesh) => mesh instanceof Mesh);
+    const meshes = this.hullMeshes();
     for (const mesh of meshes) {
       mesh.renderOverlay = true;
       mesh.overlayColor = HIT_FLASH_COLOR;
@@ -439,6 +459,10 @@ export class ShipView {
       for (const mesh of meshes) mesh.overlayAlpha = strength * (1 - progress) ** 2;
     });
     for (const mesh of meshes) mesh.renderOverlay = false;
+  }
+
+  private hullMeshes(): Mesh[] {
+    return this.modelRoot.getChildMeshes().filter((mesh) => mesh instanceof Mesh);
   }
 
   // --- Zerstörung ---

@@ -1,5 +1,5 @@
-// Vorschau des Deploy-Einflugs ohne Server: Schiffe fliegen in Dauerschleife von
-// beiden Seiten ein, in die Strike-Lane teils über ein Schiff in der Command-Lane.
+// Vorschau des Deploys ohne Server: Schiffe fallen in Dauerschleife auf beiden Seiten
+// aus dem Hyperraum in ihre Slots, in die Strike-Lane auch vor ein Schiff in der Command-Lane.
 // `?slow=4` bremst die ganze Szene um den Faktor.
 
 import { Board, type LaneType, type Side } from "../../shared/board.ts";
@@ -11,7 +11,7 @@ import { wait } from "../src/scene/tween.ts";
 
 declare global {
   interface Window {
-    /** Abgeschlossene Einflüge, zum Synchronisieren von Screenshot-Serien. */
+    /** Abgeschlossene Ankünfte, zum Synchronisieren von Screenshot-Serien. */
     arrivalCount: number;
   }
 }

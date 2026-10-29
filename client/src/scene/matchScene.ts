@@ -94,8 +94,6 @@ const ORBIT_RAMP = 150;
 const ORBIT_DRAG_WIDTH = 0.5;
 /** Lane-z eines Slots: Slot 0 am Ende mit dem größten z, die sechs Slots symmetrisch um die Lane-Mitte. */
 const slotZ = (index: number, step: number): number => (2.5 - index) * step;
-/** Neue Schiffe fliegen von hier aus ein, außerhalb des Bildes am Rand ihrer Seite (Welt-|x|). */
-const ARRIVAL_X = 19;
 const BOARD_CENTER = new Vector3(0, 0, BOARD_Z);
 const LABEL_COLORS: Record<Side, string> = {
   player: "rgba(140, 217, 255, 0.7)",
@@ -267,15 +265,10 @@ export class MatchScene {
     return this.padsByLane.get(this.board.lane(side, lane))![slotIndex]!;
   }
 
-  /**
-   * Stellt ein neues Schiff auf den Slot und lässt es vom Bildrand seiner Seite einfliegen. Die
-   * Command-Lane liegt näher am Rand: Steht dort im selben Slot ein Schiff, überfliegt es ein Schiff für die Strike-Lane.
-   */
+  /** Stellt ein neues Schiff auf den Slot, wo es aus dem Hyperraum fällt. */
   async deploy(ship: ShipView, side: Side, lane: LaneType, slotIndex: number): Promise<void> {
     this.pad(side, lane, slotIndex).attachShip(ship);
-    const x = Math.abs(this.laneX(side, lane));
-    const blocked = lane === "strike" && this.pad(side, "command", slotIndex).ship !== null;
-    await ship.arrive(ARRIVAL_X - x, blocked ? Math.abs(this.laneX(side, "command")) - x : null);
+    await ship.arrive(this.effects);
   }
 
   /** Mitte einer Brettseite zwischen ihren Lanes, für Effekte und Sounds, die zu keinem Schiff gehören. */

@@ -1,11 +1,11 @@
-// Generalprobe hinter dem Ladebildschirm: Babylon übersetzt einen Shader erst, wenn etwas zum ersten
-// Mal gezeichnet wird, und das Bild stockt dabei. Deshalb wird beim Laden alles einmal gezeigt, was im
-// Spiel vorkommt — Schiffe samt Flaggschiffen (Ring, Krone) und Trugbild mit Treffer-Blitz und Zielvorschau (dabei
-// auch Toon-Material, Kantenpuffer und Glühen der Schiffslichter), Geister, Wracks mit glühenden Bruchflächen (die
-// zweite Variante des Toon-Materials, im Glühen mit Glutmuster), alle Marken am Boden (auch der Leuchtring der
-// Ablenkung, Bereitschaft und Visier der Feuerbefehle), die Bögen der Zielvorschau in jeder Darstellung (gewählt,
-// verpuffend) und alle Effekte samt verpuffendem Bolzen, Zielmarke, Railgun-Strahl, Schildblase, Rakete des
-// Wärmesuchers mit Leuchtspur und Traktorstrahl — und danach wieder entsorgt. Die Shader bleiben übersetzt, weil
+// Generalprobe hinter dem Ladebildschirm: Babylon übersetzt einen Shader erst, wenn etwas zum ersten Mal gezeichnet
+// wird, und das Bild stockt dabei. Deshalb wird beim Laden alles einmal gezeigt, was im Spiel vorkommt — Schiffe samt
+// Flaggschiffen (Ring, Krone) und Trugbild mit Treffer-Blitz und Zielvorschau (dabei auch Toon-Material, Kantenpuffer
+// und Glühen der Schiffslichter), Geister, Wracks mit glühenden Bruchflächen (die zweite Variante des Toon-Materials,
+// im Glühen mit Glutmuster), alle Marken am Boden (auch der Leuchtring der Ablenkung, Bereitschaft und Visier der
+// Feuerbefehle), die Bögen der Zielvorschau in jeder Darstellung (gewählt, verpuffend) und alle Effekte samt
+// verpuffendem Bolzen, Zielmarke, Railgun-Strahl, Schildblase, Rakete des Wärmesuchers mit Leuchtspur, Traktorstrahl
+// und Austritt aus dem Hyperraum — und danach wieder entsorgt. Die Shader bleiben übersetzt, weil
 // `Effect.PersistentMode` sie nie freigibt (`matchScene.ts`). Die Effekte bleiben dabei stumm, auch wenn ein Klick auf
 // den Ladebildschirm den Ton schon freigegeben hat.
 
@@ -72,6 +72,7 @@ export async function rehearse(view: MatchScene): Promise<void> {
     effects.detonate(STAGE, color, 1, "energy"),
     effects.beam(STAGE.add(new Vector3(-3, 0, 0)), STAGE, color),
     effects.bubble(STAGE, color, 2),
+    effects.warp(STAGE, Vector3.Forward(), 1),
     effects.missile(STAGE.add(new Vector3(-3, 0, 0)), STAGE, color),
     (async () => {
       const release = effects.tether(STAGE.add(new Vector3(-3, 3, 0)), () => STAGE, color);
