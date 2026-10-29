@@ -57,7 +57,7 @@ export class Background {
   }
 
   private load(url: string): Texture {
-    const texture = new Texture(url, this.scene, true, false, Texture.BILINEAR_SAMPLINGMODE, () => {
+    const texture = new Texture(url, this.scene, true, true, Texture.BILINEAR_SAMPLINGMODE, () => {
       if (this.layer.texture !== texture) this.layer.texture?.dispose();
       this.layer.texture = this.texture = texture;
       this.fit();
