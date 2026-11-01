@@ -14,6 +14,12 @@ app.commandLine.appendSwitch("ignore-gpu-blocklist");
 
 let server: ChildProcess | null = null;
 
+/** Gepackt tragen Windows- und macOS-App das Icon selbst, Linux braucht es am Fenster und das Dock
+ *  von macOS beim Entwickeln (sonst zeigt es das Icon des Electron-Binarys). */
+function iconPath(): string {
+  return join(app.getAppPath(), "dist", "icon.png");
+}
+
 /** Lässt das Betriebssystem einen freien Port wählen. */
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -51,8 +57,7 @@ function createWindow(url: string): void {
     minHeight: 600,
     title: "Voidfleet",
     backgroundColor: "#04050a",
-    // Windows und macOS nehmen das Icon der ausführbaren Datei, Linux braucht es am Fenster.
-    icon: join(app.getAppPath(), "dist", "icon.png"),
+    icon: iconPath(),
     show: false,
     autoHideMenuBar: true,
     webPreferences: { backgroundThrottling: false },
@@ -86,6 +91,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("window-all-closed", () => app.quit());
   app.on("will-quit", () => server?.kill());
   app.whenReady().then(async () => {
+    app.dock?.setIcon(iconPath());
     try {
       createWindow(await startServer());
     } catch (error) {
