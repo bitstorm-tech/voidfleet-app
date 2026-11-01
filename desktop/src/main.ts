@@ -95,12 +95,13 @@ function createWindow(url: string): void {
     backgroundColor: "#04050a",
     icon: iconPath(),
     show: false,
-    fullscreen: saved === "fullscreen",
     autoHideMenuBar: true,
     webPreferences: { backgroundThrottling: false, preload: join(app.getAppPath(), "dist", "preload.js") },
   });
+  // Kein `fullscreen` in den Optionen: Ein ausdrückliches `false` sperrt unter macOS das Vollbild ganz.
   window.once("ready-to-show", () => {
-    if (saved === "maximized") window.maximize();
+    if (saved === "fullscreen") window.setFullScreen(true);
+    else if (saved === "maximized") window.maximize();
     window.show();
   });
   ipcMain.on("window:mode", (event, mode: WindowMode) => {
@@ -117,10 +118,11 @@ function createWindow(url: string): void {
     void shell.openExternal(url);
     return { action: "deny" };
   });
-  // F11 schaltet Vollbild, F12 die Entwicklerwerkzeuge.
+  // F11 und unter macOS ⌃⌘F (ohne Menü gibt es den Kurzbefehl dort sonst nicht) schalten Vollbild, F12 die
+  // Entwicklerwerkzeuge.
   window.webContents.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
-    if (input.key === "F11") window.setFullScreen(!window.isFullScreen());
+    if (input.key === "F11" || (input.code === "KeyF" && input.meta && input.control)) window.setFullScreen(!window.isFullScreen());
     else if (input.key === "F12") window.webContents.toggleDevTools();
     else return;
     event.preventDefault();
