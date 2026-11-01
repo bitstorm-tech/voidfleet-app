@@ -159,6 +159,7 @@ class Player implements Commander {
       commandHandSize: this.commandHand.length,
       shipDeckSize: this.shipDeck.size,
       commandDeckSize: this.commandDeck.size,
+      bot: this.isBot,
       playedCommands: this.playedCommands,
     };
   }
@@ -211,6 +212,14 @@ export class Match {
     const seat = this.seatPlayer(null);
     if (seat !== null) this.players[seat]!.admiral = ADMIRAL_IDS[Math.floor(this.random() * ADMIRAL_IDS.length)]!;
     return seat;
+  }
+
+  /** Nimmt den Computergegner wieder vom Platz, damit ein Mitspieler beitreten kann; nur, solange das Match nicht begonnen hat. */
+  removeBot(): ErrorCode | null {
+    if (this.started) return "match_started";
+    if (!this.players[1]?.isBot) return "opponent_missing";
+    this.players.pop();
+    return null;
   }
 
   private seatPlayer(token: string | null): Seat | null {

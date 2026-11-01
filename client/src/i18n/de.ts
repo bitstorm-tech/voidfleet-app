@@ -15,6 +15,7 @@ export const de: Messages = {
     waiting: "Warte auf Gegner",
     skip: "Animation überspringen",
     playComputer: "Gegen Computer spielen",
+    invitePlayer: "Mitspieler einladen",
     showLog: "Log einblenden",
     hideLog: "Log ausblenden",
     overdrive: (bonus) => `Overdrive +${bonus}`,
@@ -503,6 +504,7 @@ export const de: Messages = {
   errors: {
     match_full: "Dieses Match ist bereits voll.",
     match_over: "Das Match ist vorbei.",
+    match_started: "Das Match hat schon begonnen.",
     opponent_missing: "Der Gegner ist noch nicht beigetreten.",
     admiral_required: "Wähle zuerst deinen Admiral.",
     admiral_already_chosen: "Du hast deinen Admiral schon gewählt.",

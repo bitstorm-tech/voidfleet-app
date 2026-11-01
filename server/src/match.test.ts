@@ -92,6 +92,25 @@ test("Vor Runde 1 wählt jeder einmal seinen Admiral, auch solange der Gegner fe
   expect(match.submit(0, opening)).toBeNull();
 });
 
+test("Der Computergegner macht seinen Platz für einen Mitspieler frei, solange das Match nicht begonnen hat", () => {
+  const match = new Match("test");
+  expect(match.removeBot()).toBe("opponent_missing");
+  match.join("a");
+  match.addBot();
+  expect(match.view(0).opponent?.bot).toBe(true);
+  expect(match.removeBot()).toBeNull();
+  expect(match.view(0).opponent).toBeNull();
+  expect(match.join("b")).toBe(1);
+  expect(match.view(0).opponent?.bot).toBe(false);
+  expect(match.removeBot()).toBe("opponent_missing");
+
+  const started = new Match("started");
+  started.join("a");
+  started.addBot();
+  started.chooseAdmiral(0, "osei");
+  expect(started.removeBot()).toBe("match_started");
+});
+
 test("Der Computergegner nimmt den freien Platz, wählt sofort seinen Admiral und zieht, sobald der Spieler abgibt", () => {
   const match = new Match("test", () => 0.99);
   match.join("a");
@@ -639,6 +658,7 @@ test("Der Gegner sieht Admiral, Handgrößen, Decks und die aufgedeckten Befehle
     commandHandSize: 2,
     shipDeckSize: 11,
     commandDeckSize: 30,
+    bot: false,
     playedCommands: ["torpedo"],
   });
 });

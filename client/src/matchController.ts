@@ -161,10 +161,15 @@ export class MatchController {
       () => this.onPowerClick(),
       () => this.onMarkClick(),
     );
-    this.hand = new HandView(ui, [this.hud.submitButton, this.hud.skipButton, this.hud.botButton, this.hud.checklist], this.powerCard.element, {
-      onShipCardClick: (pick) => this.onShipCardClick(pick),
-      onCommandCardClick: (index) => this.onCommandCardClick(index),
-    });
+    this.hand = new HandView(
+      ui,
+      [this.hud.submitButton, this.hud.skipButton, this.hud.botButton, this.hud.inviteButton, this.hud.checklist],
+      this.powerCard.element,
+      {
+        onShipCardClick: (pick) => this.onShipCardClick(pick),
+        onCommandCardClick: (index) => this.onCommandCardClick(index),
+      },
+    );
     const loading = new LoadingScreen(ui);
     this.inbox = preloadAssets(this.view, (fraction) => loading.setProgress(fraction)).then(
       () => loading.hide(),
@@ -177,6 +182,7 @@ export class MatchController {
     this.hud.submitButton.addEventListener("click", () => this.submit());
     this.hud.skipButton.addEventListener("click", () => this.playback.skip());
     this.hud.botButton.addEventListener("click", () => this.connection.send({ type: "addBot" }));
+    this.hud.inviteButton.addEventListener("click", () => this.connection.send({ type: "removeBot" }));
     this.view.scene.onPointerObservable.add((info) => this.onScenePointer(info));
     window.addEventListener("keydown", (event) => this.onKeyDown(event));
     window.addEventListener("contextmenu", (event) => this.onContextMenu(event));
@@ -1009,9 +1015,12 @@ export class MatchController {
     this.hud.setRound(match.round);
     this.hud.setOverdrive(overdriveBonus(match.round));
     this.hud.setStatus(this.buildStatusText());
-    // Solange kein Gegner da ist, bietet der Knopf den Computergegner an.
+    // Neue Matches gehen gegen den Computergegner; bis zur Admiralswahl macht der Knopf seinen Platz für einen Mitspieler
+    // frei, und solange keiner da ist, holt er ihn zurück.
+    const choosing = this.isConnected && match.round > 0 && match.admiral === null && match.result === null;
     const waitingForOpponent = this.isConnected && match.round > 0 && match.opponent === null;
-    this.hud.showAction(this.isResolving ? "skip" : waitingForOpponent ? "bot" : "submit");
+    const action = waitingForOpponent ? "bot" : choosing && match.opponent?.bot ? "invite" : "submit";
+    this.hud.showAction(this.isResolving ? "skip" : action);
     this.hud.submitButton.disabled = !this.canPlan || match.opponent === null || match.flagshipMissing;
     this.hud.submitButton.textContent = match.submitted ? t.hud.waiting : t.hud.endTurn;
     const planning = !this.isResolving && this.canPlan && match.opponent !== null;

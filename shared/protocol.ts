@@ -79,6 +79,8 @@ export interface OpponentView {
   commandHandSize: number;
   shipDeckSize: number;
   commandDeckSize: number;
+  /** Der Computergegner sitzt auf diesem Platz. */
+  bot: boolean;
   /** Seine aufgedeckten Befehle in der Reihenfolge, in der er sie gespielt hat. */
   playedCommands: CommandId[];
 }
@@ -245,9 +247,11 @@ export type RoundEvent =
   | { kind: "vanish"; ship: ShipRef };
 
 /**
- * Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`.
+ * Die Verbindung selbst ist der Beitritt: `/ws?match=<id>&token=<token>`. Mit `&bot=1` legt der erste Spieler ein Match gegen
+ * den Computergegner an, der sofort den zweiten Platz nimmt.
  * `chooseAdmiral` wählt den eigenen Admiral, einmal und vor Runde 1, auch schon, solange der Gegner fehlt.
  * `addBot` setzt den Computergegner auf den freien Platz, statt auf einen Menschen zu warten; er wählt sofort.
+ * `removeBot` macht seinen Platz für einen Mitspieler frei, solange der Spieler seinen Admiral noch nicht gewählt hat.
  * `draft` wählt aus dem Nachschub (`PlayerView.draft`), bevor der Zug der Runde abgegeben werden kann.
  * `surrender` gibt das Match auf, jederzeit, auch nach abgegebenem Zug; der Gegner gewinnt sofort.
  */
@@ -256,12 +260,14 @@ export type ClientMessage =
   | { type: "draft"; pick: DraftPick }
   | { type: "submit"; plan: TurnPlan }
   | { type: "addBot" }
+  | { type: "removeBot" }
   | { type: "surrender" };
 
 /** Fehler werden als Code übertragen, der Client formuliert sie in seiner Sprache. */
 export type ErrorCode =
   | "match_full"
   | "match_over"
+  | "match_started"
   | "opponent_missing"
   | "admiral_required"
   | "admiral_already_chosen"

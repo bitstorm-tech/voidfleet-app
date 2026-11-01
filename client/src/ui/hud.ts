@@ -23,6 +23,7 @@ export class Hud {
   readonly skipButton: HTMLButtonElement;
   /** Steht an der Stelle des Submit-Buttons, solange kein Gegner da ist. */
   readonly botButton: HTMLButtonElement;
+  readonly inviteButton: HTMLButtonElement;
   /** Unter dem Submit-Button: welche Teile des Zugs eingeplant, noch möglich oder nicht möglich sind. */
   readonly checklist: HTMLUListElement;
   private readonly logLines: string[] = [];
@@ -60,6 +61,7 @@ export class Hud {
     this.submitButton = createButton("submit-button", t.hud.endTurn);
     this.skipButton = createButton("submit-button", t.hud.skip);
     this.botButton = createButton("submit-button", t.hud.playComputer);
+    this.inviteButton = createButton("submit-button", t.hud.invitePlayer);
     this.checklist = Object.assign(document.createElement("ul"), { className: "turn-checklist" });
     this.showAction("submit");
   }
@@ -88,10 +90,11 @@ export class Hud {
   }
 
   /** Welcher Knopf an der Stelle des Submit-Buttons steht. */
-  showAction(action: "submit" | "skip" | "bot"): void {
+  showAction(action: "submit" | "skip" | "bot" | "invite"): void {
     this.submitButton.hidden = action !== "submit";
     this.skipButton.hidden = action !== "skip";
     this.botButton.hidden = action !== "bot";
+    this.inviteButton.hidden = action !== "invite";
   }
 
   setRound(round: number): void {

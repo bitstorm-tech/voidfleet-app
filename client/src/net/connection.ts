@@ -1,5 +1,5 @@
 // WebSocket-Verbindung zum Spielserver. Das Match steht in der URL
-// (`?match=<id>`); fehlt es oder wird ein neues verlangt, wird ein neues angelegt. Das Token identifiziert
+// (`?match=<id>`); fehlt es oder wird ein neues verlangt, wird ein neues angelegt, gegen den Computergegner. Das Token identifiziert
 // den Spieler beim Neuladen und liegt pro Tab im sessionStorage, damit zwei
 // Tabs im selben Browser als zwei Spieler zählen.
 
@@ -10,15 +10,15 @@ function randomId(bytes: number): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function matchIdFromUrl(newMatch: boolean): string {
+/** Die Match-Id aus der URL; `created`, wenn sie neu angelegt wurde. */
+function matchIdFromUrl(newMatch: boolean): { matchId: string; created: boolean } {
   const url = new URL(location.href);
-  let matchId = newMatch ? null : url.searchParams.get("match");
-  if (!matchId) {
-    matchId = randomId(4);
-    url.searchParams.set("match", matchId);
-    history.replaceState(null, "", url);
-  }
-  return matchId;
+  const existing = newMatch ? null : url.searchParams.get("match");
+  if (existing) return { matchId: existing, created: false };
+  const matchId = randomId(4);
+  url.searchParams.set("match", matchId);
+  history.replaceState(null, "", url);
+  return { matchId, created: true };
 }
 
 function tokenFor(matchId: string): string {
@@ -39,9 +39,11 @@ export class ServerConnection {
   private readonly listeners = new AbortController();
 
   constructor(callbacks: ConnectionCallbacks, newMatch = false) {
-    this.matchId = matchIdFromUrl(newMatch);
+    const { matchId, created } = matchIdFromUrl(newMatch);
+    this.matchId = matchId;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const params = new URLSearchParams({ match: this.matchId, token: tokenFor(this.matchId) });
+    const params = new URLSearchParams({ match: matchId, token: tokenFor(matchId) });
+    if (created) params.set("bot", "1");
     this.socket = new WebSocket(`${protocol}//${location.host}/ws?${params}`);
     const { signal } = this.listeners;
     this.socket.addEventListener("message", (event) => callbacks.onMessage(JSON.parse(event.data) as ServerMessage), { signal });

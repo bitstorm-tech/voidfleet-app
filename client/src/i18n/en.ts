@@ -97,6 +97,7 @@ export const en = {
     waiting: "Waiting for opponent",
     skip: "Skip animation",
     playComputer: "Play against computer",
+    invitePlayer: "Invite a player",
     showLog: "Show log",
     hideLog: "Hide log",
     overdrive: (bonus: number) => `Overdrive +${bonus}`,
@@ -565,6 +566,7 @@ export const en = {
   errors: {
     match_full: "This match is already full.",
     match_over: "The match is over.",
+    match_started: "The match has already started.",
     opponent_missing: "The opponent hasn't joined yet.",
     admiral_required: "Choose your admiral first.",
     admiral_already_chosen: "You have already chosen your admiral.",

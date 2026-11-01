@@ -15,6 +15,8 @@ import { Match, type Seat } from "./match.ts";
 interface SocketData {
   matchId: string;
   token: string;
+  /** Der erste Spieler legt das Match gegen den Computergegner an. */
+  bot: boolean;
   seat: Seat | null;
 }
 
@@ -97,6 +99,15 @@ function onAddBot(socket: Socket, room: Room): void {
   broadcastState(room);
 }
 
+function onRemoveBot(socket: Socket, room: Room): void {
+  const error = room.match.removeBot();
+  if (error) {
+    send(socket, { type: "error", code: error });
+    return;
+  }
+  broadcastState(room);
+}
+
 // Die Icons im Manifest der installierbaren App brauchen feste Pfade; Bun schreibt nur die Links
 // in index.html auf seine gebündelten Dateien um, nicht die Pfade im Manifest. Per `type: "file"`
 // importiert, landen sie auch in der kompilierten Server-Binary der Desktop-App (siehe `desktop/`).
@@ -116,7 +127,7 @@ const server = Bun.serve({
       const matchId = params.get("match");
       const token = params.get("token");
       if (!matchId || !token) return new Response("match und token fehlen", { status: 400 });
-      if (server.upgrade(req, { data: { matchId, token, seat: null } })) return undefined;
+      if (server.upgrade(req, { data: { matchId, token, bot: params.has("bot"), seat: null } })) return undefined;
       return new Response("WebSocket erwartet", { status: 400 });
     },
   },
@@ -131,6 +142,7 @@ const server = Bun.serve({
         return;
       }
       socket.data.seat = seat;
+      if (socket.data.bot && room.match.players.length === 1) room.match.addBot();
       // Ein zweiter Tab mit demselben Token übernimmt den Platz.
       room.sockets[seat]?.close();
       room.sockets[seat] = socket;
@@ -156,6 +168,9 @@ const server = Bun.serve({
           break;
         case "addBot":
           onAddBot(socket, room);
+          break;
+        case "removeBot":
+          onRemoveBot(socket, room);
           break;
       }
     },
