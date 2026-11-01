@@ -3,9 +3,10 @@
 // einem Fenster. Der Server endet mit der App.
 
 import { type ChildProcess, spawn } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import { app, BrowserWindow, dialog, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 
 const SERVER_BINARY = process.platform === "win32" ? "voidfleet-server.exe" : "voidfleet-server";
 
@@ -13,6 +14,21 @@ const SERVER_BINARY = process.platform === "win32" ? "voidfleet-server.exe" : "v
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
 
 let server: ChildProcess | null = null;
+
+/** Die Einstellungen des Clients liegen als Datei im Datenordner der App statt im `localStorage`, der am Origin samt
+ *  (bei jedem Start anderem) Port hängt; `preload.ts` reicht sie durch. */
+function settingsPath(): string {
+  return join(app.getPath("userData"), "settings.json");
+}
+
+ipcMain.on("settings:load", (event) => {
+  try {
+    event.returnValue = readFileSync(settingsPath(), "utf8");
+  } catch {
+    event.returnValue = null;
+  }
+});
+ipcMain.on("settings:save", (_event, json: string) => writeFileSync(settingsPath(), json));
 
 /** Gepackt tragen Windows- und macOS-App das Icon selbst, Linux braucht es am Fenster und das Dock
  *  von macOS beim Entwickeln (sonst zeigt es das Icon des Electron-Binarys). */
@@ -60,7 +76,7 @@ function createWindow(url: string): void {
     icon: iconPath(),
     show: false,
     autoHideMenuBar: true,
-    webPreferences: { backgroundThrottling: false },
+    webPreferences: { backgroundThrottling: false, preload: join(app.getAppPath(), "dist", "preload.js") },
   });
   window.once("ready-to-show", () => window.show());
   // Links nach außen (etwa Quellen) öffnen im Browser, nicht in einem zweiten Spielfenster.

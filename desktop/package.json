@@ -1,5 +1,6 @@
 {
   "name": "voidfleet-desktop",
+  "productName": "Voidfleet",
   "version": "0.1.0",
   "description": "Voidfleet als Desktop-App",
   "author": "Josef Bauer",
@@ -7,7 +8,7 @@
   "main": "dist/main.js",
   "scripts": {
     "postinstall": "install-electron",
-    "build": "bun build src/main.ts --target node --format cjs --external electron --outfile dist/main.js && cp ../client/assets/app/icon-512.png dist/icon.png && bun build --compile --minify --define 'process.env.NODE_ENV=\"production\"' ../server/src/main.ts --outfile dist/voidfleet-server",
+    "build": "bun build src/main.ts --target node --format cjs --external electron --outfile dist/main.js && bun build src/preload.ts --target node --format cjs --external electron --outfile dist/preload.js && cp ../client/assets/app/icon-512.png dist/icon.png && bun build --compile --minify --define 'process.env.NODE_ENV=\"production\"' ../server/src/main.ts --outfile dist/voidfleet-server",
     "start": "bun run build && electron .",
     "dist": "bun run build && electron-builder",
     "typecheck": "tsc --noEmit"
@@ -19,13 +20,13 @@
   },
   "build": {
     "appId": "app.voidfleet.desktop",
-    "productName": "Voidfleet",
     "icon": "../client/assets/app/icon-512.png",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/main.js",
+      "dist/preload.js",
       "dist/icon.png",
       "package.json"
     ],

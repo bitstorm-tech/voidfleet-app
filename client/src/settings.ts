@@ -1,4 +1,5 @@
-// Spieler-Einstellungen, vorerst nur im Browser (`localStorage`) gespeichert.
+// Spieler-Einstellungen, im Browser im `localStorage` gespeichert, in der Desktop-App als Datei im Datenordner der App
+// (`desktop/src/preload.ts`).
 // Änderungen gelten sofort; wer darauf reagieren muss, meldet sich mit `onSettingsChange` an.
 
 import type { Locale } from "./i18n/index.ts";
@@ -35,7 +36,15 @@ export interface Settings {
   language?: Locale;
 }
 
+declare global {
+  interface Window {
+    /** Nur in der Desktop-App gesetzt. */
+    voidfleetDesktop?: { settings: string | null; saveSettings(json: string): void };
+  }
+}
+
 const STORAGE_KEY = "voidfleet.settings";
+const desktop = window.voidfleetDesktop;
 const DEFAULTS: Settings = {
   musicVolume: 0.6,
   effectsVolume: 0.8,
@@ -47,13 +56,15 @@ const DEFAULTS: Settings = {
   cursor: "arrow",
 };
 
-export const settings: Settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") };
+export const settings: Settings = { ...DEFAULTS, ...JSON.parse((desktop ? desktop.settings : localStorage.getItem(STORAGE_KEY)) ?? "{}") };
 
 const listeners = new Set<() => void>();
 
 export function updateSettings(changes: Partial<Settings>): void {
   Object.assign(settings, changes);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  const json = JSON.stringify(settings);
+  if (desktop) desktop.saveSettings(json);
+  else localStorage.setItem(STORAGE_KEY, json);
   for (const listener of listeners) listener();
 }
 
