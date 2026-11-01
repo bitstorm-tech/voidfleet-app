@@ -1,8 +1,9 @@
-// Einstellungen: Zahnrad-Knopf oben rechts neben dem Ansichts-Knopf öffnet einen modalen Dialog
-// mit Reglern für die Lautstärke von Musik, Effekten und Bordfunk, je einer Geschwindigkeitswahl für Angriffe,
-// Schiffsbewegungen und die übrigen Animationen, dem Mauszeiger, der Sprache und, solange der Browser es anbietet, dem Installieren als
-// eigene App (`install.ts`). Jede Auswahl wird gespeichert (`settings.ts`); Lautstärken, Geschwindigkeiten und Cursor
-// gelten sofort, ein Sprachwechsel lädt die Seite neu.
+// Einstellungen: Zahnrad-Knopf oben rechts neben dem Ansichts-Knopf öffnet einen modalen Dialog im Stil eines
+// Steuerpults mit zwei eingelassenen Feldern: links die Regler für die Lautstärke von Musik, Effekten und Bordfunk,
+// die Sprache und, solange der Browser es anbietet, das Installieren als eigene App (`install.ts`); rechts je eine
+// Geschwindigkeitswahl für Angriffe, Schiffsbewegungen und die übrigen Animationen und der Mauszeiger. Jede Auswahl
+// wird gespeichert (`settings.ts`); Lautstärken, Geschwindigkeiten und Cursor gelten sofort, ein Sprachwechsel lädt
+// die Seite neu.
 
 import { LOCALE_NAMES, locale, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
@@ -22,24 +23,41 @@ export class SettingsDialog {
     dialog
       .querySelector(".dialog-close")!
       .before(
-        volumeSlider("musicVolume"),
-        volumeSlider("effectsVolume"),
-        volumeSlider("voiceVolume"),
-        speedChoice("attackSpeed"),
-        speedChoice("movementSpeed"),
-        speedChoice("animationSpeed"),
-        cursorChoice(),
-        choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
-        installRow(),
+        consolePanel(
+          volumeSlider("musicVolume"),
+          volumeSlider("effectsVolume"),
+          volumeSlider("voiceVolume"),
+          choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
+          installRow(),
+        ),
+        consolePanel(speedChoice("attackSpeed"), speedChoice("movementSpeed"), speedChoice("animationSpeed"), cursorChoice()),
       );
   }
 }
 
+/** Eingelassenes Feld im Pult, das eine Gruppe von Reglern trägt. */
+function consolePanel(...controls: HTMLElement[]): HTMLDivElement {
+  const panel = Object.assign(document.createElement("div"), { className: "console-panel" });
+  panel.append(...controls);
+  return panel;
+}
+
+/** Schieberegler mit leuchtender Füllung (`--fill`) und der Lautstärke in Prozent als Anzeige daneben. */
 function volumeSlider(setting: VolumeSetting): HTMLLabelElement {
   const label = Object.assign(document.createElement("label"), { className: "settings-volume" });
   const input = Object.assign(document.createElement("input"), { type: "range", min: "0", max: "1", step: "0.05", value: String(settings[setting]) });
-  input.addEventListener("input", () => updateSettings({ [setting]: Number(input.value) }));
-  label.append(Object.assign(document.createElement("span"), { textContent: t.settings[setting] }), input);
+  const readout = document.createElement("output");
+  const show = () => {
+    const percent = Math.round(Number(input.value) * 100);
+    readout.textContent = String(percent);
+    input.style.setProperty("--fill", `${percent}%`);
+  };
+  show();
+  input.addEventListener("input", () => {
+    show();
+    updateSettings({ [setting]: Number(input.value) });
+  });
+  label.append(Object.assign(document.createElement("span"), { textContent: t.settings[setting] }), readout, input);
   return label;
 }
 

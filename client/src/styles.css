@@ -35,6 +35,12 @@
   box-sizing: border-box;
 }
 
+@property --halo {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 /* Der Spiel-Cursor gilt überall – auch über Buttons und dem Babylon-Canvas. */
 *,
 *::before,
@@ -107,21 +113,78 @@ body {
   text-transform: uppercase;
 }
 
+/*
+ * Knöpfe als Tasten eines Steuerpults: gewölbte Oberseite, sichtbare Flanke unten (`--depth`) und Schlagschatten.
+ * Hover hebt die Taste an und lässt sie leuchten, Drücken senkt sie fast bis aufs Pult. Varianten setzen nur Farben
+ * (`--face` Oberseite, `--edge` Flanke, `--glow` Leuchten) und die Ruhehöhe `--rest`.
+ */
 #ui button {
+  --face: rgb(52 60 76);
+  --edge: rgb(20 24 32);
+  --glow: rgb(var(--player));
+  --rest: 4px;
+  --depth: var(--rest);
+  --halo: 0px;
+  --bright: 1;
   pointer-events: auto;
   font-family: var(--font);
   color: var(--text);
-  background: var(--panel);
-  border: 1px solid rgb(255 255 255 / 0.08);
-  border-radius: 3px;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.55);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.17), rgb(255 255 255 / 0.04) 46%, rgb(0 0 0 / 0.04) 54%, rgb(0 0 0 / 0.24)), var(--face);
+  border: 1px solid rgb(0 0 0 / 0.65);
+  border-radius: 5px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.24),
+    inset 0 -2px 0 rgb(0 0 0 / 0.22),
+    0 var(--depth) 0 var(--edge),
+    0 calc(var(--depth) + 3px) 9px rgb(0 0 0 / 0.55),
+    0 0 var(--halo) color-mix(in srgb, var(--glow) 45%, transparent);
+  translate: 0 calc(var(--rest) - var(--depth));
+  filter: brightness(var(--bright));
+  transition:
+    translate 0.08s ease-out,
+    box-shadow 0.08s ease-out,
+    filter 0.12s ease-out;
 }
 
 #ui button:hover {
-  background: var(--panel-hover);
+  --depth: calc(var(--rest) + 1px);
+  --halo: 16px;
+  --bright: 1.14;
+}
+
+#ui button:active {
+  --depth: 1px;
+  --halo: 8px;
+  --bright: 0.94;
+  transition-duration: 0.03s;
+}
+
+#ui button:focus-visible {
+  outline: 2px solid rgb(var(--select));
+  outline-offset: 2px;
 }
 
 #ui button:disabled {
-  opacity: 0.45;
+  --depth: var(--rest);
+  --halo: 0px;
+  --bright: 0.8;
+  opacity: 0.5;
+}
+
+/* Hauptaktionen leuchten in der eigenen Farbe, das Aufgeben warnt rot. */
+#ui .submit-button,
+#ui .draft-confirm,
+#ui .result-new {
+  --face: rgb(34 96 150);
+  --edge: rgb(12 40 66);
+  --glow: rgb(var(--select));
+}
+
+#ui .surrender-confirm {
+  --face: rgb(132 40 34);
+  --edge: rgb(58 16 14);
+  --glow: rgb(var(--lost));
 }
 
 /* Rechts bleibt Platz für die Icon-Knöpfe und das Gegner-Feld darunter. */
@@ -176,23 +239,25 @@ body {
 }
 
 /* Unauffällige Icon-Knöpfe oben rechts: Log, Vollbild, Ansicht, Einstellungen, Regeln und Aufgeben. */
-.icon-button {
+#ui .icon-button {
+  --rest: 3px;
   width: 32px;
   height: 32px;
   padding: 0;
   display: grid;
   place-items: center;
-  opacity: 0.5;
+  color: var(--text-dim);
 }
 
-.icon-button:hover,
-.log-panel.expanded .icon-button {
-  opacity: 1;
+#ui .icon-button:hover,
+#ui .log-panel.expanded .icon-button {
+  color: rgb(var(--select));
 }
 
 .icon-button svg {
   width: 18px;
   height: 18px;
+  filter: drop-shadow(0 1px 0 rgb(0 0 0 / 0.6));
 }
 
 .fullscreen-toggle {
@@ -448,32 +513,174 @@ body {
   text-shadow: 0 1px 2px rgb(0 0 0 / 0.8);
 }
 
-/* --- Dialoge (Einstellungen, Regeln) --- */
+/* --- Dialoge (Einstellungen, Regeln, Aufgeben) als Steuerpult: Metallgehäuse mit Rahmen und Schrauben, Kopfleiste mit Kontrolllampe --- */
+
+/* Schraubenkopf für die Ecken des Pults, als Hintergrundschicht. */
+:root {
+  --screw: radial-gradient(circle at 38% 34%, rgb(214 222 234), rgb(108 118 134) 38%, rgb(34 39 48) 62%, rgb(0 0 0 / 0.7) 70%, transparent 76%);
+}
 
 .dialog {
   min-width: 360px;
-  padding: 24px 28px;
+  padding: 22px 28px 26px;
   color: var(--text);
-  background: var(--panel);
-  border: none;
-  border-top: 3px solid var(--accent);
-  border-radius: 3px;
+  background:
+    var(--screw) left 9px bottom 9px / 11px 11px no-repeat,
+    var(--screw) right 9px bottom 9px / 11px 11px no-repeat,
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.014) 0 1px, transparent 1px 4px),
+    linear-gradient(165deg, rgb(40 47 60), rgb(25 29 38) 50%, rgb(17 20 27));
+  border: 1px solid rgb(4 6 9);
+  border-radius: 18px;
+  corner-shape: bevel;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    inset 0 0 50px rgb(0 0 0 / 0.4),
+    0 0 0 5px rgb(14 17 23),
+    0 0 0 6px rgb(255 255 255 / 0.08),
+    0 0 0 8px rgb(4 6 9),
+    0 26px 80px rgb(0 0 0 / 0.75),
+    0 0 60px rgb(var(--player) / 0.12);
   pointer-events: auto;
 }
 
-.dialog::backdrop {
-  background: rgb(var(--background) / 0.6);
+.dialog[open] {
+  animation: console-boot 0.32s ease-out;
 }
 
+.dialog::backdrop {
+  background: radial-gradient(ellipse at center, rgb(var(--background) / 0.45), rgb(var(--background) / 0.8));
+}
+
+/* Lüftungsschlitze unten links, auf Höhe der Knöpfe. */
+.dialog::after {
+  content: "";
+  position: absolute;
+  left: 32px;
+  bottom: 30px;
+  width: 72px;
+  height: 12px;
+  background: repeating-linear-gradient(90deg, rgb(3 4 6) 0 3px, transparent 3px 7px);
+  border-radius: 2px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.07);
+  opacity: 0.85;
+}
+
+/* Im schmalen Aufgeben-Dialog stehen die Knöpfe dort. */
+.surrender-dialog::after {
+  display: none;
+}
+
+@keyframes console-boot {
+  from {
+    opacity: 0;
+    scale: 0.96;
+    filter: brightness(1.8);
+  }
+  40% {
+    opacity: 1;
+    filter: brightness(1.3);
+  }
+  to {
+    scale: 1;
+    filter: none;
+  }
+}
+
+/* Kopfleiste: eigenes Blech mit Schrauben, Kontrolllampe vor dem Titel und Lichtkante darunter. */
 .dialog h2 {
-  margin: 0 0 20px;
-  font-size: 30px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: -22px -28px 24px;
+  padding: 14px 34px 12px;
+  font-size: 28px;
   font-weight: 600;
   color: var(--accent);
+  text-shadow: 0 0 14px rgb(var(--player) / 0.55);
+  background:
+    var(--screw) left 10px center / 11px 11px no-repeat,
+    var(--screw) right 10px center / 11px 11px no-repeat,
+    linear-gradient(180deg, rgb(54 62 78), rgb(34 40 51) 55%, rgb(28 33 42));
+  border-bottom: 1px solid rgb(4 6 9);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    0 1px 0 rgb(var(--player) / 0.6),
+    0 3px 16px rgb(var(--player) / 0.22);
 }
 
+.dialog h2::before {
+  content: "";
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, white, rgb(var(--select)) 45%, rgb(var(--player) / 0.7));
+  box-shadow:
+    0 0 0 2px rgb(8 10 14),
+    0 0 0 3px rgb(255 255 255 / 0.1),
+    0 0 10px rgb(var(--select));
+  animation: console-lamp 3s steps(1) infinite;
+}
+
+/* Statuslampen rechts in der Kopfleiste. */
+.dialog h2::after {
+  content: "";
+  flex: none;
+  width: 52px;
+  height: 8px;
+  margin-left: auto;
+  background:
+    radial-gradient(circle, rgb(var(--heal)) 0 2.5px, transparent 3.5px) 0 0 / 18px 8px repeat-x,
+    rgb(6 8 11);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 2px black,
+    0 1px 0 rgb(255 255 255 / 0.08);
+  filter: drop-shadow(0 0 3px rgb(var(--heal) / 0.6));
+}
+
+@keyframes console-lamp {
+  0%,
+  88% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 0.35;
+  }
+}
+
+/* Eingelassene Felder im Pult tragen die Regler (Einstellungen: zwei nebeneinander). */
+.settings-dialog[open] {
+  display: grid;
+  grid-template-columns: 300px 420px;
+  gap: 0 20px;
+}
+
+.settings-dialog h2,
+.settings-dialog .dialog-close {
+  grid-column: 1 / -1;
+}
+
+.console-panel {
+  padding: 16px 16px 2px;
+}
+
+.console-panel,
+.rules-nav,
+.rules-body {
+  background: linear-gradient(180deg, rgb(9 11 16 / 0.85), rgb(14 17 23 / 0.7));
+  border: 1px solid rgb(0 0 0 / 0.7);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 0.7),
+    inset 0 0 0 1px rgb(255 255 255 / 0.02),
+    0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+/* Segmentierte Auswahl als Reihe von Tasten; die gewählte ist eingerastet und hat eine leuchtende Lampe. */
 .settings-choice {
   display: flex;
+  gap: 6px;
   margin: 0 0 18px;
   padding: 0;
   border: none;
@@ -482,7 +689,7 @@ body {
 .settings-choice legend {
   margin-bottom: 10px;
   padding: 0;
-  font-size: 16px;
+  font-size: 15px;
   color: var(--text-dim);
 }
 
@@ -495,46 +702,89 @@ body {
   opacity: 0;
 }
 
-.settings-choice span {
+.settings-choice span,
+.settings-cursor img {
+  --depth: 3px;
   display: block;
-  padding: 8px 12px;
-  font-size: 16px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.03) 46%, rgb(0 0 0 / 0.04) 54%, rgb(0 0 0 / 0.22)), rgb(46 53 68);
+  border: 1px solid rgb(0 0 0 / 0.65);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    0 var(--depth) 0 rgb(18 21 28),
+    0 calc(var(--depth) + 2px) 6px rgb(0 0 0 / 0.5);
+  translate: 0 calc(3px - var(--depth));
+  transition:
+    translate 0.08s ease-out,
+    box-shadow 0.08s ease-out,
+    filter 0.12s ease-out;
+}
+
+.settings-choice span {
+  position: relative;
+  padding: 11px 4px 7px;
+  font-size: 14px;
   text-align: center;
   white-space: nowrap;
-  background: rgb(255 255 255 / 0.04);
-  border: 1px solid rgb(255 255 255 / 0.08);
+  color: var(--text-dim);
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.55);
 }
 
-.settings-choice label:first-of-type span {
-  border-radius: 3px 0 0 3px;
+/* Lampe oben in jeder Taste; aus, bis die Taste gewählt ist. */
+.settings-choice span::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  translate: -50% 0;
+  width: 18px;
+  height: 3px;
+  background: rgb(6 8 11);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 1px black;
 }
 
-.settings-choice label:last-of-type span {
-  border-radius: 0 3px 3px 0;
+.settings-choice span:hover,
+.settings-cursor img:hover {
+  --depth: 4px;
+  filter: brightness(1.15);
 }
 
-.settings-choice label + label span {
-  border-left: none;
+.settings-choice span:active,
+.settings-cursor img:active {
+  --depth: 1px;
 }
 
-.settings-choice span:hover {
-  background: var(--panel-hover);
+.settings-choice input:checked + span,
+.settings-cursor input:checked + img {
+  --depth: 1px;
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.18), rgb(255 255 255 / 0.03) 60%), color-mix(in srgb, rgb(var(--player)) 22%, rgb(30 36 48));
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 0.5),
+    0 var(--depth) 0 rgb(18 21 28),
+    0 0 12px rgb(var(--player) / 0.25);
+  filter: none;
 }
 
 .settings-choice input:checked + span {
-  color: rgb(var(--background));
-  font-weight: 600;
-  background: var(--accent);
+  color: var(--text);
 }
 
-.settings-choice input:focus-visible + span {
+.settings-choice input:checked + span::before {
+  background: rgb(var(--select));
+  box-shadow: 0 0 8px rgb(var(--select));
+}
+
+.settings-choice input:focus-visible + span,
+.settings-cursor input:focus-visible + img {
   outline: 2px solid rgb(var(--select));
+  outline-offset: 2px;
 }
 
 .settings-cursor {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px 6px;
   margin: 0 0 18px;
   padding: 0;
   border: none;
@@ -553,45 +803,172 @@ body {
 }
 
 .settings-cursor img {
-  display: block;
   width: 100%;
-  aspect-ratio: 1;
-  padding: 8px;
+  aspect-ratio: 1.4;
+  padding: 7px;
   object-fit: contain;
-  background: rgb(255 255 255 / 0.04);
-  border: 1px solid rgb(255 255 255 / 0.08);
-  border-radius: 3px;
 }
 
-.settings-cursor img:hover {
-  background: var(--panel-hover);
-}
-
-.settings-cursor input:checked + img {
-  background: rgb(var(--player) / 0.18);
-  border-color: var(--accent);
-}
-
-.settings-cursor input:focus-visible + img {
-  outline: 2px solid rgb(var(--select));
-}
-
+/* Schieberegler: eingelassene Schiene mit Leuchtsegmenten bis zum Griff, daneben die Anzeige in Prozent. */
 .settings-volume {
-  display: block;
-  margin: 0 0 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 16px;
 }
 
 .settings-volume span {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 16px;
+  font-size: 15px;
   color: var(--text-dim);
 }
 
+.settings-volume output {
+  min-width: 42px;
+  padding: 1px 6px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: rgb(var(--select));
+  text-shadow: 0 0 6px rgb(var(--select) / 0.7);
+  background: rgb(4 6 9);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 3px black,
+    0 1px 0 rgb(255 255 255 / 0.07);
+}
+
 .settings-volume input {
+  --fill: 50%;
+  grid-column: 1 / -1;
   width: 100%;
+  height: 24px;
   margin: 0;
-  accent-color: var(--accent);
+  appearance: none;
+  background: none;
+}
+
+.settings-volume input::-webkit-slider-runnable-track {
+  height: 10px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 7px, rgb(4 6 9 / 0.85) 7px 9px),
+    linear-gradient(90deg, rgb(var(--player)), rgb(var(--select))) 0 0 / var(--fill) 100% no-repeat,
+    rgb(5 7 10);
+  border: 1px solid black;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 2px 3px rgb(0 0 0 / 0.8),
+    0 1px 0 rgb(255 255 255 / 0.09),
+    0 0 10px rgb(var(--select) / 0.15);
+}
+
+.settings-volume input::-moz-range-track {
+  height: 10px;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 7px, rgb(4 6 9 / 0.85) 7px 9px),
+    linear-gradient(90deg, rgb(var(--player)), rgb(var(--select))) 0 0 / var(--fill) 100% no-repeat,
+    rgb(5 7 10);
+  border: 1px solid black;
+  border-radius: 3px;
+  box-shadow:
+    inset 0 2px 3px rgb(0 0 0 / 0.8),
+    0 1px 0 rgb(255 255 255 / 0.09);
+}
+
+/* Griff wie ein Schieber am Mischpult: gewölbt, mit Riffelung, hebt sich beim Hover und senkt sich beim Ziehen. */
+.settings-volume input::-webkit-slider-thumb {
+  width: 20px;
+  height: 22px;
+  margin-top: -7px;
+  appearance: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 6px,
+      rgb(0 0 0 / 0.45) 6px 7px,
+      transparent 7px 9px,
+      rgb(0 0 0 / 0.45) 9px 10px,
+      transparent 10px 12px,
+      rgb(0 0 0 / 0.45) 12px 13px,
+      transparent 13px
+    ),
+    linear-gradient(180deg, rgb(168 178 194), rgb(98 108 124) 48%, rgb(72 80 94) 52%, rgb(110 120 136));
+  border: 1px solid rgb(0 0 0 / 0.75);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    0 3px 0 rgb(30 34 42),
+    0 5px 7px rgb(0 0 0 / 0.6);
+  transition:
+    translate 0.08s ease-out,
+    box-shadow 0.08s ease-out,
+    filter 0.12s ease-out;
+}
+
+.settings-volume input::-moz-range-thumb {
+  width: 20px;
+  height: 22px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 6px,
+      rgb(0 0 0 / 0.45) 6px 7px,
+      transparent 7px 9px,
+      rgb(0 0 0 / 0.45) 9px 10px,
+      transparent 10px 12px,
+      rgb(0 0 0 / 0.45) 12px 13px,
+      transparent 13px
+    ),
+    linear-gradient(180deg, rgb(168 178 194), rgb(98 108 124) 48%, rgb(72 80 94) 52%, rgb(110 120 136));
+  border: 1px solid rgb(0 0 0 / 0.75);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    0 3px 0 rgb(30 34 42),
+    0 5px 7px rgb(0 0 0 / 0.6);
+}
+
+.settings-volume input:hover::-webkit-slider-thumb {
+  translate: 0 -1px;
+  filter: brightness(1.12);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    0 4px 0 rgb(30 34 42),
+    0 6px 8px rgb(0 0 0 / 0.6),
+    0 0 14px rgb(var(--select) / 0.5);
+}
+
+.settings-volume input:hover::-moz-range-thumb {
+  filter: brightness(1.12);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    0 4px 0 rgb(30 34 42),
+    0 6px 8px rgb(0 0 0 / 0.6),
+    0 0 14px rgb(var(--select) / 0.5);
+}
+
+.settings-volume input:active::-webkit-slider-thumb {
+  translate: 0 2px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    0 1px 0 rgb(30 34 42),
+    0 2px 4px rgb(0 0 0 / 0.6),
+    0 0 18px rgb(var(--select) / 0.7);
+}
+
+.settings-volume input:active::-moz-range-thumb {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    0 1px 0 rgb(30 34 42),
+    0 2px 4px rgb(0 0 0 / 0.6),
+    0 0 18px rgb(var(--select) / 0.7);
+}
+
+.settings-volume input:focus-visible {
+  outline: 2px solid rgb(var(--select));
+  outline-offset: 2px;
 }
 
 .settings-install {
@@ -612,13 +989,13 @@ body {
 #ui .settings-install button {
   width: 100%;
   padding: 8px 12px;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 #ui .dialog-close {
   display: block;
-  margin: 6px 0 0 auto;
-  padding: 8px 24px;
+  margin: 22px 0 0 auto;
+  padding: 9px 26px;
   font-size: 18px;
 }
 
@@ -627,7 +1004,6 @@ body {
 .rules-dialog {
   width: min(1080px, 94vw);
   height: min(900px, 92vh);
-  padding: 20px 24px;
 }
 
 .rules-dialog[open] {
@@ -636,7 +1012,11 @@ body {
 }
 
 .rules-dialog h2 {
-  margin-bottom: 14px;
+  margin-bottom: 18px;
+}
+
+#ui .rules-dialog .dialog-close {
+  margin-top: 4px;
 }
 
 .rules-layout {
@@ -652,19 +1032,38 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 220px;
-  padding-top: 2px;
+  width: 230px;
+  padding: 8px 6px;
+  overflow-y: auto;
 }
 
+/* Kapitel als Einträge im eingelassenen Feld, nicht als Tasten; das aktive hat eine leuchtende Lampe. */
 #ui .rules-nav button {
-  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
   font-size: 16px;
   text-align: left;
   color: var(--text-dim);
   background: none;
   border: none;
-  border-left: 2px solid transparent;
-  border-radius: 0;
+  border-radius: 3px;
+  box-shadow: none;
+  translate: none;
+  filter: none;
+}
+
+#ui .rules-nav button::before {
+  content: "";
+  flex: none;
+  width: 4px;
+  height: 16px;
+  background: rgb(6 8 11);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 1px black,
+    0 1px 0 rgb(255 255 255 / 0.06);
 }
 
 #ui .rules-nav button:hover {
@@ -674,8 +1073,12 @@ body {
 
 #ui .rules-nav button.active {
   color: var(--text);
-  background: rgb(255 255 255 / 0.05);
-  border-left-color: var(--accent);
+  background: rgb(var(--player) / 0.1);
+}
+
+#ui .rules-nav button.active::before {
+  background: rgb(var(--select));
+  box-shadow: 0 0 8px rgb(var(--select));
 }
 
 .surrender-text {
@@ -698,19 +1101,10 @@ body {
   font-size: 18px;
 }
 
-#ui .surrender-confirm {
-  font-weight: 600;
-  border-color: rgb(var(--lost) / 0.7);
-}
-
-#ui .surrender-confirm:hover {
-  background: rgb(var(--lost) / 0.25);
-}
-
 .rules-body {
   flex: 1;
   min-width: 0;
-  padding-right: 14px;
+  padding: 18px 20px;
   overflow-y: auto;
   scroll-behavior: smooth;
 }
@@ -1178,9 +1572,23 @@ body {
 }
 
 /* Während der Zielwahl pulsiert der Rahmen in der Farbe des Admirals. */
-.power-card.selecting,
-.lock-button.selecting {
+.power-card.selecting {
   animation: power-selecting 1.1s ease-in-out infinite alternate;
+}
+
+/* Die Taste behält ihre Form und pulsiert nur im Leuchten (`--halo` ist dafür als Länge registriert). */
+#ui .lock-button.selecting {
+  border-color: rgb(var(--admiral-rgb));
+  animation: key-selecting 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes key-selecting {
+  from {
+    --halo: 6px;
+  }
+  to {
+    --halo: 24px;
+  }
 }
 
 @keyframes power-selecting {
@@ -1213,17 +1621,18 @@ body {
 }
 
 #ui .lock-button {
+  --face: color-mix(in srgb, rgb(var(--admiral-rgb)) 30%, rgb(30 34 44));
+  --edge: color-mix(in srgb, rgb(var(--admiral-rgb)) 25%, rgb(10 12 16));
+  --glow: rgb(var(--admiral-rgb));
+  --rest: 3px;
   color: var(--text);
-  background: rgb(var(--admiral-rgb) / 0.14);
-}
-
-#ui .lock-button:hover {
-  background: rgb(var(--admiral-rgb) / 0.3);
 }
 
 #ui .lock-button.selected {
+  --face: color-mix(in srgb, rgb(var(--select)) 30%, rgb(30 34 44));
+  --halo: 14px;
+  --glow: rgb(var(--select));
   border-color: rgb(var(--select));
-  box-shadow: 0 0 0 1px rgb(var(--select));
 }
 
 #ui .lock-button.blocked {
@@ -1851,10 +2260,6 @@ body {
   font-size: 22px;
 }
 
-#ui .result-new {
-  border-color: rgb(var(--result-rgb) / 0.7);
-}
-
 .result-badge {
   position: absolute;
   top: 18px;
@@ -2035,6 +2440,10 @@ body {
   border: 1px solid rgb(var(--admiral-rgb) / 0.55);
   border-top: 4px solid rgb(var(--admiral-rgb));
   border-radius: 4px;
+  box-shadow: none;
+  translate: 0 0;
+  filter: none;
+  text-shadow: none;
   transition:
     translate 0.15s ease-out,
     box-shadow 0.15s ease-out;
