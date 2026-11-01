@@ -1,6 +1,6 @@
 # Server (Bun)
 
-- `bun install`, dann `bun run dev` (startet neu bei Änderungen) oder `bun run start`; Port über `PORT` (Standard 3000), `bun run typecheck`, `bun test`.
+- `bun install`, dann `bun run dev` (startet neu bei Änderungen) oder `bun run start`; Port über `PORT` (Standard 3000), Adresse über `HOST` (Standard `0.0.0.0`; die Desktop-App in `../desktop/` setzt `127.0.0.1`), `bun run typecheck`, `bun test`.
 - Ein Prozess für alles: `Bun.serve` liefert `../client/index.html` aus (Bun bündelt den Client, im Dev-Modus mit HMR) und nimmt unter `/ws?match=<id>&token=<token>` die WebSockets an.
 
 ## Aufbau

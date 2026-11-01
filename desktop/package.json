@@ -1,0 +1,63 @@
+{
+  "name": "voidfleet-desktop",
+  "version": "0.1.0",
+  "description": "Voidfleet als Desktop-App",
+  "author": "Josef Bauer",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "postinstall": "install-electron",
+    "build": "bun build src/main.ts --target node --format cjs --external electron --outfile dist/main.js && bun build --compile --minify --define 'process.env.NODE_ENV=\"production\"' ../server/src/main.ts --outfile dist/voidfleet-server",
+    "start": "bun run build && electron .",
+    "dist": "bun run build && electron-builder",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0",
+    "typescript": "^7.0.2"
+  },
+  "build": {
+    "appId": "app.voidfleet.desktop",
+    "productName": "Voidfleet",
+    "icon": "../client/assets/app/icon-512.png",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": ".",
+        "filter": [
+          "voidfleet-server*"
+        ]
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "dir"
+      ],
+      "category": "Game",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.games"
+    },
+    "executableName": "voidfleet"
+  },
+  "desktopName": "voidfleet.desktop"
+}

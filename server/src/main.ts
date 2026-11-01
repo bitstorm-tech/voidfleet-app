@@ -3,6 +3,10 @@
 // entstehen beim ersten Beitritt; wer den Match-Link öffnet, sitzt mit drin.
 
 import type { ServerWebSocket } from "bun";
+import icon192 from "../../client/assets/app/icon-192.png" with { type: "file" };
+import icon512 from "../../client/assets/app/icon-512.png" with { type: "file" };
+import iconMaskable192 from "../../client/assets/app/icon-maskable-192.png" with { type: "file" };
+import iconMaskable512 from "../../client/assets/app/icon-maskable-512.png" with { type: "file" };
 import index from "../../client/index.html";
 import type { AdmiralId } from "../../shared/admirals.ts";
 import type { ClientMessage, DraftPick, ServerMessage, TurnPlan } from "../../shared/protocol.ts";
@@ -94,12 +98,15 @@ function onAddBot(socket: Socket, room: Room): void {
 }
 
 // Die Icons im Manifest der installierbaren App brauchen feste Pfade; Bun schreibt nur die Links
-// in index.html auf seine gebündelten Dateien um, nicht die Pfade im Manifest.
-const APP_ICONS = ["icon-192.png", "icon-512.png", "icon-maskable-192.png", "icon-maskable-512.png"];
-const appIconRoutes = Object.fromEntries(APP_ICONS.map((file) => [`/app/${file}`, Bun.file(`${import.meta.dir}/../../client/assets/app/${file}`)]));
+// in index.html auf seine gebündelten Dateien um, nicht die Pfade im Manifest. Per `type: "file"`
+// importiert, landen sie auch in der kompilierten Server-Binary der Desktop-App (siehe `desktop/`).
+const APP_ICONS = { "icon-192.png": icon192, "icon-512.png": icon512, "icon-maskable-192.png": iconMaskable192, "icon-maskable-512.png": iconMaskable512 };
+const appIconRoutes = Object.fromEntries(Object.entries(APP_ICONS).map(([name, path]) => [`/app/${name}`, new Response(Bun.file(path))]));
 
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),
+  // Die Desktop-App bindet nur an 127.0.0.1, damit ihr Server nicht im Netz hängt.
+  hostname: process.env.HOST ?? "0.0.0.0",
   development: process.env.NODE_ENV !== "production",
   routes: {
     "/": index,

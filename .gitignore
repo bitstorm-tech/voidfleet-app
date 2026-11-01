@@ -7,3 +7,5 @@ __pycache__/
 client/tools/cache/
 # Vorschau-Renders der Schiffe (client/tools/ships/preview.py)
 client/tools/ships/renders/
+# Pakete der Desktop-App (desktop/)
+release/
