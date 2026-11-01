@@ -1,6 +1,6 @@
 // Gemeinsamer Aufbau der Dialoge hinter den Icon-Knöpfen oben rechts: Knopf,
-// modaler `<dialog>` mit Überschrift und „Schließen“; ein Klick auf den
-// abgedunkelten Hintergrund schließt ebenfalls.
+// modaler `<dialog>` mit Überschrift und „Schließen“. Nur dieser Knopf (oder
+// Escape) schließt, ein Klick auf den abgedunkelten Hintergrund nicht.
 
 import { t } from "../i18n/index.ts";
 
@@ -25,9 +25,5 @@ export function iconDialog(container: HTMLElement, name: string, title: string, 
 
   toggle.addEventListener("click", () => dialog.showModal());
   close.addEventListener("click", () => dialog.close());
-  // Der Hintergrund-Klick trifft das Dialog-Element selbst.
-  dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) dialog.close();
-  });
   return dialog;
 }
