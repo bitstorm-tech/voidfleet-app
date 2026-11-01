@@ -649,16 +649,26 @@ body {
   }
 }
 
-/* Eingelassene Felder im Pult tragen die Regler (Einstellungen: zwei nebeneinander). */
+/*
+ * Eingelassene Felder im Pult tragen die Regler. In den Einstellungen liegen die drei Felder übereinander in derselben
+ * Zelle, nur das gewählte ist sichtbar; so behält der Dialog beim Wechsel der Tabs seine Größe.
+ */
 .settings-dialog[open] {
   display: grid;
-  grid-template-columns: 300px 420px;
-  gap: 0 20px;
+  grid-template-columns: 420px;
 }
 
-.settings-dialog h2,
-.settings-dialog .dialog-close {
-  grid-column: 1 / -1;
+.settings-dialog .console-panel {
+  grid-area: 3 / 1;
+  visibility: hidden;
+}
+
+.settings-dialog .console-panel.active {
+  visibility: visible;
+}
+
+.settings-tabs span {
+  font-size: 15px;
 }
 
 .console-panel {

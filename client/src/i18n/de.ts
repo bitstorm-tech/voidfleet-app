@@ -60,6 +60,9 @@ export const de: Messages = {
   },
   settings: {
     title: "Einstellungen",
+    tabs: { game: "Spiel", video: "Video", sound: "Sound" },
+    fullscreen: "Vollbild",
+    toggle: { on: "An", off: "Aus" },
     musicVolume: "Musik",
     effectsVolume: "Soundeffekte",
     voiceVolume: "Bordfunk",

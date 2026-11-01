@@ -1,13 +1,14 @@
 // Einstellungen: Zahnrad-Knopf oben rechts neben dem Ansichts-Knopf öffnet einen modalen Dialog im Stil eines
-// Steuerpults mit zwei eingelassenen Feldern: links die Regler für die Lautstärke von Musik, Effekten und Bordfunk,
-// die Sprache und, solange der Browser es anbietet, das Installieren als eigene App (`install.ts`); rechts je eine
-// Geschwindigkeitswahl für Angriffe, Schiffsbewegungen und die übrigen Animationen und der Mauszeiger. Jede Auswahl
-// wird gespeichert (`settings.ts`); Lautstärken, Geschwindigkeiten und Cursor gelten sofort, ein Sprachwechsel lädt
-// die Seite neu.
+// Steuerpults. Eine Tastenreihe oben wählt eines von drei eingelassenen Feldern: „Spiel“ mit je einer
+// Geschwindigkeitswahl für Angriffe, Schiffsbewegungen und die übrigen Animationen, dem Mauszeiger, der Sprache und,
+// solange der Browser es anbietet, dem Installieren als eigene App (`install.ts`); „Video“ mit dem Vollbild
+// (`fullscreen.ts`); „Sound“ mit den Reglern für die Lautstärke von Musik, Effekten und Bordfunk. Jede Auswahl wird
+// gespeichert (`settings.ts`), nur das Vollbild nicht; alles gilt sofort, ein Sprachwechsel lädt die Seite neu.
 
 import { LOCALE_NAMES, locale, switchLocale, t } from "../i18n/index.ts";
 import { settings, updateSettings } from "../settings.ts";
 import { CURSORS, type CursorId } from "./cursor.ts";
+import { toggleFullscreen } from "./fullscreen.ts";
 import { iconDialog } from "./iconDialog.ts";
 import { installApp, onInstallable } from "./install.ts";
 
@@ -22,18 +23,26 @@ export class SettingsDialog {
 
   constructor(container: HTMLElement) {
     const dialog = (this.dialog = iconDialog(container, "settings", t.settings.title, ICON));
-    dialog
-      .querySelector(".dialog-close")!
-      .before(
-        consolePanel(
-          volumeSlider("musicVolume"),
-          volumeSlider("effectsVolume"),
-          volumeSlider("voiceVolume"),
-          choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
-          installRow(),
-        ),
-        consolePanel(speedChoice("attackSpeed"), speedChoice("movementSpeed"), speedChoice("animationSpeed"), cursorChoice()),
-      );
+    const panels = {
+      game: consolePanel(
+        speedChoice("attackSpeed"),
+        speedChoice("movementSpeed"),
+        speedChoice("animationSpeed"),
+        cursorChoice(),
+        choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
+        installRow(),
+      ),
+      video: consolePanel(fullscreenChoice()),
+      sound: consolePanel(volumeSlider("musicVolume"), volumeSlider("effectsVolume"), volumeSlider("voiceVolume")),
+    };
+    type Tab = keyof typeof panels;
+    const show = (tab: Tab) => {
+      for (const [id, panel] of Object.entries(panels)) panel.classList.toggle("active", id === tab);
+    };
+    show("game");
+    const tabs = segmented("settings-tab", t.settings.tabs, "game" as Tab, show);
+    tabs.classList.add("settings-tabs");
+    dialog.querySelector(".dialog-close")!.before(tabs, ...Object.values(panels));
   }
 
   open(): void {
@@ -101,10 +110,29 @@ function installRow(): HTMLDivElement {
   return row;
 }
 
-/** Segmentierte Auswahl: ein Feld je Option, die gewählte hervorgehoben. */
+/** Vollbild an oder aus; folgt auch dem Umschalten per Taste F, Doppelklick oder Icon-Knopf (`fullscreen.ts`). */
+function fullscreenChoice(): HTMLFieldSetElement {
+  const fieldset = choice("fullscreen", t.settings.fullscreen, t.settings.toggle, "off", toggleFullscreen);
+  const sync = () => {
+    const state = document.fullscreenElement ? "on" : "off";
+    for (const input of fieldset.querySelectorAll("input")) input.checked = input.value === state;
+  };
+  sync();
+  document.addEventListener("fullscreenchange", sync);
+  document.addEventListener("fullscreenerror", sync);
+  return fieldset;
+}
+
+/** Segmentierte Auswahl mit Überschrift. */
 function choice<T extends string>(name: string, legend: string, labels: Record<T, string>, current: T, onChange: (next: T) => void): HTMLFieldSetElement {
+  const fieldset = segmented(name, labels, current, onChange);
+  fieldset.prepend(Object.assign(document.createElement("legend"), { textContent: legend }));
+  return fieldset;
+}
+
+/** Reihe von Tasten, eine je Option, die gewählte eingerastet. */
+function segmented<T extends string>(name: string, labels: Record<T, string>, current: T, onChange: (next: T) => void): HTMLFieldSetElement {
   const fieldset = Object.assign(document.createElement("fieldset"), { className: "settings-choice" });
-  fieldset.append(Object.assign(document.createElement("legend"), { textContent: legend }));
   for (const option of Object.keys(labels) as T[]) {
     const label = document.createElement("label");
     const input = Object.assign(document.createElement("input"), { type: "radio", name, value: option, checked: option === current });

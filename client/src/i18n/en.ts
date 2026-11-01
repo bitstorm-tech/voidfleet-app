@@ -145,6 +145,9 @@ export const en = {
   },
   settings: {
     title: "Settings",
+    tabs: { game: "Game", video: "Video", sound: "Sound" },
+    fullscreen: "Fullscreen",
+    toggle: { on: "On", off: "Off" },
     musicVolume: "Music",
     effectsVolume: "Sound effects",
     voiceVolume: "Radio chatter",
