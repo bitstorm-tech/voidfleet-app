@@ -51,6 +51,8 @@ function createWindow(url: string): void {
     minHeight: 600,
     title: "Voidfleet",
     backgroundColor: "#04050a",
+    // Windows und macOS nehmen das Icon der ausführbaren Datei, Linux braucht es am Fenster.
+    icon: join(app.getAppPath(), "dist", "icon.png"),
     show: false,
     autoHideMenuBar: true,
     webPreferences: { backgroundThrottling: false },
