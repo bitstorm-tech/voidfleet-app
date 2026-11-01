@@ -137,6 +137,7 @@ export class MatchController {
   private validTargetCount = 0;
   /** Die Zielvorschau des eingeplanten Zugs; null, solange keine Runde geplant wird. */
   private preview: RoundPreview | null = null;
+  private readonly settingsDialog: SettingsDialog;
   /** Eigene Kriegsschiffe auf Brett und Hand beim letzten Zustand, für die Meldung, dass nur noch eines übrig ist. */
   private warships = 0;
 
@@ -151,7 +152,7 @@ export class MatchController {
     this.resultScreen = new ResultScreen(ui, () => this.startNewMatch());
     installFullscreen(ui);
     installViewToggle(ui, this.view);
-    new SettingsDialog(ui);
+    this.settingsDialog = new SettingsDialog(ui);
     new RulesDialog(ui);
     this.opponentPanel = new OpponentPanel(ui);
     new RadioSubtitle(ui);
@@ -411,19 +412,24 @@ export class MatchController {
 
   /**
    * Escape bricht eine angefangene Auswahl ab, sonst nimmt es das eingeplante Manöver bzw. die Fähigkeit zurück,
-   * zuletzt die Zielerfassung. Offene Dialoge gehen vor.
+   * dann die Zielerfassung; gibt es nichts zurückzunehmen, öffnet es die Einstellungen. Offene Dialoge gehen vor
+   * (ihr Escape schließt sie).
    */
   private onKeyDown(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || !this.canPlan || document.querySelector("dialog[open]") !== null) return;
-    this.notice = null;
+    if (event.key !== "Escape" || document.querySelector("dialog[open]") !== null) return;
     const { plan } = this.match;
+    if (!this.canPlan || (this.selection === null && plan.maneuver === null && plan.power === null && plan.mark === null)) {
+      this.settingsDialog.open();
+      return;
+    }
+    this.notice = null;
     if (this.selection !== null) {
       this.cancelSelection();
     } else if (plan.maneuver !== null) {
       this.cancelManeuver();
     } else if (plan.power !== null) {
       this.cancelPower();
-    } else if (plan.mark !== null) {
+    } else {
       plan.mark = null;
       this.refreshSelectionVisuals();
       playUiSound("cancel");
