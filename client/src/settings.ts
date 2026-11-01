@@ -14,6 +14,9 @@ export const ANIMATION_SPEEDS = { slow: 1.6, normal: 1.25, fast: 0.6, veryFast: 
 
 export type AnimationSpeed = keyof typeof ANIMATION_SPEEDS;
 
+/** Fenstermodus; „maximiert“ gibt es nur in der Desktop-App, im Browser gilt nur das Vollbild (`ui/fullscreen.ts`). */
+export type WindowMode = "windowed" | "maximized" | "fullscreen";
+
 export interface Settings {
   /** Lautstärke von Musik, Effekten und Bordfunk, jeweils 0..1; Bordfunk auf 0 schaltet ihn samt Untertiteln ab. */
   musicVolume: number;
@@ -32,6 +35,8 @@ export interface Settings {
   camera: { view: number; zoom: [number, number, number] };
   /** Gewählter Mauszeiger (`ui/cursor.ts`). */
   cursor: CursorId;
+  /** Zuletzt gewählter Fenstermodus der Desktop-App, in dem sie beim nächsten Start öffnet (`desktop/src/main.ts`). */
+  windowMode: WindowMode;
   /** Gewählte Sprache; ohne Wahl gilt die Browsersprache. */
   language?: Locale;
 }
@@ -39,7 +44,13 @@ export interface Settings {
 declare global {
   interface Window {
     /** Nur in der Desktop-App gesetzt. */
-    voidfleetDesktop?: { settings: string | null; saveSettings(json: string): void };
+    voidfleetDesktop?: {
+      settings: string | null;
+      saveSettings(json: string): void;
+      windowMode: WindowMode;
+      setWindowMode(mode: WindowMode): void;
+      onWindowModeChange(listener: (mode: WindowMode) => void): void;
+    };
   }
 }
 
@@ -54,6 +65,7 @@ const DEFAULTS: Settings = {
   animationSpeed: "normal",
   camera: { view: 1, zoom: [0, 0, 0] },
   cursor: "arrow",
+  windowMode: "maximized",
 };
 
 export const settings: Settings = { ...DEFAULTS, ...JSON.parse((desktop ? desktop.settings : localStorage.getItem(STORAGE_KEY)) ?? "{}") };

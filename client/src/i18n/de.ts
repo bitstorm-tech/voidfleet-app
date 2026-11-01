@@ -61,8 +61,8 @@ export const de: Messages = {
   settings: {
     title: "Einstellungen",
     tabs: { game: "Spiel", video: "Video", sound: "Sound" },
-    fullscreen: "Vollbild",
-    toggle: { on: "An", off: "Aus" },
+    windowMode: "Darstellung",
+    windowModes: { windowed: "Fenster", maximized: "Maximiert", fullscreen: "Vollbild" },
     musicVolume: "Musik",
     effectsVolume: "Soundeffekte",
     voiceVolume: "Bordfunk",

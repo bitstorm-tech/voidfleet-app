@@ -2,13 +2,13 @@
 // Steuerpults. Eine Tastenreihe oben wählt eines von drei eingelassenen Feldern: „Spiel“ mit je einer
 // Geschwindigkeitswahl für Angriffe, Schiffsbewegungen und die übrigen Animationen, dem Mauszeiger, der Sprache und,
 // solange der Browser es anbietet, dem Installieren als eigene App (`install.ts`); „Video“ mit dem Vollbild
-// (`fullscreen.ts`); „Sound“ mit den Reglern für die Lautstärke von Musik, Effekten und Bordfunk. Jede Auswahl wird
-// gespeichert (`settings.ts`), nur das Vollbild nicht; alles gilt sofort, ein Sprachwechsel lädt die Seite neu.
+// (Fenster, maximiert nur in der Desktop-App, oder Vollbild, `fullscreen.ts`); „Sound“ mit den Reglern für die Lautstärke von Musik, Effekten und Bordfunk. Jede Auswahl wird
+// gespeichert (`settings.ts`), der Fenstermodus nur in der Desktop-App; alles gilt sofort, ein Sprachwechsel lädt die Seite neu.
 
 import { LOCALE_NAMES, locale, switchLocale, t } from "../i18n/index.ts";
-import { settings, updateSettings } from "../settings.ts";
+import { settings, updateSettings, type WindowMode } from "../settings.ts";
 import { CURSORS, type CursorId } from "./cursor.ts";
-import { toggleFullscreen } from "./fullscreen.ts";
+import { onWindowModeChange, setWindowMode, WINDOW_MODES, windowMode } from "./fullscreen.ts";
 import { iconDialog } from "./iconDialog.ts";
 import { installApp, onInstallable } from "./install.ts";
 
@@ -32,7 +32,7 @@ export class SettingsDialog {
         choice("language", t.settings.language, LOCALE_NAMES, locale, switchLocale),
         installRow(),
       ),
-      video: consolePanel(fullscreenChoice()),
+      video: consolePanel(windowModeChoice()),
       sound: consolePanel(volumeSlider("musicVolume"), volumeSlider("effectsVolume"), volumeSlider("voiceVolume")),
     };
     type Tab = keyof typeof panels;
@@ -110,16 +110,13 @@ function installRow(): HTMLDivElement {
   return row;
 }
 
-/** Vollbild an oder aus; folgt auch dem Umschalten per Taste F, Doppelklick oder Icon-Knopf (`fullscreen.ts`). */
-function fullscreenChoice(): HTMLFieldSetElement {
-  const fieldset = choice("fullscreen", t.settings.fullscreen, t.settings.toggle, "off", toggleFullscreen);
-  const sync = () => {
-    const state = document.fullscreenElement ? "on" : "off";
-    for (const input of fieldset.querySelectorAll("input")) input.checked = input.value === state;
-  };
-  sync();
-  document.addEventListener("fullscreenchange", sync);
-  document.addEventListener("fullscreenerror", sync);
+/** Fenstermodus; folgt auch dem Umschalten per Taste F, Doppelklick, Icon-Knopf, F11 oder Titelleiste. */
+function windowModeChoice(): HTMLFieldSetElement {
+  const labels = Object.fromEntries(WINDOW_MODES.map((mode) => [mode, t.settings.windowModes[mode]])) as Record<WindowMode, string>;
+  const fieldset = choice("windowMode", t.settings.windowMode, labels, windowMode, setWindowMode);
+  onWindowModeChange(() => {
+    for (const input of fieldset.querySelectorAll("input")) input.checked = input.value === windowMode;
+  });
   return fieldset;
 }
 

@@ -5,7 +5,7 @@ import { ABILITY_VALUES, type AdmiralId, type PowerId, type PowerTarget } from "
 import type { LaneType, Side } from "../../../shared/board.ts";
 import { type CommandId, type CommandType, type ShipClass, type ShipId, shipById, type TargetMode } from "../../../shared/cards.ts";
 import type { ErrorCode, MatchResult } from "../../../shared/protocol.ts";
-import type { AnimationSpeed } from "../settings.ts";
+import type { AnimationSpeed, WindowMode } from "../settings.ts";
 import type { CursorId } from "../ui/cursor.ts";
 
 export interface CardText {
@@ -146,8 +146,8 @@ export const en = {
   settings: {
     title: "Settings",
     tabs: { game: "Game", video: "Video", sound: "Sound" },
-    fullscreen: "Fullscreen",
-    toggle: { on: "On", off: "Off" },
+    windowMode: "Display",
+    windowModes: { windowed: "Window", maximized: "Maximized", fullscreen: "Fullscreen" } satisfies Record<WindowMode, string>,
     musicVolume: "Music",
     effectsVolume: "Sound effects",
     voiceVolume: "Radio chatter",

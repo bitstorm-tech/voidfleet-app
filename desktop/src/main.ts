@@ -1,6 +1,7 @@
 // Electron-Hauptprozess der Desktop-App: startet den kompilierten Spielserver (`voidfleet-server`,
 // eine Bun-Binary mit eingebettetem Client) auf einem freien Port von 127.0.0.1 und zeigt ihn in
-// einem Fenster. Der Server endet mit der App.
+// einem Fenster. Der Server endet mit der App. Das Fenster öffnet im zuletzt gewählten Modus (Fenster, maximiert oder
+// Vollbild); der Client schaltet ihn per IPC um und erfährt jeden Wechsel, auch per F11 oder über die Titelleiste.
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -21,13 +22,15 @@ function settingsPath(): string {
   return join(app.getPath("userData"), "settings.json");
 }
 
-ipcMain.on("settings:load", (event) => {
+function readSettings(): string | null {
   try {
-    event.returnValue = readFileSync(settingsPath(), "utf8");
+    return readFileSync(settingsPath(), "utf8");
   } catch {
-    event.returnValue = null;
+    return null;
   }
-});
+}
+
+ipcMain.on("settings:load", (event) => (event.returnValue = readSettings()));
 ipcMain.on("settings:save", (_event, json: string) => writeFileSync(settingsPath(), json));
 
 /** Gepackt tragen Windows- und macOS-App das Icon selbst, Linux braucht es am Fenster und das Dock
@@ -65,7 +68,24 @@ async function startServer(): Promise<string> {
   });
 }
 
+type WindowMode = "windowed" | "maximized" | "fullscreen";
+
+function windowMode(window: BrowserWindow): WindowMode {
+  return window.isFullScreen() ? "fullscreen" : window.isMaximized() ? "maximized" : "windowed";
+}
+
+/** Aus dem Vollbild heraus maximiert oder verkleinert es erst, wenn das Vollbild verlassen ist; sonst setzt das System
+ *  den Zustand von vor dem Vollbild wieder ein. */
+function setWindowMode(window: BrowserWindow, mode: WindowMode): void {
+  if (mode === "fullscreen") return window.setFullScreen(true);
+  const finish = () => (mode === "maximized" ? window.maximize() : window.unmaximize());
+  if (!window.isFullScreen()) return finish();
+  window.once("leave-full-screen", finish);
+  window.setFullScreen(false);
+}
+
 function createWindow(url: string): void {
+  const saved = (JSON.parse(readSettings() ?? "{}") as { windowMode?: WindowMode }).windowMode ?? "maximized";
   const window = new BrowserWindow({
     width: 1600,
     height: 900,
@@ -75,10 +95,23 @@ function createWindow(url: string): void {
     backgroundColor: "#04050a",
     icon: iconPath(),
     show: false,
+    fullscreen: saved === "fullscreen",
     autoHideMenuBar: true,
     webPreferences: { backgroundThrottling: false, preload: join(app.getAppPath(), "dist", "preload.js") },
   });
-  window.once("ready-to-show", () => window.show());
+  window.once("ready-to-show", () => {
+    if (saved === "maximized") window.maximize();
+    window.show();
+  });
+  ipcMain.on("window:mode", (event, mode: WindowMode) => {
+    if (event.sender === window.webContents) setWindowMode(window, mode);
+  });
+  ipcMain.on("window:mode:get", (event) => (event.returnValue = saved));
+  const report = () => window.webContents.send("window:mode", windowMode(window));
+  window.on("enter-full-screen", report);
+  window.on("leave-full-screen", report);
+  window.on("maximize", report);
+  window.on("unmaximize", report);
   // Links nach außen (etwa Quellen) öffnen im Browser, nicht in einem zweiten Spielfenster.
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
